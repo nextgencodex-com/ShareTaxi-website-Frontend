@@ -1,31 +1,9 @@
 import { Button } from "@/components/ui/button"
-import { Car, Phone, Mail, MapPin, Facebook, Twitter, Instagram } from "lucide-react"
+import { Car, Phone, Mail, MapPin, Facebook, Twitter, Instagram, MessageCircle } from "lucide-react"
 
 export function Footer() {
   return (
-    <footer className="bg-card border-t border-border">
-      {/* CTA Section */}
-      <div className="bg-primary text-primary-foreground py-12">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-2xl font-bold mb-4">Share Your Experience</h2>
-          <p className="mb-6 opacity-90">
-            Join thousands of satisfied customers and experience premium transportation today.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button variant="secondary" size="lg">
-              Book a Ride
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              className="border-white text-white hover:bg-white hover:text-primary bg-transparent"
-            >
-              Download App
-            </Button>
-          </div>
-        </div>
-      </div>
-
+    <footer className="bg-black text-white border-t border-gray-700">
       {/* Main Footer */}
       <div className="py-12">
         <div className="container mx-auto px-4">
@@ -38,18 +16,18 @@ export function Footer() {
                 </div>
                 <span className="text-lg font-bold">Share Taxi Sri Lanka</span>
               </div>
-              <p className="text-muted-foreground text-sm">
+              <p className="text-gray-300 text-sm">
                 Premium transportation services across Sri Lanka. Safe, reliable, and comfortable rides for every
                 journey.
               </p>
               <div className="flex gap-3">
-                <Button variant="ghost" size="sm" className="p-2">
+                <Button variant="ghost" size="sm" className="p-2 text-white hover:bg-gray-800">
                   <Facebook className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="sm" className="p-2">
+                <Button variant="ghost" size="sm" className="p-2 text-white hover:bg-gray-800">
                   <Twitter className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="sm" className="p-2">
+                <Button variant="ghost" size="sm" className="p-2 text-white hover:bg-gray-800">
                   <Instagram className="h-4 w-4" />
                 </Button>
               </div>
@@ -58,7 +36,7 @@ export function Footer() {
             {/* Services */}
             <div className="space-y-4">
               <h3 className="font-semibold">Services</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
+              <ul className="space-y-2 text-sm text-gray-300">
                 <li>
                   <a href="#" className="hover:text-primary transition-colors">
                     Airport Transfers
@@ -90,7 +68,7 @@ export function Footer() {
             {/* Support */}
             <div className="space-y-4">
               <h3 className="font-semibold">Support</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
+              <ul className="space-y-2 text-sm text-gray-300">
                 <li>
                   <a href="#" className="hover:text-primary transition-colors">
                     Help Center
@@ -123,15 +101,19 @@ export function Footer() {
             <div className="space-y-4">
               <h3 className="font-semibold">Contact Info</h3>
               <div className="space-y-3 text-sm">
-                <div className="flex items-center gap-2 text-muted-foreground">
+                <div className="flex items-center gap-2 text-gray-300">
                   <Phone className="h-4 w-4 text-primary" />
                   <span>+94 11 234 5678</span>
                 </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
+                <div className="flex items-center gap-2 text-gray-300">
+                  <MessageCircle className="h-4 w-4 text-green-400" />
+                  <span>+94 75 962 7589</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-300">
                   <Mail className="h-4 w-4 text-primary" />
                   <span>info@ridesharelanka.com</span>
                 </div>
-                <div className="flex items-start gap-2 text-muted-foreground">
+                <div className="flex items-start gap-2 text-gray-300">
                   <MapPin className="h-4 w-4 text-primary mt-0.5" />
                   <span>123 Galle Road, Colombo 03, Sri Lanka</span>
                 </div>
@@ -139,7 +121,7 @@ export function Footer() {
             </div>
           </div>
 
-          <div className="border-t border-border mt-8 pt-8 text-center text-sm text-muted-foreground">
+          <div className="border-t border-gray-700 mt-8 pt-8 text-center text-sm text-gray-300">
             <p>&copy; 2024 Share Taxi Sri Lanka. All rights reserved. </p>
           </div>
         </div>

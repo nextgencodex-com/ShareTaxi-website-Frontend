@@ -1,5 +1,9 @@
+"use client"
+
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Users, Briefcase, ShoppingBag } from "lucide-react"
+import { BookRidePopup } from "./book-ride-popup"
 
 const vehicles = [
   {
@@ -41,8 +45,21 @@ const vehicles = [
 ]
 
 export function VehicleOptionsSection() {
+  const [showPopup, setShowPopup] = useState(false)
+  const [selectedVehicle, setSelectedVehicle] = useState<typeof vehicles[0] | null>(null)
+
+  const handleBookNow = (vehicle: typeof vehicles[0]) => {
+    setSelectedVehicle(vehicle)
+    setShowPopup(true)
+  }
+
+  const handleClosePopup = () => {
+    setShowPopup(false)
+    setSelectedVehicle(null)
+  }
+
   return (
-    <section className="py-16 bg-gray-50">
+    <section id="vehicle-options-section" className="py-16 bg-gray-50">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold text-gray-800 mb-4">Our Private MPV Car Options</h2>
@@ -98,13 +115,22 @@ export function VehicleOptionsSection() {
                 </ul>
               </div>
 
-              <Button className={`w-full ${vehicle.buttonColor} text-white font-semibold py-3 rounded-xl`}>
+              <Button
+                onClick={() => handleBookNow(vehicle)}
+                className={`w-full ${vehicle.buttonColor} text-white font-semibold py-3 rounded-xl`}
+              >
                 Book Now
               </Button>
             </div>
           ))}
         </div>
       </div>
+
+      <BookRidePopup
+        isOpen={showPopup}
+        onClose={handleClosePopup}
+        vehicle={selectedVehicle}
+      />
     </section>
   )
 }

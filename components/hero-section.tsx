@@ -1,19 +1,31 @@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Clock, Shield, Star } from "lucide-react"
+import { MapPin, Clock, Shield, Star, MessageCircle } from "lucide-react"
 import dynamic from 'next/dynamic'
 
 const Map = dynamic(() => import('./map'), { ssr: false })
 
 export function HeroSection() {
   return (
-    <section id="hero-section" className="relative bg-white py-20">
+    <section id="hero-section" className="relative bg-white py-20 overflow-hidden">
+      {/* Decorative Circles */}
+      {/* Group 1: Top-left cluster */}
+      <div className="absolute top-20 left-20 w-[150px] h-[150px] bg-orange-200/30 rounded-full"></div>
+      <div className="absolute top-40 left-40 w-[80px] h-[80px] bg-orange-300/40 rounded-full"></div>
+      {/* Group 2: Bottom-right cluster */}
+      <div className="absolute bottom-0 right-0 w-[250px] h-[250px] bg-orange-200/25 rounded-full"></div>
+      <div className="absolute bottom-20 right-20 w-[120px] h-[120px] bg-orange-300/35 rounded-full"></div>
+      <div className="absolute bottom-40 right-40 w-[60px] h-[60px] bg-orange-100/45 rounded-full"></div>
+      {/* Group 3: Mid-right cluster */}
+      <div className="absolute top-1/3 right-10 w-[180px] h-[180px] bg-orange-300/30 rounded-full"></div>
+      <div className="absolute top-1/2 right-20 w-[90px] h-[90px] bg-orange-100/40 rounded-full"></div>
+      <div className="absolute top-2/3 right-5 w-[50px] h-[50px] bg-orange-200/50 rounded-full"></div>
       <div className="container mx-auto px-4">
         <div className="space-y-8 text-center">
           <div className="space-y-4">
             <Badge className="bg-primary/20 text-primary border-primary/30">Premium Ride Experience</Badge>
-            <h1 className="text-4xl lg:text-6xl font-bold text-balance">
-              Premium Ride Experience with <br /><span className="text-primary">Share Taxi Sri Lanka</span>
+            <h1 className="text-4xl lg:text-7xl font-bold text-balance">
+              <span className="text-2xl lg:text-5xl">Premium Ride Experience with</span> <br /><span className="text-primary text-4xl lg:text-7xl">Share Taxi Sri Lanka</span>
             </h1>
             <p className="text-lg text-muted-foreground text-pretty">
               Book scheduled or shared rides with our premium fleet. Safe, reliable, and comfortable transportation at
@@ -21,13 +33,29 @@ export function HeroSection() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-4 justify-center">
-            <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full">
+          <div className="flex flex-wrap gap-6 justify-center">
+            <Button
+              size="lg"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full h-16 px-8 text-lg font-popins"
+              onClick={() => {
+                const element = document.getElementById('booking-section');
+                element?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
               Book Individual Ride
             </Button>
-            <Button variant="outline" size="lg" className="rounded-full">
+            <Button
+              variant="outline"
+              size="lg"
+              className="rounded-full h-16 px-8 text-lg font-popins"
+              onClick={() => {
+                const element = document.getElementById('shared-rides-section');
+                element?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
               Join Shared Ride
             </Button>
+
           </div>
         </div>
         <div className="grid lg:grid-cols-2 gap-12 items-center mt-12">

@@ -5,13 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { MapPin, Calendar, Clock, Users, ArrowRight, Plus, X } from "lucide-react"
+import { Calendar, ChevronDown, Plus, X } from "lucide-react"
 import dynamic from 'next/dynamic'
+import { BookingDetailsPopup } from "./booking-details-popup"
 
 const Map = dynamic(() => import('./map'), { ssr: false })
-
-type TripType = 'one-way' | 'round-trip' | 'multi-city'
 
 interface Destination {
   id: string
@@ -19,433 +17,423 @@ interface Destination {
 }
 
 export function BookingSection() {
-  const [selectedTripType, setSelectedTripType] = useState<TripType>('one-way')
-  const [formData, setFormData] = useState({
-    pickup: '',
-    destination: '',
-    date: '',
-    time: '',
-    returnDate: '',
-    returnTime: '',
-    passengers: '',
-    destinations: [{ id: '1', location: '' }, { id: '2', location: '' }] as Destination[]
-  })
+  const [tripType, setTripType] = useState("one-way")
+  const [rideType, setRideType] = useState("shared")
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState("")
+  const [passengers, setPassengers] = useState("02")
+  const [luggage, setLuggage] = useState("04")
+  const [from, setFrom] = useState("Galle")
+  const [to, setTo] = useState("Colombo")
+  const [date, setDate] = useState("2025-09-20")
+  const [customTime, setCustomTime] = useState("")
 
-  const handleTripTypeChange = (tripType: TripType) => {
-    setSelectedTripType(tripType)
-  }
+  const [destinations, setDestinations] = useState<Destination[]>([
+    { id: '1', location: '' },
+    { id: '2', location: '' }
+  ])
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-  }
+  const [startingPoint, setStartingPoint] = useState("Colombo")
+
+  const [showBookingPopup, setShowBookingPopup] = useState(false)
+
+  const timeSlots = [
+    "6 - 8 am", "8 - 10 am", "10 - 12 pm", "12 - 2 pm", "2 - 4 pm",
+    "4 - 6 pm", "6 - 8 pm", "8 - 10 pm", "10 - 12 am"
+  ]
 
   const addDestination = () => {
     const newId = Date.now().toString()
-    setFormData(prev => ({
-      ...prev,
-      destinations: [...prev.destinations, { id: newId, location: '' }]
-    }))
+    setDestinations(prev => [...prev, { id: newId, location: '' }])
   }
 
   const removeDestination = (id: string) => {
-    if (formData.destinations.length > 2) {
-      setFormData(prev => ({
-        ...prev,
-        destinations: prev.destinations.filter(dest => dest.id !== id)
-      }))
+    if (destinations.length > 2) {
+      setDestinations(prev => prev.filter(dest => dest.id !== id))
     }
   }
 
   const updateDestination = (id: string, location: string) => {
-    setFormData(prev => ({
-      ...prev,
-      destinations: prev.destinations.map(dest =>
-        dest.id === id ? { ...dest, location } : dest
-      )
-    }))
+    setDestinations(prev => prev.map(dest =>
+      dest.id === id ? { ...dest, location } : dest
+    ))
   }
+
+  const handleNextClick = () => {
+    const bookingData = {
+      from: tripType === 'multi-city' ? startingPoint : from,
+      to,
+      rideType,
+      date,
+      time: rideType === "shared" ? selectedTimeSlot : customTime,
+      passengers,
+      luggage,
+      tripType,
+      destinations: tripType === 'multi-city' ? destinations : undefined,
+    }
+    setShowBookingPopup(true)
+  }
+
   return (
-    <section id="booking-section" className="py-20 bg-gradient-to-b from-background to-muted/20">
-      <div className="container mx-auto px-4">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-balance mb-6 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-            Book Your Ride
-          </h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto leading-relaxed">
-            Experience seamless taxi booking with our elegant and intuitive interface.
-            Your journey starts here.
-          </p>
-        </div>
+    <>
+      <section className="py-16 bg-muted/30">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-balance mb-4">Book Your Taxi with Ease</h2>
+            <p className="text-muted-foreground text-pretty max-w-2xl mx-auto">
+              Simple booking process with real-time tracking and instant confirmation. Choose your pickup location and
+              we'll handle the rest.
+            </p>
+          </div>
 
-        <div className="max-w-6xl mx-auto">
-          <div className="grid lg:grid-cols-5 gap-8 items-start">
-            {/* Booking Form */}
-            <div className="lg:col-span-2">
-              <Card className="bg-card/50 backdrop-blur-sm border-border/50 shadow-xl">
-                <CardContent className="p-8">
-                  <div className="space-y-8">
-                    {/* Trip Type Selector */}
-                    <div className="flex gap-1 bg-muted/50 rounded-xl p-1">
-                      <Button
-                        variant={selectedTripType === 'one-way' ? 'default' : 'ghost'}
-                        size="sm"
-                        className={`flex-1 rounded-lg transition-all ${
-                          selectedTripType === 'one-way'
-                            ? 'bg-primary text-primary-foreground shadow-sm'
-                            : 'hover:bg-muted'
-                        }`}
-                        onClick={() => handleTripTypeChange('one-way')}
-                      >
-                        One Way
-                      </Button>
-                      <Button
-                        variant={selectedTripType === 'round-trip' ? 'default' : 'ghost'}
-                        size="sm"
-                        className={`flex-1 rounded-lg transition-all ${
-                          selectedTripType === 'round-trip'
-                            ? 'bg-primary text-primary-foreground shadow-sm'
-                            : 'hover:bg-muted'
-                        }`}
-                        onClick={() => handleTripTypeChange('round-trip')}
-                      >
-                        Round Trip
-                      </Button>
-                      <Button
-                        variant={selectedTripType === 'multi-city' ? 'default' : 'ghost'}
-                        size="sm"
-                        className={`flex-1 rounded-lg transition-all ${
-                          selectedTripType === 'multi-city'
-                            ? 'bg-primary text-primary-foreground shadow-sm'
-                            : 'hover:bg-muted'
-                        }`}
-                        onClick={() => handleTripTypeChange('multi-city')}
-                      >
-                        Multi-City
-                      </Button>
+          <div className="grid lg:grid-cols-2 gap-8 items-start">
+            <Card className="bg-white border-gray-200 shadow-lg">
+              <CardContent className="p-8">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-center mb-8">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
+                      <div className="w-16 h-0.5 bg-gray-300"></div>
+                      <div className="w-4 h-4 border-2 border-blue-500 bg-white rounded-full"></div>
+                      <div className="w-16 h-0.5 bg-gray-300"></div>
+                      <div className="w-4 h-4 border-2 border-blue-500 bg-white rounded-full"></div>
                     </div>
+                  </div>
 
-                    {/* Conditional Form Sections */}
-                    {selectedTripType === 'one-way' && (
-                      <>
-                        {/* One Way Form */}
-                        <div className="space-y-6">
-                          <div className="space-y-3">
-                            <Label htmlFor="pickup" className="text-sm font-medium flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-primary" />
-                              From
-                            </Label>
-                            <Input
-                              id="pickup"
-                              placeholder="Enter pickup location"
-                              value={formData.pickup}
-                              onChange={(e) => handleInputChange('pickup', e.target.value)}
-                              className="bg-background/50 border-border/50 h-12 text-base rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                            />
-                          </div>
-
-                          <div className="space-y-3">
-                            <Label htmlFor="destination" className="text-sm font-medium flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-accent" />
-                              To
-                            </Label>
-                            <Input
-                              id="destination"
-                              placeholder="Enter destination"
-                              value={formData.destination}
-                              onChange={(e) => handleInputChange('destination', e.target.value)}
-                              className="bg-background/50 border-border/50 h-12 text-base rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Date & Time */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-3">
-                            <Label htmlFor="date" className="text-sm font-medium flex items-center gap-2">
-                              <Calendar className="h-4 w-4 text-primary" />
-                              Date
-                            </Label>
-                            <Input
-                              id="date"
-                              type="date"
-                              value={formData.date}
-                              onChange={(e) => handleInputChange('date', e.target.value)}
-                              className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                            />
-                          </div>
-
-                          <div className="space-y-3">
-                            <Label htmlFor="time" className="text-sm font-medium flex items-center gap-2">
-                              <Clock className="h-4 w-4 text-primary" />
-                              Time
-                            </Label>
-                            <Input
-                              id="time"
-                              type="time"
-                              value={formData.time}
-                              onChange={(e) => handleInputChange('time', e.target.value)}
-                              className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {selectedTripType === 'round-trip' && (
-                      <>
-                        {/* Round Trip Form */}
-                        <div className="space-y-6">
-                          <div className="space-y-3">
-                            <Label htmlFor="pickup" className="text-sm font-medium flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-primary" />
-                              From
-                            </Label>
-                            <Input
-                              id="pickup"
-                              placeholder="Enter pickup location"
-                              value={formData.pickup}
-                              onChange={(e) => handleInputChange('pickup', e.target.value)}
-                              className="bg-background/50 border-border/50 h-12 text-base rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                            />
-                          </div>
-
-                          <div className="space-y-3">
-                            <Label htmlFor="destination" className="text-sm font-medium flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-accent" />
-                              To
-                            </Label>
-                            <Input
-                              id="destination"
-                              placeholder="Enter destination"
-                              value={formData.destination}
-                              onChange={(e) => handleInputChange('destination', e.target.value)}
-                              className="bg-background/50 border-border/50 h-12 text-base rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Outbound Date & Time */}
-                        <div className="space-y-4">
-                          <h4 className="text-sm font-semibold text-foreground">Outbound Journey</h4>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-3">
-                              <Label htmlFor="date" className="text-sm font-medium flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-primary" />
-                                Date
-                              </Label>
-                              <Input
-                                id="date"
-                                type="date"
-                                value={formData.date}
-                                onChange={(e) => handleInputChange('date', e.target.value)}
-                                className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                              />
-                            </div>
-
-                            <div className="space-y-3">
-                              <Label htmlFor="time" className="text-sm font-medium flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-primary" />
-                                Time
-                              </Label>
-                              <Input
-                                id="time"
-                                type="time"
-                                value={formData.time}
-                                onChange={(e) => handleInputChange('time', e.target.value)}
-                                className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Return Date & Time */}
-                        <div className="space-y-4">
-                          <h4 className="text-sm font-semibold text-foreground">Return Journey</h4>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-3">
-                              <Label htmlFor="returnDate" className="text-sm font-medium flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-primary" />
-                                Date
-                              </Label>
-                              <Input
-                                id="returnDate"
-                                type="date"
-                                value={formData.returnDate}
-                                onChange={(e) => handleInputChange('returnDate', e.target.value)}
-                                className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                              />
-                            </div>
-
-                            <div className="space-y-3">
-                              <Label htmlFor="returnTime" className="text-sm font-medium flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-primary" />
-                                Time
-                              </Label>
-                              <Input
-                                id="returnTime"
-                                type="time"
-                                value={formData.returnTime}
-                                onChange={(e) => handleInputChange('returnTime', e.target.value)}
-                                className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {selectedTripType === 'multi-city' && (
-                      <>
-                        {/* Multi-City Form */}
-                        <div className="space-y-6">
-                          <div className="space-y-3">
-                            <Label className="text-sm font-medium flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-primary" />
-                              Starting Point
-                            </Label>
-                            <Input
-                              placeholder="Enter starting location"
-                              value={formData.pickup}
-                              onChange={(e) => handleInputChange('pickup', e.target.value)}
-                              className="bg-background/50 border-border/50 h-12 text-base rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                            />
-                          </div>
-
-                          {/* Destinations */}
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                              <Label className="text-sm font-medium flex items-center gap-2">
-                                <MapPin className="h-4 w-4 text-accent" />
-                                Destinations
-                              </Label>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={addDestination}
-                                className="h-8 px-3 rounded-lg"
-                              >
-                                <Plus className="h-3 w-3 mr-1" />
-                                Add Stop
-                              </Button>
-                            </div>
-
-                            <div className="space-y-3">
-                              {formData.destinations.map((dest, index) => (
-                                <div key={dest.id} className="flex gap-2 items-center">
-                                  <div className="flex-1">
-                                    <Input
-                                      placeholder={`Stop ${index + 1}`}
-                                      value={dest.location}
-                                      onChange={(e) => updateDestination(dest.id, e.target.value)}
-                                      className="bg-background/50 border-border/50 h-12 text-base rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                                    />
-                                  </div>
-                                  {formData.destinations.length > 2 && (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => removeDestination(dest.id)}
-                                      className="h-12 px-3 rounded-lg hover:bg-destructive hover:text-destructive-foreground"
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Date & Time */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-3">
-                            <Label htmlFor="date" className="text-sm font-medium flex items-center gap-2">
-                              <Calendar className="h-4 w-4 text-primary" />
-                              Date
-                            </Label>
-                            <Input
-                              id="date"
-                              type="date"
-                              value={formData.date}
-                              onChange={(e) => handleInputChange('date', e.target.value)}
-                              className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                            />
-                          </div>
-
-                          <div className="space-y-3">
-                            <Label htmlFor="time" className="text-sm font-medium flex items-center gap-2">
-                              <Clock className="h-4 w-4 text-primary" />
-                              Time
-                            </Label>
-                            <Input
-                              id="time"
-                              type="time"
-                              value={formData.time}
-                              onChange={(e) => handleInputChange('time', e.target.value)}
-                              className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-2 focus:ring-primary/20 transition-all"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Passengers */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium flex items-center gap-2">
-                        <Users className="h-4 w-4 text-primary" />
-                        Passengers
-                      </Label>
-                      <Select value={formData.passengers} onValueChange={(value) => handleInputChange('passengers', value)}>
-                        <SelectTrigger className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-2 focus:ring-primary/20 transition-all">
-                          <SelectValue placeholder="Select passengers" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">1 Passenger</SelectItem>
-                          <SelectItem value="2">2 Passengers</SelectItem>
-                          <SelectItem value="3">3 Passengers</SelectItem>
-                          <SelectItem value="4">4+ Passengers</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Book Button */}
+                  <div className="grid grid-cols-3 gap-2 bg-gray-100 rounded-lg p-1">
                     <Button
-                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-14 rounded-xl text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-200 group"
-                      size="lg"
-                      onClick={() => {
-                        console.log('Form Data:', { selectedTripType, ...formData })
-                        // Here you would typically submit the form data to your backend
-                        alert(`Booking ${selectedTripType} trip with form data logged to console`)
-                      }}
+                      variant={tripType === "one-way" ? "default" : "ghost"}
+                      size="sm"
+                      className={
+                        tripType === "one-way"
+                          ? "bg-blue-500 text-white hover:bg-blue-600"
+                          : "text-gray-600 hover:text-gray-800"
+                      }
+                      onClick={() => setTripType("one-way")}
                     >
-                      Find Your Ride
-                      <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                      One Way
+                    </Button>
+                    <Button
+                      variant={tripType === "round-trip" ? "default" : "ghost"}
+                      size="sm"
+                      className={
+                        tripType === "round-trip"
+                          ? "bg-blue-500 text-white hover:bg-blue-600"
+                          : "text-gray-600 hover:text-gray-800"
+                      }
+                      onClick={() => setTripType("round-trip")}
+                    >
+                      Round Trip
+                    </Button>
+                    <Button
+                      variant={tripType === "multi-city" ? "default" : "ghost"}
+                      size="sm"
+                      className={
+                        tripType === "multi-city"
+                          ? "bg-blue-500 text-white hover:bg-blue-600"
+                          : "text-gray-600 hover:text-gray-800"
+                      }
+                      onClick={() => setTripType("multi-city")}
+                    >
+                      Multi-City
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
 
-            {/* Map Section */}
-            <div className="lg:col-span-3">
-              <Card className="bg-card/50 backdrop-blur-sm border-border/50 shadow-xl overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-t-xl p-6">
-                    <h3 className="text-lg font-semibold text-foreground mb-2">Live Map</h3>
-                    <p className="text-muted-foreground text-sm">Track available rides in real-time</p>
-                  </div>
-                  <div className="h-[500px] relative">
-                    <Map />
-                    <div className="absolute inset-0 bg-gradient-to-t from-background/10 to-transparent pointer-events-none" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                  {tripType === 'multi-city' ? (
+                    <div className="space-y-6">
+                      <h3 className="text-lg font-semibold text-gray-800">Multi-City Tour</h3>
+                      <div className="space-y-3">
+                        <Label className="text-gray-700 font-medium">Starting Point</Label>
+                        <Input
+                          value={startingPoint}
+                          onChange={(e) => setStartingPoint(e.target.value)}
+                          className="bg-blue-50 border-blue-200 text-gray-800 placeholder:text-gray-500 h-12"
+                          placeholder="Enter starting location"
+                        />
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-gray-700 font-medium">Destinations</Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={addDestination}
+                            className="h-8 px-3 rounded-lg"
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            Add Stop
+                          </Button>
+                        </div>
+                        <div className="space-y-3">
+                          {destinations.map((dest, index) => (
+                            <div key={dest.id} className="flex gap-2 items-center">
+                              <div className="flex-1">
+                                <Input
+                                  placeholder={`Stop ${index + 1}`}
+                                  value={dest.location}
+                                  onChange={(e) => updateDestination(dest.id, e.target.value)}
+                                  className="bg-blue-50 border-blue-200 text-gray-800 h-12"
+                                />
+                              </div>
+                              {destinations.length > 2 && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => removeDestination(dest.id)}
+                                  className="h-12 px-3 rounded-lg hover:bg-destructive hover:text-destructive-foreground"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-gray-700 font-medium">Pickup Date</Label>
+                          <Input
+                            type="date"
+                            value={date}
+                            onChange={(e) => setDate(e.target.value)}
+                            className="bg-blue-50 border-blue-200 text-gray-800 h-12"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-gray-700 font-medium">Pickup Time</Label>
+                          <Input
+                            type="time"
+                            value={customTime}
+                            onChange={(e) => setCustomTime(e.target.value)}
+                            className="bg-blue-50 border-blue-200 text-gray-800 h-12"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-gray-700 font-medium">No of Passengers</Label>
+                          <div className="relative">
+                            <select
+                              value={passengers}
+                              onChange={(e) => setPassengers(e.target.value)}
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10"
+                            >
+                              <option value="01">01</option>
+                              <option value="02">02</option>
+                              <option value="03">03</option>
+                              <option value="04">04</option>
+                              <option value="05">05</option>
+                              <option value="06">06</option>
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-gray-700 font-medium">No of Luggage</Label>
+                          <div className="relative">
+                            <select
+                              value={luggage}
+                              onChange={(e) => setLuggage(e.target.value)}
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10"
+                            >
+                              <option value="01">01</option>
+                              <option value="02">02</option>
+                              <option value="03">03</option>
+                              <option value="04">04</option>
+                              <option value="05">05</option>
+                              <option value="06">06</option>
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <h3 className="text-lg font-semibold text-gray-800">{tripType === 'round-trip' ? 'Round Trip' : 'Tour'} Details</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="from" className="text-gray-700 font-medium">
+                            From
+                          </Label>
+                          <Input
+                            id="from"
+                            value={from}
+                            onChange={(e) => setFrom(e.target.value)}
+                            className="bg-blue-50 border-blue-200 text-gray-800 placeholder:text-gray-500 h-12"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="to" className="text-gray-700 font-medium">
+                            To
+                          </Label>
+                          <Input
+                            id="to"
+                            value={to}
+                            onChange={(e) => setTo(e.target.value)}
+                            className="bg-blue-50 border-blue-200 text-gray-800 placeholder:text-gray-500 h-12"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-6">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            id="shared"
+                            name="rideType"
+                            value="shared"
+                            checked={rideType === "shared"}
+                            onChange={(e) => setRideType(e.target.value)}
+                            className="w-4 h-4 text-blue-500 border-gray-300 focus:ring-blue-500"
+                          />
+                          <Label htmlFor="shared" className="text-gray-700 font-medium">
+                            Shared
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            id="personal"
+                            name="rideType"
+                            value="personal"
+                            checked={rideType === "personal"}
+                            onChange={(e) => setRideType(e.target.value)}
+                            className="w-4 h-4 text-blue-500 border-gray-300 focus:ring-blue-500"
+                          />
+                          <Label htmlFor="personal" className="text-gray-700 font-medium">
+                            Personal
+                          </Label>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="pickup-date" className="text-gray-700 font-medium">
+                          Pickup Date
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id="pickup-date"
+                            type="date"
+                            value={date}
+                            onChange={(e) => setDate(e.target.value)}
+                            className="bg-blue-50 border-blue-200 text-gray-800 h-12"
+                          />
+                          <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-gray-700 font-medium">Pickup Time</Label>
+                        {rideType === "shared" ? (
+                          <div className="relative">
+                            <select
+                              value={selectedTimeSlot}
+                              onChange={(e) => setSelectedTimeSlot(e.target.value)}
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10"
+                            >
+                              <option value="">Select a time slot</option>
+                              {timeSlots.map((slot) => (
+                                <option key={slot} value={slot}>
+                                  {slot}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                          </div>
+                        ) : (
+                          <Input
+                            type="time"
+                            value={customTime}
+                            onChange={(e) => setCustomTime(e.target.value)}
+                            className="bg-blue-50 border-blue-200 text-gray-800 h-12"
+                          />
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-gray-700 font-medium">No of Passengers</Label>
+                          <div className="relative">
+                            <select
+                              value={passengers}
+                              onChange={(e) => setPassengers(e.target.value)}
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10"
+                            >
+                              <option value="01">01</option>
+                              <option value="02">02</option>
+                              <option value="03">03</option>
+                              <option value="04">04</option>
+                              <option value="05">05</option>
+                              <option value="06">06</option>
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-gray-700 font-medium">No of Luggage</Label>
+                          <div className="relative">
+                            <select
+                              value={luggage}
+                              onChange={(e) => setLuggage(e.target.value)}
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10"
+                            >
+                              <option value="01">01</option>
+                              <option value="02">02</option>
+                              <option value="03">03</option>
+                              <option value="04">04</option>
+                              <option value="05">05</option>
+                              <option value="06">06</option>
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={handleNextClick}
+                    className="w-full bg-blue-500 text-white hover:bg-blue-600 py-3 text-lg font-medium"
+                    size="lg"
+                  >
+                    Next →
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/50 backdrop-blur-sm border-border/50 shadow-xl overflow-hidden">
+              <CardContent className="p-0">
+                <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-t-xl p-6">
+                  <h3 className="text-lg font-semibold text-foreground mb-2">Live Map</h3>
+                  <p className="text-muted-foreground text-sm">Track available rides in real-time</p>
+                </div>
+                <div className="h-[500px] relative">
+                  <Map />
+                  <div className="absolute inset-0 bg-gradient-to-t from-background/10 to-transparent pointer-events-none" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      <BookingDetailsPopup
+        isOpen={showBookingPopup}
+        onClose={() => setShowBookingPopup(false)}
+        bookingData={
+          showBookingPopup
+            ? {
+                from,
+                to,
+                rideType,
+                date,
+                time: rideType === "shared" ? selectedTimeSlot : customTime,
+                passengers,
+                luggage,
+                tripType,
+              }
+            : null
+        }
+      />
+    </>
   )
 }

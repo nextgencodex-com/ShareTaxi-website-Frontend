@@ -4,21 +4,20 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FaSearch } from 'react-icons/fa';
-import { Car, User, Menu, X } from 'lucide-react';
+import { Car, Menu, X, Globe } from 'lucide-react';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [mobileSearchQuery, setMobileSearchQuery] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const isProcessingClick = useRef(false);
   const router = useRouter();
 
   const menuItems = [
-    { name: 'Book Trip', link: '#booking-section' },
+    { name: 'Home', link: '/' },
+    { name: 'Book Taxi', link: '#book-taxi-section' },
     { name: 'Shared Rides', link: '#shared-rides-section' },
-    { name: 'Our Fleet', link: '#vehicle-options-section' },
-    { name: 'Support', link: '#reviews-section' },
+    { name: 'Car Option', link: '#vehicle-options-section' },
   ];
 
   // Close mobile menu when clicking outside
@@ -53,12 +52,6 @@ const Navbar = () => {
     }
   };
 
-  // Handle desktop search form submission
-  const handleDesktopSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    handleSearch(searchQuery);
-  };
-
   // Handle mobile search form submission
   const handleMobileSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -73,112 +66,99 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="bg-black shadow-md bg-gradient-to-br from-primary/10 via-background to-accent/5 mt-6">
+    <nav className="bg-black shadow-md mt-8">
       {/* Header container with top and side spacing */}
       <div className="flex h-20 md:h-24 items-center px-4 md:px-8 py-4">
-        {/* Larger White Rounded Background Shape */}
-        <div className="bg-white flex-1 rounded-full py-2 md:py-3 px-4 md:px-6 mx-4 md:mx-8 shadow-lg">
-          {/* Smaller Inner White Navbar */}
-          <div className="bg-white rounded-lg flex items-center justify-between px-3 md:px-6 py-2 w-full">
-          {/* Logo */}
-          <div className="flex items-center">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="bg-primary text-primary-foreground p-2 rounded-lg">
-                <Car className="h-6 w-6" />
-              </div>
-              <span className="text-2xl font-bold text-foreground tracking-wide" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>Share Taxi Sri Lanka</span>
-            </Link>
-          </div>
-
-          {/* Desktop Menu */}
-          <div className="hidden md:flex items-center space-x-8">
-            {menuItems.map((item) => (
-              <Link
-                key={item.name}
-                href={item.link}
-                className="text-black hover:text-primary transition-all duration-300 font-semibold text-xl tracking-wide" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
-              >
-                {item.name}
+        {/* Larger Rounded Background Shape (removed bg-white to inherit black) */}
+        <div className="flex-1 rounded-full py-2 md:py-3 px-4 md:px-6 mx-4 md:mx-8 shadow-lg">
+          {/* Smaller Inner Navbar (removed bg-white to inherit black) */}
+          <div className="rounded-lg flex items-center justify-between px-3 md:px-6 py-2 w-full">
+            {/* Logo */}
+            <div className="flex items-center">
+              <Link href="/" className="flex items-center gap-4">
+                <div className="bg-primary text-primary-foreground p-2 rounded-lg">
+                  <Car className="h-6 w-6" />
+                </div>
+                <span className="text-2xl font-bold text-white tracking-wide" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>Share Taxi Sri Lanka</span>
               </Link>
-            ))}
-          </div>
+            </div>
 
-          {/* Right side: Search, Login, Mobile Button */}
-          <div className="flex items-center space-x-3 md:space-x-4">
-            {/* Search Bar */}
-            <form onSubmit={handleDesktopSearchSubmit} className="hidden md:block relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => handleKeyPress(e, searchQuery)}
-                placeholder="Search destinations..."
-                className="pr-10 pl-8 py-3 text-lg border border-gray-300 rounded-full bg-white text-black placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary shadow-md hover:shadow-lg transition-all duration-300 rounded-full"
-              />
+            {/* Desktop Menu */}
+            <div className="hidden md:flex items-center space-x-8">
+              {menuItems.map((item) => (
+                <Link
+                  key={item.name}
+                  href={item.link}
+                  className="text-white hover:text-primary transition-all duration-300 font-semibold text-xl tracking-wide" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+                >
+                  {item.name}
+                </Link>
+              ))}
+            </div>
+
+            {/* Right side: Language, Login, Sign Up, Mobile Button */}
+            <div className="flex items-center space-x-3 md:space-x-4">
+              {/* Language Button */}
               <button
-                type="submit"
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500 hover:text-primary transition-all duration-300 focus:outline-none"
+                className="!bg-black !text-white hover:!bg-gray-800 !rounded-full shadow-md hover:shadow-lg w-12 h-12 md:w-10 md:h-10 flex items-center justify-center transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary !border-0"
               >
-                <FaSearch />
+                <Globe className="w-5 h-5" />
               </button>
-            </form>
 
-            {/* Login Button */}
-            <Link href="/login">
-              <button
-                className="text-black rounded-full border border-black hover:bg-primary hover:text-primary-foreground shadow-md hover:shadow-lg w-12 h-12 md:w-10 md:h-10 flex items-center justify-center transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary rounded-full"
+              {/* Login Button for Desktop */}
+              <Link
+                href="/login"
+                className="hidden md:block text-center !bg-black !text-white hover:!bg-gray-800 py-2 px-4 font-medium text-lg tracking-wide rounded-lg transition-all duration-200 !border-0"
               >
-                <User className="w-5 h-5" />
-              </button>
-            </Link>
+                Login
+              </Link>
 
-            {/* Sign Up Button */}
-            <Link href="/signup">
-              <button
-                className="hidden md:block bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-full font-medium transition-all duration-300 shadow-md hover:shadow-lg rounded-full"
+              {/* Sign Up Button for Desktop */}
+              <Link
+                href="/signup"
+                className="hidden md:block text-center !bg-black !text-white hover:!bg-gray-800 py-2 px-4 font-medium text-lg tracking-wide rounded-lg transition-all duration-200 !border-0"
               >
                 Sign Up
-              </button>
-            </Link>
+              </Link>
 
-            {/* Mobile Menu Toggle */}
-            <div className="md:hidden">
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
+              {/* Mobile Menu Toggle */}
+              <div className="md:hidden">
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
 
-                  // Prevent double-clicking by checking if we're already processing
-                  if (isProcessingClick.current) {
-                    return;
-                  }
+                    // Prevent double-clicking by checking if we're already processing
+                    if (isProcessingClick.current) {
+                      return;
+                    }
 
-                  isProcessingClick.current = true;
+                    isProcessingClick.current = true;
 
-                  setIsMenuOpen(prev => !prev);
+                    setIsMenuOpen(prev => !prev);
 
-                  // Reset the processing flag after a short delay
-                  setTimeout(() => {
-                    isProcessingClick.current = false;
-                  }, 300);
-                }}
-                className="text-black hover:bg-gray-100 active:bg-gray-200 rounded-lg p-2 transition-all duration-150 flex items-center justify-center w-12 h-12 touch-manipulation select-none"
-                aria-label="Toggle mobile menu"
-                style={{
-                  WebkitTapHighlightColor: 'transparent',
-                  WebkitTouchCallout: 'none',
-                  WebkitUserSelect: 'none',
-                  userSelect: 'none'
-                }}
-              >
-                {isMenuOpen ? (
-                  <X className="text-2xl transition-all duration-200" />
-                ) : (
-                  <Menu className="text-2xl transition-all duration-200" />
-                )}
-              </button>
+                    // Reset the processing flag after a short delay
+                    setTimeout(() => {
+                      isProcessingClick.current = false;
+                    }, 300);
+                  }}
+                  className="text-white hover:bg-gray-800 active:bg-gray-900 rounded-lg p-2 transition-all duration-150 flex items-center justify-center w-12 h-12 touch-manipulation select-none"
+                  aria-label="Toggle mobile menu"
+                  style={{
+                    WebkitTapHighlightColor: 'transparent',
+                    WebkitTouchCallout: 'none',
+                    WebkitUserSelect: 'none',
+                    userSelect: 'none'
+                  }}
+                >
+                  {isMenuOpen ? (
+                    <X className="text-2xl transition-all duration-200" />
+                  ) : (
+                    <Menu className="text-2xl transition-all duration-200" />
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
           </div>
         </div>
       </div>
@@ -195,7 +175,7 @@ const Navbar = () => {
               <Link
                 key={item.name}
                 href={item.link}
-                className="block w-full text-center text-white hover:text-primary active:bg-gray-800 py-4 px-4 font-semibold text-xl tracking-wide border border-gray-700 rounded-lg transition-all duration-200 touch-manipulation"
+                className="block w-full text-center text-white hover:text-primary active:bg-gray-800 py-4 px-4 font-semibold text-xl tracking-wide rounded-lg transition-all duration-200 touch-manipulation border-0"
                 style={{
                   fontFamily: 'system-ui, -apple-system, sans-serif',
                   WebkitTapHighlightColor: 'transparent'
@@ -212,10 +192,26 @@ const Navbar = () => {
               </Link>
             ))}
 
+            {/* Login Button for Mobile */}
+            <Link
+              href="/login"
+              className="block w-full text-center !bg-black !text-white hover:!bg-gray-800 py-4 px-4 font-medium text-lg tracking-wide rounded-lg transition-all duration-200 touch-manipulation !border-0"
+              onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                e.stopPropagation();
+                setIsMenuOpen(false);
+              }}
+              onTouchStart={(e: React.TouchEvent<HTMLAnchorElement>) => {
+                e.stopPropagation();
+              }}
+              style={{ WebkitTapHighlightColor: 'transparent' }}
+            >
+              Login
+            </Link>
+
             {/* Sign Up Button for Mobile */}
             <Link
               href="/signup"
-              className="block w-full text-center bg-primary text-primary-foreground hover:bg-primary/90 py-4 px-4 font-medium text-lg tracking-wide rounded-lg transition-all duration-200 touch-manipulation"
+              className="block w-full text-center !bg-black !text-white hover:!bg-gray-800 py-4 px-4 font-medium text-lg tracking-wide rounded-lg transition-all duration-200 touch-manipulation !border-0"
               onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
                 e.stopPropagation();
                 setIsMenuOpen(false);
