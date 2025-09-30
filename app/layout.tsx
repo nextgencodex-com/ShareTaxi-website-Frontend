@@ -2,6 +2,9 @@ import type { Metadata } from 'next'
 import { Poppins } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AuthProvider } from '@/components/auth-context'
+import { LanguageProvider } from '@/components/language-context'
+import { NextIntlClientProvider } from 'next-intl';
+import { getMessages } from 'next-intl/server';
 import './globals.css'
 
 const poppins = Poppins({
@@ -16,17 +19,23 @@ export const metadata: Metadata = {
   generator: 'Share Taxi Sri Lanka',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
+  const messages = await getMessages();
+
   return (
-    <html lang="en">
+    <html>
       <body className={`font-sans ${poppins.variable}`}>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <NextIntlClientProvider messages={messages}>
+          <LanguageProvider>
+            <AuthProvider>
+              {children}
+            </AuthProvider>
+          </LanguageProvider>
+        </NextIntlClientProvider>
         <Analytics />
       </body>
     </html>

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { X, MapPin, Clock, Users } from "lucide-react"
+import { X, MapPin, Clock, Users, ArrowLeft } from "lucide-react"
 import { PaymentDetailsPopup } from "./payment-popup"
 
 interface RideData {
@@ -36,9 +36,10 @@ interface JoinRidePopupProps {
   isOpen: boolean
   onClose: () => void
   rideData: RideData | null
+  onUpdateSeats?: (rideId: number, seatsBooked: number) => void
 }
 
-export function JoinRidePopup({ isOpen, onClose, rideData }: JoinRidePopupProps) {
+export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: JoinRidePopupProps) {
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -75,6 +76,12 @@ export function JoinRidePopup({ isOpen, onClose, rideData }: JoinRidePopupProps)
       <div className="bg-white rounded-2xl w-full max-w-2xl h-[90vh] flex flex-col">
         {/* Fixed Header */}
         <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center hover:bg-gray-100"
+          >
+            <ArrowLeft className="h-4 w-4 text-gray-600" />
+          </button>
           <h2 className="text-2xl font-bold text-gray-900">Personal Details</h2>
           <button
             onClick={onClose}
@@ -294,6 +301,15 @@ export function JoinRidePopup({ isOpen, onClose, rideData }: JoinRidePopupProps)
         onClose={handleClosePaymentPopup}
         rideData={rideData}
         selectedSeats={formData.seatCount}
+        personalData={{
+          fullName: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          emergencyContact: formData.emergencyContact,
+          specialRequests: formData.specialRequests,
+          seatCount: formData.seatCount.toString(),
+        }}
+        onUpdateSeats={onUpdateSeats}
       />
     </div>
   )

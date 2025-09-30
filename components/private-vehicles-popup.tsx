@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Users, Briefcase, ShoppingBag, X } from "lucide-react"
+import { Users, Briefcase, ShoppingBag, X, ArrowLeft } from "lucide-react"
 import { BookRidePopup } from "./book-ride-popup"
 
 const vehicles = [
@@ -71,6 +71,12 @@ export function PrivateVehiclesPopup({ isOpen, onClose }: PrivateVehiclesPopupPr
         <div className="bg-white rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center hover:bg-gray-100"
+            >
+              <ArrowLeft className="h-4 w-4 text-gray-600" />
+            </button>
             <h2 className="text-2xl font-bold text-gray-800">Our Private MPV Car Options</h2>
             <button
               onClick={onClose}

@@ -2,10 +2,13 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Clock, Users, MapPin, X, CreditCard, Share2 } from "lucide-react"
+import { Clock, Users, MapPin, X, CreditCard, Share2, ChevronDown, ArrowLeft } from "lucide-react"
 import { JoinRidePopup } from "./join-ride-popup"
 import { PaymentDetailsPopup } from "./payment-popup"
+import { BookingDetailsPopup } from "./booking-details-popup"
 
 const sharedRides = [
   {
@@ -89,9 +92,20 @@ interface SharedRidesPopupProps {
 
 export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
   const [isJoinRideOpen, setIsJoinRideOpen] = useState(false)
-  const [isPaymentOpen, setIsPaymentOpen] = useState(false)
+  const [isBookingDetailsOpen, setIsBookingDetailsOpen] = useState(false)
   const [selectedRide, setSelectedRide] = useState<(typeof sharedRides)[0] | null>(null)
   const [selectedSeats, setSelectedSeats] = useState(1)
+
+  // Booking form state
+  const [tripType, setTripType] = useState("one-way")
+  const [rideType, setRideType] = useState("shared")
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState("")
+  const [passengers, setPassengers] = useState("02")
+  const [luggage, setLuggage] = useState("04")
+  const [from, setFrom] = useState("Downtown Plaza")
+  const [to, setTo] = useState("Airport Terminal 1")
+  const [date, setDate] = useState("2025-09-20")
+  const [customTime, setCustomTime] = useState("")
 
   if (!isOpen) return null
 
@@ -102,11 +116,16 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
     setSelectedRide(null)
   }
 
-  const handleClosePayment = () => {
-    setIsPaymentOpen(false)
+  const handleCloseBookingDetails = () => {
+    setIsBookingDetailsOpen(false)
     setSelectedRide(null)
     setSelectedSeats(1)
   }
+
+  const timeSlots = [
+    "6 - 8 am", "8 - 10 am", "10 - 12 pm", "12 - 2 pm", "2 - 4 pm",
+    "4 - 6 pm", "6 - 8 pm", "8 - 10 pm", "10 - 12 am"
+  ]
 
   return (
     <>
@@ -114,6 +133,12 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
         <div className="bg-white rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center hover:bg-gray-100"
+            >
+              <ArrowLeft className="h-4 w-4 text-gray-600" />
+            </button>
             <h2 className="text-2xl font-bold text-gray-900">Available Shared Rides</h2>
             <button
               onClick={onClose}
@@ -194,13 +219,210 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
                 </div>
               </div>
 
+              {/* Booking Form */}
+              <div className="bg-white rounded-2xl p-6 border">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-center mb-8">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
+                      <div className="w-16 h-0.5 bg-gray-300"></div>
+                      <div className="w-4 h-4 border-2 border-blue-500 bg-white rounded-full"></div>
+                      <div className="w-16 h-0.5 bg-gray-300"></div>
+                      <div className="w-4 h-4 border-2 border-blue-500 bg-white rounded-full"></div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 bg-gray-100 rounded-lg p-1">
+                    <Button
+                      variant={tripType === "one-way" ? "default" : "ghost"}
+                      size="sm"
+                      className={
+                        tripType === "one-way"
+                          ? "bg-blue-500 text-white hover:bg-blue-600"
+                          : "text-gray-600 hover:text-gray-800"
+                      }
+                      onClick={() => setTripType("one-way")}
+                    >
+                      One Way
+                    </Button>
+                    <Button
+                      variant={tripType === "round-trip" ? "default" : "ghost"}
+                      size="sm"
+                      className={
+                        tripType === "round-trip"
+                          ? "bg-blue-500 text-white hover:bg-blue-600"
+                          : "text-gray-600 hover:text-gray-800"
+                      }
+                      onClick={() => setTripType("round-trip")}
+                    >
+                      Round Trip
+                    </Button>
+                    <Button
+                      variant={tripType === "multi-city" ? "default" : "ghost"}
+                      size="sm"
+                      className={
+                        tripType === "multi-city"
+                          ? "bg-blue-500 text-white hover:bg-blue-600"
+                          : "text-gray-600 hover:text-gray-800"
+                      }
+                      onClick={() => setTripType("multi-city")}
+                    >
+                      Multi-City
+                    </Button>
+                  </div>
+
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-semibold text-gray-800">{tripType === "multi-city" ? "Multi-City Tour" : tripType === "round-trip" ? "Round Trip" : "Tour"} Details</h3>
+                    {tripType === "multi-city" ? (
+                      <div className="text-center text-gray-500 py-4">Multi-city booking not yet implemented</div>
+                    ) : (
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="from" className="text-gray-700 font-medium">
+                              From
+                            </Label>
+                            <Input
+                              id="from"
+                              value={from}
+                              onChange={(e) => setFrom(e.target.value)}
+                              className="bg-blue-50 border-blue-200 text-gray-800 placeholder:text-gray-500 h-12"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="to" className="text-gray-700 font-medium">
+                              To
+                            </Label>
+                            <Input
+                              id="to"
+                              value={to}
+                              onChange={(e) => setTo(e.target.value)}
+                              className="bg-blue-50 border-blue-200 text-gray-800 placeholder:text-gray-500 h-12"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-6">
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="radio"
+                              id="shared"
+                              name="rideType"
+                              value="shared"
+                              checked={rideType === "shared"}
+                              onChange={(e) => setRideType(e.target.value)}
+                              className="w-4 h-4 text-blue-500 border-gray-300 focus:ring-blue-500"
+                            />
+                            <Label htmlFor="shared" className="text-gray-700 font-medium">
+                              Shared
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="radio"
+                              id="personal"
+                              name="rideType"
+                              value="personal"
+                              checked={rideType === "personal"}
+                              onChange={(e) => setRideType(e.target.value)}
+                              className="w-4 h-4 text-blue-500 border-gray-300 focus:ring-blue-500"
+                            />
+                            <Label htmlFor="personal" className="text-gray-700 font-medium">
+                              Personal
+                            </Label>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="pickup-date" className="text-gray-700 font-medium">
+                            Pickup Date
+                          </Label>
+                          <div className="relative">
+                            <Input
+                              id="pickup-date"
+                              type="date"
+                              value={date}
+                              onChange={(e) => setDate(e.target.value)}
+                              className="bg-blue-50 border-blue-200 text-gray-800 h-12"
+                            />
+                            <Clock className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-gray-700 font-medium">Pickup Time</Label>
+                          {rideType === "shared" ? (
+                            <div className="relative">
+                              <select
+                                value={selectedTimeSlot}
+                                onChange={(e) => setSelectedTimeSlot(e.target.value)}
+                                className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10 h-12"
+                              >
+                                <option value="">Select a time slot</option>
+                                {timeSlots.map((slot) => (
+                                  <option key={slot} value={slot}>
+                                    {slot}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                            </div>
+                          ) : (
+                            <Input
+                              type="time"
+                              value={customTime}
+                              onChange={(e) => setCustomTime(e.target.value)}
+                              className="bg-blue-50 border-blue-200 text-gray-800 h-12"
+                            />
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-gray-700 font-medium">No of Passengers</Label>
+                            <div className="relative">
+                              <select
+                                value={passengers}
+                                onChange={(e) => setPassengers(e.target.value)}
+                                className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10 h-12"
+                              >
+                                <option value="01">01</option>
+                                <option value="02">02</option>
+                                <option value="03">03</option>
+                                <option value="04">04</option>
+                                <option value="05">05</option>
+                                <option value="06">06</option>
+                              </select>
+                              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-gray-700 font-medium">No of Luggage</Label>
+                            <div className="relative">
+                              <select
+                                value={luggage}
+                                onChange={(e) => setLuggage(e.target.value)}
+                                className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10 h-12"
+                              >
+                                <option value="01">01</option>
+                                <option value="02">02</option>
+                                <option value="03">03</option>
+                                <option value="04">04</option>
+                                <option value="05">05</option>
+                                <option value="06">06</option>
+                              </select>
+                              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Action Buttons */}
               <div className="flex gap-4">
                 <Button
                   onClick={() => {
-                    setSelectedRide(sharedRides[0]) // Use first ride as example
-                    setSelectedSeats(1)
-                    setIsPaymentOpen(true)
+                    // Use form data to create booking data
+                    setIsBookingDetailsOpen(true)
                   }}
                   className="flex-1 bg-orange-500 hover:bg-orange-600 text-white h-14 text-lg font-semibold rounded-2xl"
                 >
@@ -209,16 +431,16 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
                 </Button>
                 <Button
                   onClick={() => {
-                    // Share functionality
+                    // Share functionality with form data
                     if (navigator.share) {
                       navigator.share({
                         title: 'Shared Ride Available',
-                        text: `Join ride from Downtown Plaza to Airport Terminal 1 for LKR 2000.00`,
+                        text: `Join ride from ${from} to ${to} for LKR 2000.00`,
                         url: window.location.href,
                       })
                     } else {
                       // Fallback: copy to clipboard
-                      navigator.clipboard.writeText(`Join ride from Downtown Plaza to Airport Terminal 1 for LKR 2000.00`)
+                      navigator.clipboard.writeText(`Join ride from ${from} to ${to} for LKR 2000.00`)
                       alert('Ride details copied to clipboard!')
                     }
                   }}
@@ -235,14 +457,20 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
       </div>
 
       <JoinRidePopup isOpen={isJoinRideOpen} onClose={handleCloseJoinRide} rideData={selectedRide} />
-      {selectedRide && (
-        <PaymentDetailsPopup
-          isOpen={isPaymentOpen}
-          onClose={handleClosePayment}
-          rideData={selectedRide}
-          selectedSeats={selectedSeats}
-        />
-      )}
+      <BookingDetailsPopup
+        isOpen={isBookingDetailsOpen}
+        onClose={handleCloseBookingDetails}
+        bookingData={{
+          from,
+          to,
+          rideType,
+          date,
+          time: rideType === "shared" ? selectedTimeSlot : customTime,
+          passengers,
+          luggage,
+          tripType,
+        }}
+      />
     </>
   )
 }

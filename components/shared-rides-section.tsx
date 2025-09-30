@@ -9,13 +9,13 @@ import { Input } from "@/components/ui/input"
 import { Clock, Users, MapPin } from "lucide-react"
 import { JoinRidePopup } from "./join-ride-popup"
 
-const sharedRides = [
+const initialSharedRides = [
   {
     id: 1,
     timeAgo: "10 min ago",
     driver: {
       name: "Alex Chen",
-      image: "/images/alex-chen-driver.jpg",
+      image: "/images/professional-driver-headshot.jpg",
     },
     vehicle: "Toyota Alphard",
     pickup: {
@@ -85,8 +85,19 @@ const sharedRides = [
 ]
 
 export function SharedRidesSection() {
+  const [sharedRides, setSharedRides] = useState(initialSharedRides)
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [selectedRide, setSelectedRide] = useState<(typeof sharedRides)[0] | null>(null)
+
+  const updateRideSeats = (rideId: number, seatsBooked: number) => {
+    setSharedRides(prev =>
+      prev.map(ride =>
+        ride.id === rideId
+          ? { ...ride, seats: { ...ride.seats, available: Math.max(0, ride.seats.available - seatsBooked) } }
+          : ride
+      )
+    )
+  }
 
   const handleJoinRide = (ride: (typeof sharedRides)[0]) => {
     setSelectedRide(ride)
@@ -214,7 +225,12 @@ export function SharedRidesSection() {
         </div>
       </section>
 
-      <JoinRidePopup isOpen={isPopupOpen} onClose={handleClosePopup} rideData={selectedRide} />
+      <JoinRidePopup
+        isOpen={isPopupOpen}
+        onClose={handleClosePopup}
+        rideData={selectedRide}
+        onUpdateSeats={updateRideSeats}
+      />
     </>
   )
 }

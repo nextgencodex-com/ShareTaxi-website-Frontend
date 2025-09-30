@@ -2,14 +2,12 @@
 
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Star, User } from "lucide-react"
-import { useAuth } from "@/components/auth-context"
 
 interface UserProfilePageProps {
   onBackToHome: () => void
 }
 
 export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
-  const { user } = useAuth()
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Back to Home */}
@@ -25,41 +23,11 @@ export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
       </div>
 
       <div className="max-w-4xl mx-auto px-6 py-8">
-        {/* Profile Section */}
-        <div className="flex items-center gap-6 mb-8">
-          <div className="relative">
-            <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-200">
-              <img
-                src="/professional-driver-headshot.jpg"
-                alt={user?.fullName || "User"}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center">
-              <User className="h-4 w-4 text-black" />
-            </div>
-          </div>
-
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-gray-900">{user?.fullName || "User"}</h1>
-              <span className="bg-purple-100 text-purple-600 px-2 py-1 rounded-full text-sm font-medium">Hi</span>
-            </div>
-            <p className="text-gray-600 mb-4">{user?.email || "user@example.com"}</p>
-
-            <div className="flex items-center gap-8">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">12</div>
-                <div className="text-sm text-gray-500">Total Rides</div>
-              </div>
-              <div className="text-center">
-                <div className="flex items-center gap-1">
-                  <span className="text-2xl font-bold text-yellow-500">4.8</span>
-                  <Star className="h-5 w-5 text-yellow-400 fill-current" />
-                </div>
-                <div className="text-sm text-gray-500">Rating</div>
-              </div>
-            </div>
+        {/* Profile Icon Header */}
+        <div className="flex items-center justify-center mb-8">
+          <div className="flex items-center gap-4">
+            <User className="h-12 w-12 text-gray-600" />
+            <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
           </div>
         </div>
 

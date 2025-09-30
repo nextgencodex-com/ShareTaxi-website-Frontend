@@ -28,16 +28,13 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background relative">
       {/* Decorative Circles */}
-      <div className="absolute left-32 top-1/3 w-72 h-72 bg-orange-300/25 rounded-full"></div>
-      <div className="absolute left-0 top-1/2 w-48 h-48 bg-orange-200/40 rounded-full"></div>
-      <div className="absolute left-16 bottom-1/3 w-64 h-64 bg-orange-300/30 rounded-full"></div>
+
 
       <Header
-        onLoginSignupClick={() => setIsLoginSignupOpen(true)}
         isLoggedIn={isLoggedIn}
-        user={user}
-        onLogout={handleLogout}
+        onLoginClick={() => setIsLoginSignupOpen(true)}
       />
+
       <main>
         <HeroSection />
         <BookingSection />

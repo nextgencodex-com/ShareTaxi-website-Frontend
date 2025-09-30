@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { X } from "lucide-react"
+import { X, ArrowLeft } from "lucide-react"
 
 interface User {
   fullName: string
@@ -83,6 +83,9 @@ export function LoginSignupPopup({ isOpen, onClose, onLogin }: LoginSignupPopupP
         <div className="p-6">
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <ArrowLeft className="h-6 w-6 text-gray-600" />
+            </button>
             <h2 className="text-2xl font-bold text-gray-800">
               {activeTab === "login" ? "Login" : "Sign Up"}
             </h2>

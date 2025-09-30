@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Calendar, ChevronDown, Plus, X } from "lucide-react"
+import { Calendar, ChevronDown, Plus, X, MapPin, ChevronUp } from "lucide-react"
 import dynamic from 'next/dynamic'
 import { BookingDetailsPopup } from "./booking-details-popup"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 const Map = dynamic(() => import('./map'), { ssr: false })
 
@@ -17,6 +18,9 @@ interface Destination {
 }
 
 export function BookingSection() {
+  const isMobile = useIsMobile()
+  const [showMapMobile, setShowMapMobile] = useState(false)
+
   const [tripType, setTripType] = useState("one-way")
   const [rideType, setRideType] = useState("shared")
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("")
@@ -75,7 +79,7 @@ export function BookingSection() {
 
   return (
     <>
-      <section className="py-16 bg-muted/30">
+      <section id="booking-section" className="py-16 bg-muted/30">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-balance mb-4">Book Your Taxi with Ease</h2>
@@ -85,9 +89,10 @@ export function BookingSection() {
             </p>
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-8 items-start">
-            <Card className="bg-white border-gray-200 shadow-lg">
-              <CardContent className="p-8">
+          <div className="space-y-8">
+            <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:space-y-0 space-y-8">
+              <Card className="bg-white border-gray-200 shadow-lg">
+                <CardContent className="p-8">
                 <div className="space-y-6">
                   <div className="flex items-center justify-center mb-8">
                     <div className="flex items-center space-x-4">
@@ -400,18 +405,57 @@ export function BookingSection() {
               </CardContent>
             </Card>
 
-            <Card className="bg-card/50 backdrop-blur-sm border-border/50 shadow-xl overflow-hidden">
-              <CardContent className="p-0">
-                <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-t-xl p-6">
-                  <h3 className="text-lg font-semibold text-foreground mb-2">Live Map</h3>
-                  <p className="text-muted-foreground text-sm">Track available rides in real-time</p>
-                </div>
-                <div className="h-[500px] relative">
-                  <Map />
-                  <div className="absolute inset-0 bg-gradient-to-t from-background/10 to-transparent pointer-events-none" />
-                </div>
-              </CardContent>
-            </Card>
+            {/* Desktop Map - Always Visible */}
+            {!isMobile && (
+              <Card className="bg-card/50 backdrop-blur-sm border-border/50 shadow-xl overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-t-xl p-6">
+                    <h3 className="text-lg font-semibold text-foreground mb-2">Live Map</h3>
+                    <p className="text-muted-foreground text-sm">Track available rides in real-time</p>
+                  </div>
+                  <div className="h-[500px] relative">
+                    <Map keyName="booking" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-background/10 to-transparent pointer-events-none" />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            </div>
+
+            {/* Mobile Toggle Button */}
+            {isMobile && (
+              <div className="flex justify-center">
+                <Button
+                  onClick={() => setShowMapMobile(!showMapMobile)}
+                  className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg transform transition-all duration-300 hover:scale-105"
+                  size="lg"
+                >
+                  <MapPin className="h-5 w-5" />
+                  <span>{showMapMobile ? 'Hide Map' : 'Show Map'}</span>
+                  {showMapMobile ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Mobile Map - Show When Toggled */}
+            {isMobile && showMapMobile && (
+              <Card className="bg-card/50 backdrop-blur-sm border-border/50 shadow-xl overflow-hidden transition-all duration-500 ease-in-out">
+                <CardContent className="p-0">
+                  <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-t-xl p-6">
+                    <h3 className="text-lg font-semibold text-foreground mb-2">Live Map</h3>
+                    <p className="text-muted-foreground text-sm">Track available rides in real-time</p>
+                  </div>
+                  <div className="h-[400px] relative">
+                    <Map keyName="booking" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-background/10 to-transparent pointer-events-none" />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </section>

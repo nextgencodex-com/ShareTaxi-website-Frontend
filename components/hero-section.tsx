@@ -2,10 +2,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MapPin, Clock, Shield, Star, MessageCircle } from "lucide-react"
 import dynamic from 'next/dynamic'
+import { useTranslations } from 'next-intl'
 
 const Map = dynamic(() => import('./map'), { ssr: false })
 
 export function HeroSection() {
+  const t = useTranslations('hero')
   return (
     <section id="hero-section" className="relative bg-white py-20 overflow-hidden">
       {/* Decorative Circles */}
@@ -23,13 +25,12 @@ export function HeroSection() {
       <div className="container mx-auto px-4">
         <div className="space-y-8 text-center">
           <div className="space-y-4">
-            <Badge className="bg-primary/20 text-primary border-primary/30">Premium Ride Experience</Badge>
+            <Badge className="bg-primary/20 text-primary border-primary/30">{t('badge')}</Badge>
             <h1 className="text-4xl lg:text-7xl font-bold text-balance">
-              <span className="text-2xl lg:text-5xl">Premium Ride Experience with</span> <br /><span className="text-primary text-4xl lg:text-7xl">Share Taxi Sri Lanka</span>
+              <span className="text-2xl lg:text-5xl">{t('title.line1')}</span> <br /><span className="text-primary text-4xl lg:text-7xl">Share Taxi Sri Lanka</span>
             </h1>
             <p className="text-lg text-muted-foreground text-pretty">
-              Book scheduled or shared rides with our premium fleet. Safe, reliable, and comfortable transportation at
-              your fingertips.
+              {t('description')}
             </p>
           </div>
 
@@ -42,7 +43,7 @@ export function HeroSection() {
                 element?.scrollIntoView({ behavior: 'smooth' });
               }}
             >
-              Book Individual Ride
+              {t('buttons.bookIndividualRide')}
             </Button>
             <Button
               variant="outline"
@@ -53,7 +54,7 @@ export function HeroSection() {
                 element?.scrollIntoView({ behavior: 'smooth' });
               }}
             >
-              Join Shared Ride
+              {t('buttons.joinSharedRide')}
             </Button>
 
           </div>
@@ -74,25 +75,25 @@ export function HeroSection() {
               <div className="bg-green-100 p-4 rounded-full">
                 <Clock className="h-6 w-6 text-green-600" />
               </div>
-              <span className="text-sm font-medium">24/7 Service</span>
+              <span className="text-sm font-medium">{t('features.service247')}</span>
             </div>
             <div className="flex items-center gap-4">
               <div className="bg-primary/20 p-4 rounded-full">
                 <Shield className="h-6 w-6 text-primary" />
               </div>
-              <span className="text-sm font-medium">Verified Driver</span>
+              <span className="text-sm font-medium">{t('features.verifiedDrivers')}</span>
             </div>
             <div className="flex items-center gap-4">
               <div className="bg-accent/20 p-4 rounded-full">
                 <Star className="h-6 w-6 text-accent" />
               </div>
-              <span className="text-sm font-medium">5-Star Rated</span>
+              <span className="text-sm font-medium">{t('features.starRated')}</span>
             </div>
             <div className="flex items-center gap-4">
               <div className="bg-blue-100 p-4 rounded-full">
                 <MapPin className="h-6 w-6 text-blue-600" />
               </div>
-              <span className="text-sm font-medium">Real-Time Tracking</span>
+              <span className="text-sm font-medium">{t('features.realTimeTracking')}</span>
             </div>
           </div>
         </div>

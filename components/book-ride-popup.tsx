@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { X, Users, Briefcase, ShoppingBag, Calendar } from "lucide-react"
+import { X, Users, Briefcase, ShoppingBag, Calendar, ArrowLeft } from "lucide-react"
 
 interface Vehicle {
   id: number
@@ -50,6 +50,9 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
         <div className="p-6">
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <ArrowLeft className="h-6 w-6 text-gray-600" />
+            </button>
             <h2 className="text-2xl font-bold text-gray-800">Book Your Ride</h2>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
               <X className="h-6 w-6 text-gray-600" />

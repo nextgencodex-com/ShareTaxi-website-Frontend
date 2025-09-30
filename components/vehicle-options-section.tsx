@@ -99,7 +99,7 @@ export function VehicleOptionsSection() {
                 <img
                   src={vehicle.image || "/placeholder.svg"}
                   alt={vehicle.name}
-                  className="w-full h-40 object-cover"
+                  className="w-full h-62 object-cover"
                 />
               </div>
 
