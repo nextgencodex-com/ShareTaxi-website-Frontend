@@ -36,7 +36,24 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle booking submission
+
+    // Create WhatsApp message with booking details
+    const message = `*New Booking Request*%0A%0A` +
+      `*Vehicle:* ${vehicle.name}%0A` +
+      `*Price:* ${vehicle.price}%0A%0A` +
+      `*Customer Details:*%0A` +
+      `*Name:* ${formData.name}%0A` +
+      `*Email:* ${formData.email}%0A` +
+      `*Phone:* +94 ${formData.phone}%0A` +
+      `*Booking Date:* ${formData.bookingDate}%0A%0A` +
+      `Please contact the customer for confirmation.`
+
+    // WhatsApp URL with pre-filled message
+    const whatsappUrl = `https://wa.me/94759627589?text=${message}`
+
+    // Open WhatsApp in new window/tab
+    window.open(whatsappUrl, '_blank')
+
     onClose()
   }
 
