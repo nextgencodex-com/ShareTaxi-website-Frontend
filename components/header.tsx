@@ -29,10 +29,18 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
   return (
     <>
       <header className="relative z-50 pt-4 md:pt-6 px-4 md:px-6">
-        <div className="bg-black rounded-full px-4 md:px-8 py-3 md:py-4 max-w-6xl mx-auto">
+        <div className="bg-black rounded-full px-4 md:px-8 py-3 md:py-4 max-w-6xl mx-auto relative">
           <div className="flex items-center justify-between">
-            {/* Logo and Brand Name */}
-            <div className="flex items-center gap-2 md:gap-3">
+            {/* Mobile Logo */}
+            <img src="/images/logo.png" alt="Share Taxi Sri Lanka" className="lg:hidden h-8 md:h-10" />
+
+            {/* Mobile Centered Title */}
+            <span className="lg:hidden absolute inset-0 flex items-center justify-center text-white font-semibold text-sm md:text-base whitespace-nowrap pointer-events-none">
+              Share Taxi Sri Lanka
+            </span>
+
+            {/* Desktop Logo and Brand Name */}
+            <div className="hidden lg:flex items-center gap-2 md:gap-3">
               <img src="/images/logo.png" alt="Share Taxi Sri Lanka" className="h-8 md:h-10" />
               <span className="text-white font-semibold text-sm md:text-base whitespace-nowrap">
                 Share Taxi Sri Lanka
@@ -100,6 +108,7 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
               </div>
             </div>
 
+            {/* Mobile Menu Button */}
             <Button
               variant="ghost"
               className="lg:hidden text-white hover:text-yellow-400 hover:bg-transparent p-2"
