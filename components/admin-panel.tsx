@@ -34,6 +34,9 @@ interface RideData {
     available: number
     total: number
   }
+  passengers: string
+  luggage: string
+  handCarry: string
   price: string
 }
 
@@ -57,6 +60,15 @@ interface AdminPanelProps {
 }
 
 export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps) {
+  const timeSlots = [
+    "6-8 am", "8-10 am", "10-12 pm", "12-2 pm", "2-4 pm",
+    "4-6 pm", "6-8 pm", "8-10 pm", "10-12 am"
+  ]
+
+  const passengerOptions = Array.from({ length: 10 }, (_, i) => (i + 1).toString())
+  const luggageOptions = Array.from({ length: 7 }, (_, i) => i.toString())
+  const handCarryOptions = Array.from({ length: 6 }, (_, i) => i.toString())
+
   // Shared Ride Form State
   const [rideForm, setRideForm] = useState({
     driverName: "",
@@ -66,6 +78,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     destinationLocation: "",
     time: "",
     duration: "",
+    passengers: "1",
+    luggage: "0",
+    handCarry: "0",
     availableSeats: "",
     totalSeats: "",
     price: "",
@@ -76,9 +91,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const [vehicleForm, setVehicleForm] = useState({
     name: "",
     price: "",
-    passengers: "",
-    luggage: "",
-    handCarry: "",
+    passengers: "4",
+    luggage: "2",
+    handCarry: "2",
     image: "",
     feature1: "",
     feature2: "",
@@ -153,6 +168,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       },
       time: rideForm.time,
       duration: rideForm.duration,
+      passengers: rideForm.passengers,
+      luggage: rideForm.luggage,
+      handCarry: rideForm.handCarry,
       seats: {
         available: availableSeats,
         total: totalSeats,
@@ -171,6 +189,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       destinationLocation: "",
       time: "",
       duration: "",
+      passengers: "1",
+      luggage: "0",
+      handCarry: "0",
       availableSeats: "",
       totalSeats: "",
       price: "",
@@ -203,9 +224,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     setVehicleForm({
       name: "",
       price: "",
-      passengers: "",
-      luggage: "",
-      handCarry: "",
+      passengers: "4",
+      luggage: "2",
+      handCarry: "2",
       image: "",
       feature1: "",
       feature2: "",
@@ -301,12 +322,21 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                   <div className="grid md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium mb-2">Time</label>
-                      <Input
-                        required
+                      <Select
                         value={rideForm.time}
-                        onChange={(e) => setRideForm({ ...rideForm, time: e.target.value })}
-                        placeholder=""
-                      />
+                        onValueChange={(value) => setRideForm({ ...rideForm, time: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select time" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {timeSlots.map((slot) => (
+                            <SelectItem key={slot} value={slot}>
+                              {slot}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div>
@@ -339,6 +369,65 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         value={rideForm.totalSeats}
                         onChange={(e) => setRideForm({ ...rideForm, totalSeats: e.target.value })}
                       />
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Passengers</label>
+                      <Select
+                        value={rideForm.passengers}
+                        onValueChange={(value) => setRideForm({ ...rideForm, passengers: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {passengerOptions.map((num) => (
+                            <SelectItem key={num} value={num}>
+                              {num}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Luggage</label>
+                      <Select
+                        value={rideForm.luggage}
+                        onValueChange={(value) => setRideForm({ ...rideForm, luggage: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {luggageOptions.map((num) => (
+                            <SelectItem key={num} value={num}>
+                              {num}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Hand Carry</label>
+                      <Select
+                        value={rideForm.handCarry}
+                        onValueChange={(value) => setRideForm({ ...rideForm, handCarry: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {handCarryOptions.map((num) => (
+                            <SelectItem key={num} value={num}>
+                              {num}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
@@ -407,29 +496,59 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                   <div className="grid md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium mb-2">Passengers</label>
-                      <Input
-                        required
+                      <Select
                         value={vehicleForm.passengers}
-                        onChange={(e) => setVehicleForm({ ...vehicleForm, passengers: e.target.value })}
-                      />
+                        onValueChange={(value) => setVehicleForm({ ...vehicleForm, passengers: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {passengerOptions.map((num) => (
+                            <SelectItem key={num} value={num}>
+                              {num}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium mb-2">Luggage</label>
-                      <Input
-                        required
+                      <Select
                         value={vehicleForm.luggage}
-                        onChange={(e) => setVehicleForm({ ...vehicleForm, luggage: e.target.value })}
-                      />
+                        onValueChange={(value) => setVehicleForm({ ...vehicleForm, luggage: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {luggageOptions.map((num) => (
+                            <SelectItem key={num} value={num}>
+                              {num}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium mb-2">Hand Carry</label>
-                      <Input
-                        required
+                      <Select
                         value={vehicleForm.handCarry}
-                        onChange={(e) => setVehicleForm({ ...vehicleForm, handCarry: e.target.value })}
-                      />
+                        onValueChange={(value) => setVehicleForm({ ...vehicleForm, handCarry: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {handCarryOptions.map((num) => (
+                            <SelectItem key={num} value={num}>
+                              {num}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
