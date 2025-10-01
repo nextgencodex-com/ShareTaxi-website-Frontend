@@ -127,7 +127,7 @@ export function BookingSection() {
                       }
                       onClick={() => setTripType("round-trip")}
                     >
-                      Round Trip
+                      Return Trip
                     </Button>
                     <Button
                       variant={tripType === "multi-city" ? "default" : "ghost"}
@@ -256,7 +256,7 @@ export function BookingSection() {
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      <h3 className="text-lg font-semibold text-gray-800">{tripType === 'round-trip' ? 'Round Trip' : 'Tour'} Details</h3>
+                      <h3 className="text-lg font-semibold text-gray-800">{tripType === 'round-trip' ? 'Return Trip' : 'Tour'} Details</h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="from" className="text-gray-700 font-medium">
