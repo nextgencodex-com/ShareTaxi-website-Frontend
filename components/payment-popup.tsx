@@ -159,6 +159,16 @@ Price: LKR 2000.00
     const mailtoLink = `mailto:contact@nextgcodex.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bookingDetails)}`
 
     window.open(mailtoLink, "_blank")
+
+    // Send confirmation email to user
+    const userConfirmationSubject = `Booking Confirmation - Thank You for Choosing Us!`
+    const userConfirmationBody = `${bookingDetails}\n\nThank you for choosing us! We have received your booking request and will contact you soon.`
+
+    const userMailtoLink = `mailto:${personalData?.email}?subject=${encodeURIComponent(userConfirmationSubject)}&body=${encodeURIComponent(userConfirmationBody)}`
+
+    setTimeout(() => {
+      window.open(userMailtoLink, "_blank")
+    }, 1000) // Small delay to avoid popup blockers
   }
 
   const handleWhatsAppBooking = () => {
@@ -224,6 +234,16 @@ Please confirm this booking. Thank you!
 
     const whatsappLink = `https://wa.me/94759627589?text=${encodeURIComponent(bookingDetails)}`
     window.open(whatsappLink, "_blank")
+
+    // Send confirmation email to user
+    const userConfirmationSubject = `Booking Confirmation - Thank You for Choosing Us!`
+    const userConfirmationBody = `${bookingDetails}\n\nThank you for choosing us! We have sent your booking request and will contact you soon.`
+
+    const userMailtoLink = `mailto:${personalData?.email}?subject=${encodeURIComponent(userConfirmationSubject)}&body=${encodeURIComponent(userConfirmationBody)}`
+
+    setTimeout(() => {
+      window.open(userMailtoLink, "_blank")
+    }, 1000) // Small delay to avoid popup blockers
   }
 
   const handleCloseConfirmation = () => {

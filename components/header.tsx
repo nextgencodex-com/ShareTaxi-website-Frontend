@@ -16,9 +16,10 @@ import {
 interface HeaderProps {
   isLoggedIn?: boolean
   onLoginClick?: () => void
+  onAdminLoginClick?: () => void
 }
 
-export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
+export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: HeaderProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isMobileLanguageOpen, setIsMobileLanguageOpen] = useState(false)
   const t = useTranslations('language')
@@ -63,8 +64,17 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
               </a>
             </nav>
 
-            {/* Desktop - Language Selector and Profile */}
+            {/* Desktop - Admin, Language Selector and Profile */}
             <div className="hidden lg:flex items-center gap-4">
+              {/* Admin Button */}
+              <Button
+                onClick={onAdminLoginClick}
+                variant="ghost"
+                className="text-white hover:text-yellow-400 hover:bg-transparent px-3"
+              >
+                Admin
+              </Button>
+
               {/* Language Selector */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -121,7 +131,7 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
       </header>
 
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-gray z-30 lg:hidden overflow-y-5">
+        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-md z-30 lg:hidden overflow-y-5">
           <div className="p-6">
             {/* Close button */}
             <div className="flex justify-end mb-8">
@@ -136,6 +146,17 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
 
             {/* Menu items as tiles */}
             <div className="space-y-2">
+              {/* Admin tile at top */}
+              <button
+                onClick={() => {
+                  onAdminLoginClick?.()
+                  setIsMobileMenuOpen(false)
+                }}
+                className="block bg-gray-900 hover:bg-gray-700 rounded-3xl p-4 transition-colors"
+              >
+                <h3 className="text-yellow-400 font-semibold text-xl">Admin</h3>
+              </button>
+
               {/* Navigation tiles */}
               <a
                 href="#hero-section"

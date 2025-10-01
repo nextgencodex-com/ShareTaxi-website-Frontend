@@ -10,253 +10,284 @@ import { Clock, Users, MapPin, ChevronLeft, ChevronRight, Filter } from "lucide-
 import { JoinRidePopup } from "./join-ride-popup"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-const sharedRides = [
-  {
-    id: 1,
-    timeAgo: "10 min ago",
-    postedDate: new Date(Date.now() - 10 * 60 * 1000),
-    frequency: "one-time",
-    driver: {
-      name: "Alex Chen",
-      image: "/images/alex-chen-driver.jpg",
-    },
-    vehicle: "Toyota Alphard",
-    pickup: {
-      location: "Downtown Plaza",
-      type: "Pickup point",
-    },
-    destination: {
-      location: "Airport Terminal 1",
-      type: "Destination",
-    },
-    time: "02-04 pm",
-    duration: "45 min",
-    seats: {
-      available: 3,
-      total: 6,
-    },
-    price: "LKR 2000.00",
-  },
-  {
-    id: 2,
-    timeAgo: "25 min ago",
-    postedDate: new Date(Date.now() - 25 * 60 * 1000),
-    frequency: "daily",
-    driver: {
-      name: "Sarah Wilson",
-      image: "/images/sarah-wilson-driver.jpg",
-    },
-    vehicle: "Hyundai Starex",
-    pickup: {
-      location: "Galle Fort",
-      type: "Pickup point",
-    },
-    destination: {
-      location: "Colombo City Center",
-      type: "Destination",
-    },
-    time: "06-08 am",
-    duration: "2 hours",
-    seats: {
-      available: 4,
-      total: 8,
-    },
-    price: "LKR 1500.00",
-  },
-  {
-    id: 3,
-    timeAgo: "1 hour ago",
-    postedDate: new Date(Date.now() - 60 * 60 * 1000),
-    frequency: "monthly",
-    driver: {
-      name: "Michael Chen",
-      image: "/images/michael-chen-driver.jpg",
-    },
-    vehicle: "Toyota Innova",
-    pickup: {
-      location: "Kandy Central",
-      type: "Pickup point",
-    },
-    destination: {
-      location: "Nuwara Eliya",
-      type: "Destination",
-    },
-    time: "08-10 am",
-    duration: "3 hours",
-    seats: {
-      available: 2,
-      total: 6,
-    },
-    price: "LKR 2500.00",
-  },
-  {
-    id: 4,
-    timeAgo: "2 hours ago",
-    postedDate: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    frequency: "daily",
-    driver: {
-      name: "David Kim",
-      image: "/images/david-kim-driver.jpg",
-    },
-    vehicle: "Toyota Alphard",
-    pickup: {
-      location: "Negombo Beach",
-      type: "Pickup point",
-    },
-    destination: {
-      location: "Airport Terminal 2",
-      type: "Destination",
-    },
-    time: "04-06 pm",
-    duration: "30 min",
-    seats: {
-      available: 5,
-      total: 6,
-    },
-    price: "LKR 1000.00",
-  },
-  {
-    id: 5,
-    timeAgo: "3 hours ago",
-    postedDate: new Date(Date.now() - 3 * 60 * 60 * 1000),
-    frequency: "yearly",
-    driver: {
-      name: "Emma Johnson",
-      image: "/images/emma-johnson-driver.jpg",
-    },
-    vehicle: "Hyundai Starex",
-    pickup: {
-      location: "Downtown Plaza",
-      type: "Pickup point",
-    },
-    destination: {
-      location: "Sigiriya Rock",
-      type: "Destination",
-    },
-    time: "05-07 am",
-    duration: "4 hours",
-    seats: {
-      available: 3,
-      total: 8,
-    },
-    price: "LKR 3500.00",
-  },
-  {
-    id: 6,
-    timeAgo: "5 hours ago",
-    postedDate: new Date(Date.now() - 5 * 60 * 60 * 1000),
-    frequency: "one-time",
-    driver: {
-      name: "James Brown",
-      image: "/images/james-brown-driver.jpg",
-    },
-    vehicle: "Toyota Innova",
-    pickup: {
-      location: "Colombo Fort",
-      type: "Pickup point",
-    },
-    destination: {
-      location: "Galle Face",
-      type: "Destination",
-    },
-    time: "12-02 pm",
-    duration: "20 min",
-    seats: {
-      available: 4,
-      total: 6,
-    },
-    price: "LKR 800.00",
-  },
-  {
-    id: 7,
-    timeAgo: "6 hours ago",
-    postedDate: new Date(Date.now() - 6 * 60 * 60 * 1000),
-    frequency: "monthly",
-    driver: {
-      name: "Lisa Anderson",
-      image: "/images/lisa-anderson-driver.jpg",
-    },
-    vehicle: "Toyota Alphard",
-    pickup: {
-      location: "Airport Terminal 1",
-      type: "Pickup point",
-    },
-    destination: {
-      location: "Bentota Beach",
-      type: "Destination",
-    },
-    time: "10-12 am",
-    duration: "2.5 hours",
-    seats: {
-      available: 2,
-      total: 6,
-    },
-    price: "LKR 2200.00",
-  },
-  {
-    id: 8,
-    timeAgo: "8 hours ago",
-    postedDate: new Date(Date.now() - 8 * 60 * 60 * 1000),
-    frequency: "daily",
-    driver: {
-      name: "Robert Taylor",
-      image: "/images/robert-taylor-driver.jpg",
-    },
-    vehicle: "Hyundai Starex",
-    pickup: {
-      location: "Kandy Lake",
-      type: "Pickup point",
-    },
-    destination: {
-      location: "Temple of Tooth",
-      type: "Destination",
-    },
-    time: "03-05 pm",
-    duration: "15 min",
-    seats: {
-      available: 6,
-      total: 8,
-    },
-    price: "LKR 500.00",
-  },
-  {
-    id: 9,
-    timeAgo: "10 hours ago",
-    postedDate: new Date(Date.now() - 10 * 60 * 60 * 1000),
-    frequency: "yearly",
-    driver: {
-      name: "Maria Garcia",
-      image: "/images/maria-garcia-driver.jpg",
-    },
-    vehicle: "Toyota Innova",
-    pickup: {
-      location: "Ella Station",
-      type: "Pickup point",
-    },
-    destination: {
-      location: "Nine Arch Bridge",
-      type: "Destination",
-    },
-    time: "07-09 am",
-    duration: "1 hour",
-    seats: {
-      available: 3,
-      total: 6,
-    },
-    price: "LKR 1800.00",
-  },
-]
+interface Ride {
+  id: number
+  timeAgo: string
+  postedDate: Date
+  frequency: string
+  driver: {
+    name: string
+    image: string
+  }
+  vehicle: string
+  pickup: {
+    location: string
+    type: string
+  }
+  destination: {
+    location: string
+    type: string
+  }
+  time: string
+  duration: string
+  seats: {
+    available: number
+    total: number
+  }
+  price: string
+}
 
-export function SharedRidesSection() {
+interface SharedRidesSectionProps {
+  initialRides?: Ride[]
+}
+
+export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProps) {
+  const defaultRides = useMemo(() => [
+    {
+      id: 1,
+      timeAgo: "10 min ago",
+      postedDate: new Date(Date.now() - 10 * 60 * 1000),
+      frequency: "one-time",
+      driver: {
+        name: "Alex Chen",
+        image: "/images/alex-chen-driver.jpg",
+      },
+      vehicle: "Toyota Alphard",
+      pickup: {
+        location: "Downtown Plaza",
+        type: "Pickup point",
+      },
+      destination: {
+        location: "Airport Terminal 1",
+        type: "Destination",
+      },
+      time: "02-04 pm",
+      duration: "45 min",
+      seats: {
+        available: 3,
+        total: 6,
+      },
+      price: "LKR 2000.00",
+    },
+    {
+      id: 2,
+      timeAgo: "25 min ago",
+      postedDate: new Date(Date.now() - 25 * 60 * 1000),
+      frequency: "daily",
+      driver: {
+        name: "Sarah Wilson",
+        image: "/images/sarah-wilson-driver.jpg",
+      },
+      vehicle: "Hyundai Starex",
+      pickup: {
+        location: "Galle Fort",
+        type: "Pickup point",
+      },
+      destination: {
+        location: "Colombo City Center",
+        type: "Destination",
+      },
+      time: "06-08 am",
+      duration: "2 hours",
+      seats: {
+        available: 4,
+        total: 8,
+      },
+      price: "LKR 1500.00",
+    },
+    {
+      id: 3,
+      timeAgo: "1 hour ago",
+      postedDate: new Date(Date.now() - 60 * 60 * 1000),
+      frequency: "monthly",
+      driver: {
+        name: "Michael Chen",
+        image: "/images/michael-chen-driver.jpg",
+      },
+      vehicle: "Toyota Innova",
+      pickup: {
+        location: "Kandy Central",
+        type: "Pickup point",
+      },
+      destination: {
+        location: "Nuwara Eliya",
+        type: "Destination",
+      },
+      time: "08-10 am",
+      duration: "3 hours",
+      seats: {
+        available: 2,
+        total: 6,
+      },
+      price: "LKR 2500.00",
+    },
+    {
+      id: 4,
+      timeAgo: "2 hours ago",
+      postedDate: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      frequency: "daily",
+      driver: {
+        name: "David Kim",
+        image: "/images/david-kim-driver.jpg",
+      },
+      vehicle: "Toyota Alphard",
+      pickup: {
+        location: "Negombo Beach",
+        type: "Pickup point",
+      },
+      destination: {
+        location: "Airport Terminal 2",
+        type: "Destination",
+      },
+      time: "04-06 pm",
+      duration: "30 min",
+      seats: {
+        available: 5,
+        total: 6,
+      },
+      price: "LKR 1000.00",
+    },
+    {
+      id: 5,
+      timeAgo: "3 hours ago",
+      postedDate: new Date(Date.now() - 3 * 60 * 60 * 1000),
+      frequency: "yearly",
+      driver: {
+        name: "Emma Johnson",
+        image: "/images/emma-johnson-driver.jpg",
+      },
+      vehicle: "Hyundai Starex",
+      pickup: {
+        location: "Downtown Plaza",
+        type: "Pickup point",
+      },
+      destination: {
+        location: "Sigiriya Rock",
+        type: "Destination",
+      },
+      time: "05-07 am",
+      duration: "4 hours",
+      seats: {
+        available: 3,
+        total: 8,
+      },
+      price: "LKR 3500.00",
+    },
+    {
+      id: 6,
+      timeAgo: "5 hours ago",
+      postedDate: new Date(Date.now() - 5 * 60 * 60 * 1000),
+      frequency: "one-time",
+      driver: {
+        name: "James Brown",
+        image: "/images/james-brown-driver.jpg",
+      },
+      vehicle: "Toyota Innova",
+      pickup: {
+        location: "Colombo Fort",
+        type: "Pickup point",
+      },
+      destination: {
+        location: "Galle Face",
+        type: "Destination",
+      },
+      time: "12-02 pm",
+      duration: "20 min",
+      seats: {
+        available: 4,
+        total: 6,
+      },
+      price: "LKR 800.00",
+    },
+    {
+      id: 7,
+      timeAgo: "6 hours ago",
+      postedDate: new Date(Date.now() - 6 * 60 * 60 * 1000),
+      frequency: "monthly",
+      driver: {
+        name: "Lisa Anderson",
+        image: "/images/lisa-anderson-driver.jpg",
+      },
+      vehicle: "Toyota Alphard",
+      pickup: {
+        location: "Airport Terminal 1",
+        type: "Pickup point",
+      },
+      destination: {
+        location: "Bentota Beach",
+        type: "Destination",
+      },
+      time: "10-12 am",
+      duration: "2.5 hours",
+      seats: {
+        available: 2,
+        total: 6,
+      },
+      price: "LKR 2200.00",
+    },
+    {
+      id: 8,
+      timeAgo: "8 hours ago",
+      postedDate: new Date(Date.now() - 8 * 60 * 60 * 1000),
+      frequency: "daily",
+      driver: {
+        name: "Robert Taylor",
+        image: "/images/robert-taylor-driver.jpg",
+      },
+      vehicle: "Hyundai Starex",
+      pickup: {
+        location: "Kandy Lake",
+        type: "Pickup point",
+      },
+      destination: {
+        location: "Temple of Tooth",
+        type: "Destination",
+      },
+      time: "03-05 pm",
+      duration: "15 min",
+      seats: {
+        available: 6,
+        total: 8,
+      },
+      price: "LKR 500.00",
+    },
+    {
+      id: 9,
+      timeAgo: "10 hours ago",
+      postedDate: new Date(Date.now() - 10 * 60 * 60 * 1000),
+      frequency: "yearly",
+      driver: {
+        name: "Maria Garcia",
+        image: "/images/maria-garcia-driver.jpg",
+      },
+      vehicle: "Toyota Innova",
+      pickup: {
+        location: "Ella Station",
+        type: "Pickup point",
+      },
+      destination: {
+        location: "Nine Arch Bridge",
+        type: "Destination",
+      },
+      time: "07-09 am",
+      duration: "1 hour",
+      seats: {
+        available: 3,
+        total: 6,
+      },
+      price: "LKR 1800.00",
+    },
+  ], [])
+
+  const allRides = useMemo(() => [...initialRides, ...defaultRides], [initialRides, defaultRides])
   const [isPopupOpen, setIsPopupOpen] = useState(false)
-  const [selectedRide, setSelectedRide] = useState<(typeof sharedRides)[0] | null>(null)
+  const [selectedRide, setSelectedRide] = useState<Ride | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterFrequency, setFilterFrequency] = useState("all")
   const [currentPage, setCurrentPage] = useState(0)
 
   const filteredRides = useMemo(() => {
-    return sharedRides.filter((ride) => {
-      // Search filter
+    return allRides.filter((ride) => {
       const searchLower = searchQuery.toLowerCase()
       const matchesSearch =
         searchQuery === "" ||
@@ -265,12 +296,11 @@ export function SharedRidesSection() {
         ride.vehicle.toLowerCase().includes(searchLower) ||
         ride.driver.name.toLowerCase().includes(searchLower)
 
-      // Frequency filter
       const matchesFrequency = filterFrequency === "all" || ride.frequency === filterFrequency
 
       return matchesSearch && matchesFrequency
     })
-  }, [searchQuery, filterFrequency])
+  }, [allRides, searchQuery, filterFrequency])
 
   const ridesPerPage = 3
   const totalPages = Math.ceil(filteredRides.length / ridesPerPage)
@@ -295,7 +325,7 @@ export function SharedRidesSection() {
     setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1))
   }
 
-  const handleJoinRide = (ride: (typeof sharedRides)[0]) => {
+  const handleJoinRide = (ride: Ride) => {
     setSelectedRide(ride)
     setIsPopupOpen(true)
   }
@@ -307,7 +337,7 @@ export function SharedRidesSection() {
 
   return (
     <>
-      <section className="py-16 bg-gray-50">
+      <section id="shared-rides-section" className="py-16 bg-gray-50">
         <div className="container mx-auto px-4">
           <div className="text-center mb-8">
             <h2 className="text-4xl font-bold text-yellow-500 mb-4">Available Shared Rides</h2>
@@ -317,7 +347,7 @@ export function SharedRidesSection() {
             <div className="max-w-2xl mx-auto mb-12 flex gap-4 items-center">
               <div className="flex-1">
                 <Input
-                  placeholder="Search by location and vehicale..."
+                  placeholder="Search by location and vehicle..."
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   className="h-12 text-center border-2 border-blue-200 rounded-full bg-white text-gray-500"
