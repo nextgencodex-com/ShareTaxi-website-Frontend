@@ -111,7 +111,7 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
             {/* Mobile Menu Button */}
             <Button
               variant="ghost"
-              className="lg:hidden text-white hover:text-yellow-400 hover:bg-transparent p-2"
+              className="lg:hidden text-white hover:text-yellow-300 hover:bg-transparent p-1"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
               {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -121,13 +121,13 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
       </header>
 
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-black z-50 lg:hidden overflow-y-auto">
+        <div className="fixed inset-0 bg-gray z-30 lg:hidden overflow-y-5">
           <div className="p-6">
             {/* Close button */}
             <div className="flex justify-end mb-8">
               <Button
                 variant="ghost"
-                className="text-white hover:text-yellow-400 hover:bg-transparent p-2"
+                className="text-white hover:text-yellow-400 hover:bg-transparent p-8"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 <X className="h-8 w-8" />
@@ -135,11 +135,11 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
             </div>
 
             {/* Menu items as tiles */}
-            <div className="space-y-4">
+            <div className="space-y-2">
               {/* Navigation tiles */}
               <a
                 href="#hero-section"
-                className="block bg-gray-900 hover:bg-gray-800 rounded-lg p-6 transition-colors"
+                className="block bg-gray-900 hover:bg-gray-700 rounded-3xl p-4 transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 <h3 className="text-yellow-400 font-semibold text-xl">{tNav('home')}</h3>
@@ -147,7 +147,7 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
 
               <a
                 href="#booking-section"
-                className="block bg-gray-900 hover:bg-gray-800 rounded-lg p-6 transition-colors"
+                className="block bg-gray-900 hover:bg-gray-700 rounded-3xl p-4 transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 <h3 className="text-white font-semibold text-xl">{tNav('bookTaxi')}</h3>
@@ -155,7 +155,7 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
 
               <a
                 href="#shared-rides-section"
-                className="block bg-gray-900 hover:bg-gray-800 rounded-lg p-6 transition-colors"
+                className="block bg-gray-900 hover:bg-gray-700 rounded-3xl p-4 transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 <h3 className="text-white font-semibold text-xl">{tNav('sharedRides')}</h3>
@@ -163,7 +163,7 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
 
               <a
                 href="#vehicle-options-section"
-                className="block bg-gray-900 hover:bg-gray-800 rounded-lg p-6 transition-colors"
+                className="block bg-gray-900 hover:bg-gray-700 rounded-3xl p-4 transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 <h3 className="text-white font-semibold text-xl">{tNav('carOption')}</h3>
@@ -173,10 +173,10 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
               <div>
                 <button
                   onClick={() => setIsMobileLanguageOpen(!isMobileLanguageOpen)}
-                  className="w-full bg-gray-900 hover:bg-gray-800 rounded-lg p-6 transition-colors"
+                  className="w-full bg-gray-900 hover:bg-gray-700 rounded-3xl p-4 transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <h3 className="text-white font-semibold text-xl">{t('language')}</h3>
+                    <h3 className="text-white font-semibold text-xl">{t('')}</h3>
                     <div className="flex items-center gap-2">
                       <span className="text-white font-medium capitalize">{currentLocale}</span>
                       <ChevronDown className={`h-5 w-5 text-white transition-transform ${isMobileLanguageOpen ? 'rotate-180' : ''}`} />
@@ -192,7 +192,7 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
                         setIsMobileLanguageOpen(false)
                         setIsMobileMenuOpen(false)
                       }}
-                      className="w-full text-left bg-gray-800 text-white py-2 px-4 rounded hover:bg-gray-700"
+                      className="w-full text-left bg-gray-800 text-white py-2 px-4 rounded-3xl hover:bg-gray-700"
                     >
                       {t('english')}
                     </button>
@@ -202,7 +202,7 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
                         setIsMobileLanguageOpen(false)
                         setIsMobileMenuOpen(false)
                       }}
-                      className="w-full text-left bg-gray-800 text-white py-2 px-4 rounded hover:bg-gray-700"
+                      className="w-full text-left bg-gray-800 text-white py-2 px-4 rounded-3xl hover:bg-gray-700"
                     >
                       {t('sinhala')}
                     </button>
@@ -230,7 +230,7 @@ export function Header({ isLoggedIn = false, onLoginClick }: HeaderProps) {
                   }
                   setIsMobileMenuOpen(false)
                 }}
-                className="bg-yellow-400 hover:bg-yellow-500 rounded-lg p-3 transition-colors"
+                className="bg-yellow-400 hover:bg-yellow-500 rounded-lg p-2 transition-colors"
               >
                 <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center">
                   <User className="h-5 w-5 text-yellow-400" />
