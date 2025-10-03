@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowLeft } from "lucide-react"
+import { useAdminSharedRides, useAdminVehicles } from "@/hooks/use-admin"
 
 interface RideData {
   id: number
@@ -60,6 +61,9 @@ interface AdminPanelProps {
 }
 
 export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps) {
+  const { createSharedRide, loading: rideLoading } = useAdminSharedRides();
+  const { createVehicle, loading: vehicleLoading } = useAdminVehicles();
+  
   const timeSlots = [
     "6-8 am", "8-10 am", "10-12 pm", "12-2 pm", "2-4 pm",
     "4-6 pm", "6-8 pm", "8-10 pm", "10-12 am"
@@ -131,7 +135,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     }
   }
 
-  const handleRideSubmit = (e: React.FormEvent) => {
+  const handleRideSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     // Validate seat numbers
@@ -148,93 +152,140 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       return
     }
 
-    const newRide = {
-      id: Date.now(),
-      timeAgo: "Just now",
-      postedDate: new Date(),
-      frequency: rideForm.frequency,
-      driver: {
-        name: rideForm.driverName,
-        image: rideForm.driverImage || "/images/alex-chen-driver.jpg",
-      },
-      vehicle: rideForm.vehicle,
-      pickup: {
-        location: rideForm.pickupLocation,
-        type: "Pickup point",
-      },
-      destination: {
-        location: rideForm.destinationLocation,
-        type: "Destination",
-      },
-      time: rideForm.time,
-      duration: rideForm.duration,
-      passengers: rideForm.passengers,
-      luggage: rideForm.luggage,
-      handCarry: rideForm.handCarry,
-      seats: {
-        available: availableSeats,
-        total: totalSeats,
-      },
-      price: rideForm.price,
+    try {
+      // Create shared ride data for backend
+      const sharedRideData = {
+        driverName: rideForm.driverName,
+        driverImage: rideForm.driverImage || "/images/default-driver.jpg",
+        vehicle: rideForm.vehicle,
+        pickupLocation: rideForm.pickupLocation,
+        destinationLocation: rideForm.destinationLocation,
+        time: rideForm.time,
+        duration: rideForm.duration,
+        passengers: rideForm.passengers,
+        luggage: rideForm.luggage,
+        handCarry: rideForm.handCarry,
+        availableSeats: availableSeats,
+        totalSeats: totalSeats,
+        price: rideForm.price,
+        frequency: rideForm.frequency,
+      };
+
+      // Submit to backend
+      const createdRide = await createSharedRide(sharedRideData);
+
+      // Also call the original callback for UI updates
+      const newRide = {
+        id: Date.now(),
+        timeAgo: "Just now",
+        postedDate: new Date(),
+        frequency: rideForm.frequency,
+        driver: {
+          name: rideForm.driverName,
+          image: rideForm.driverImage || "/images/alex-chen-driver.jpg",
+        },
+        vehicle: rideForm.vehicle,
+        pickup: {
+          location: rideForm.pickupLocation,
+          type: "Pickup point",
+        },
+        destination: {
+          location: rideForm.destinationLocation,
+          type: "Destination",
+        },
+        time: rideForm.time,
+        duration: rideForm.duration,
+        passengers: rideForm.passengers,
+        luggage: rideForm.luggage,
+        handCarry: rideForm.handCarry,
+        seats: {
+          available: availableSeats,
+          total: totalSeats,
+        },
+        price: rideForm.price,
+      };
+
+      onAddRide(newRide);
+
+      // Reset form
+      setRideForm({
+        driverName: "",
+        driverImage: "",
+        vehicle: "",
+        pickupLocation: "",
+        destinationLocation: "",
+        time: "",
+        duration: "",
+        passengers: "1",
+        luggage: "0",
+        handCarry: "0",
+        availableSeats: "",
+        totalSeats: "",
+        price: "",
+        frequency: "one-time",
+      });
+      setDriverImageFile(null);
+
+    } catch (error) {
+      console.error('Failed to create shared ride:', error);
+      // Error is already handled by the hook with toast
     }
-
-    onAddRide(newRide)
-
-    // Reset form
-    setRideForm({
-      driverName: "",
-      driverImage: "",
-      vehicle: "",
-      pickupLocation: "",
-      destinationLocation: "",
-      time: "",
-      duration: "",
-      passengers: "1",
-      luggage: "0",
-      handCarry: "0",
-      availableSeats: "",
-      totalSeats: "",
-      price: "",
-      frequency: "one-time",
-    })
-    setDriverImageFile(null)
-
-    alert("Shared ride added successfully!")
   }
 
-  const handleVehicleSubmit = (e: React.FormEvent) => {
+  const handleVehicleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const newVehicle = {
-      id: Date.now(),
-      name: vehicleForm.name,
-      price: vehicleForm.price,
-      passengers: vehicleForm.passengers,
-      luggage: vehicleForm.luggage,
-      handCarry: vehicleForm.handCarry,
-      image: vehicleForm.image || "/images/toyota-innova.jpg",
-      features: [vehicleForm.feature1, vehicleForm.feature2, vehicleForm.feature3].filter((f) => f),
-      gradient: "bg-gradient-to-br from-blue-400 to-blue-600",
-      buttonColor: "bg-blue-600 hover:bg-blue-700",
+    try {
+      // Create vehicle data for backend
+      const vehicleData = {
+        name: vehicleForm.name,
+        price: vehicleForm.price,
+        passengers: vehicleForm.passengers,
+        luggage: vehicleForm.luggage,
+        handCarry: vehicleForm.handCarry,
+        image: vehicleForm.image || "/images/default-vehicle.jpg",
+        features: [vehicleForm.feature1, vehicleForm.feature2, vehicleForm.feature3].filter((f) => f),
+        gradient: "bg-gradient-to-br from-blue-400 to-blue-600",
+        buttonColor: "bg-blue-600 hover:bg-blue-700",
+      };
+
+      // Submit to backend
+      await createVehicle(vehicleData);
+
+      // Also call the original callback for UI updates
+      const newVehicle = {
+        id: Date.now(),
+        name: vehicleForm.name,
+        price: vehicleForm.price,
+        passengers: vehicleForm.passengers,
+        luggage: vehicleForm.luggage,
+        handCarry: vehicleForm.handCarry,
+        image: vehicleForm.image || "/images/toyota-innova.jpg",
+        features: [vehicleForm.feature1, vehicleForm.feature2, vehicleForm.feature3].filter((f) => f),
+        gradient: "bg-gradient-to-br from-blue-400 to-blue-600",
+        buttonColor: "bg-blue-600 hover:bg-blue-700",
+      };
+
+      onAddVehicle(newVehicle);
+
+      // Reset form
+      setVehicleForm({
+        name: "",
+        price: "",
+        passengers: "4",
+        luggage: "2",
+        handCarry: "2",
+        image: "",
+        feature1: "",
+        feature2: "",
+        feature3: "",
+      });
+      setVehicleImageFile(null);
+
+    } catch (error) {
+      console.error('Failed to create vehicle:', error);
+      // Error is already handled by the hook with toast
     }
-
-    onAddVehicle(newVehicle)
-
-    // Reset form
-    setVehicleForm({
-      name: "",
-      price: "",
-      passengers: "4",
-      luggage: "2",
-      handCarry: "2",
-      image: "",
-      feature1: "",
-      feature2: "",
-      feature3: "",
-    })
-    setVehicleImageFile(null)
-
-    alert("Vehicle added successfully!")
   }
 
   return (
@@ -460,8 +511,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600">
-                    Add Shared Ride
+                  <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600" disabled={rideLoading}>
+                    {rideLoading ? 'Adding Shared Ride...' : 'Add Shared Ride'}
                   </Button>
                 </form>
               </CardContent>
@@ -586,8 +637,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600">
-                    Add Vehicle
+                  <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600" disabled={vehicleLoading}>
+                    {vehicleLoading ? 'Adding Vehicle...' : 'Add Vehicle'}
                   </Button>
                 </form>
               </CardContent>
