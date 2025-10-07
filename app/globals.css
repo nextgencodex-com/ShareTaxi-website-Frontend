@@ -125,4 +125,8 @@
   html {
     scroll-behavior: smooth;
   }
+  /* Ensure Tailwind's font-sans uses the Poppins variable provided by next/font */
+  .font-sans {
+    font-family: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
 }

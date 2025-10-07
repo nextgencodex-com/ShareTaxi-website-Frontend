@@ -19,19 +19,40 @@ export default function HomePage() {
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false)
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false)
   const [addedRides, setAddedRides] = useState<any[]>([])
+  const [userAddedRides, setUserAddedRides] = useState<any[]>([])
+  const [customRides, setCustomRides] = useState<any[]>([])
   const [addedVehicles, setAddedVehicles] = useState<any[]>([])
   const { isLoggedIn, user, login, logout } = useAuth()
 
-  // Load admin-added items from localStorage
+  // Load admin-added and user-added items from localStorage
   useEffect(() => {
-    try {
-      const storedRides = localStorage.getItem('adminAddedRides')
-      if (storedRides) {
-        setAddedRides(JSON.parse(storedRides))
+    const loadRides = () => {
+      try {
+        const storedAdminRides = localStorage.getItem('adminAddedRides')
+        if (storedAdminRides) {
+          setAddedRides(JSON.parse(storedAdminRides))
+        }
+      } catch (error) {
+        console.error('Error loading admin added rides:', error)
       }
-    } catch (error) {
-      console.error('Error loading added rides:', error)
+
+      try {
+        const storedUserRides = localStorage.getItem('userAddedRides')
+        if (storedUserRides) {
+          const parsed = JSON.parse(storedUserRides)
+          // Convert postedDate strings back to Date objects
+          const userRidesWithDates = parsed.map((ride: any) => ({
+            ...ride,
+            postedDate: new Date(ride.postedDate)
+          }))
+          setUserAddedRides && setUserAddedRides(userRidesWithDates)
+        }
+      } catch (error) {
+        console.error('Error loading user added rides:', error)
+      }
     }
+
+    loadRides()
 
     try {
       const storedVehicles = localStorage.getItem('adminAddedVehicles')
@@ -40,6 +61,17 @@ export default function HomePage() {
       }
     } catch (error) {
       console.error('Error loading added vehicles:', error)
+    }
+
+    // Listen for user ride additions
+    const handleUserRideAdded = () => {
+      loadRides()
+    }
+
+    window.addEventListener('userRideAdded', handleUserRideAdded)
+
+    return () => {
+      window.removeEventListener('userRideAdded', handleUserRideAdded)
     }
   }, [])
 
@@ -75,6 +107,37 @@ export default function HomePage() {
     localStorage.setItem('adminAddedVehicles', JSON.stringify(updatedVehicles))
   }
 
+  const handleAddCustomerSharedRide = (bookingData: any) => {
+    const newRide = {
+      id: Date.now(),
+      timeAgo: "Just now",
+      postedDate: new Date(),
+      frequency: "one-time",
+      driver: {
+        name: "Customer Requested",
+        image: "/placeholder.svg"
+      },
+      vehicle: "To be assigned",
+      pickup: {
+        location: bookingData.from,
+        type: "Pickup point"
+      },
+      destination: {
+        location: bookingData.to,
+        type: "Destination"
+      },
+      time: bookingData.time,
+      duration: bookingData.mapDuration || "TBD",
+      seats: {
+        available: bookingData.passengers,
+        total: bookingData.passengers
+      },
+      price: "$15.00"
+    }
+    setCustomRides(prev => [...prev, newRide])
+    console.log('[v0] Customer shared ride added')
+  }
+
   if (isAdminLoggedIn) {
     return (
       <AdminPanel
@@ -98,13 +161,13 @@ export default function HomePage() {
 
       <main>
         <HeroSection />
-        <BookingSection />
-        <SharedRidesSection initialRides={addedRides} />
+        <BookingSection onAddSharedRide={handleAddCustomerSharedRide} />
+        <SharedRidesSection initialRides={[...customRides, ...addedRides, ...userAddedRides]} />
         <VehicleOptionsSection initialVehicles={addedVehicles} />
         <WhyChooseUsSection />
         <ReviewsSection />
       </main>
-      <Footer />
+  <Footer onAdminLoginClick={() => setIsAdminLoginOpen(true)} />
 
       <LoginSignupPopup
         isOpen={isLoginSignupOpen}
