@@ -56,8 +56,8 @@ export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-bold">LKR</div>
-                  <div className="font-bold">2000.00</div>
+                  <div className="font-bold">$</div>
+                  <div className="font-bold">6.00</div>
                 </div>
               </div>
 
@@ -98,8 +98,8 @@ export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-bold">LKR</div>
-                  <div className="font-bold">2000.00</div>
+                  <div className="font-bold">$</div>
+                  <div className="font-bold">6.00</div>
                 </div>
               </div>
 
@@ -147,8 +147,8 @@ export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-bold">LKR</div>
-                  <div className="font-bold">2000.00</div>
+                  <div className="font-bold">$</div>
+                  <div className="font-bold">6.00</div>
                 </div>
               </div>
 
@@ -180,8 +180,8 @@ export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-bold">LKR</div>
-                  <div className="font-bold">2000.00</div>
+                  <div className="font-bold">$</div>
+                  <div className="font-bold">6.00</div>
                 </div>
               </div>
 
@@ -219,8 +219,8 @@ export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-bold">LKR</div>
-                  <div className="font-bold">2000.00</div>
+                  <div className="font-bold">$</div>
+                  <div className="font-bold">6.00</div>
                 </div>
               </div>
 

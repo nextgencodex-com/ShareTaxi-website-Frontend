@@ -15,7 +15,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
     {
       id: 1,
       name: "Toyota Innova",
-      price: "LKR 2000/ hour",
+      price: "$6/ hour",
       passengers: "5-6",
       luggage: "X 1 Big",
       handCarry: "X 3 Hand",
@@ -27,7 +27,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
     {
       id: 2,
       name: "Toyota Alphard",
-      price: "LKR 3000/ hour",
+      price: "$9/ hour",
       passengers: "5-6",
       luggage: "X 2 Big",
       handCarry: "X 4 Hand",
@@ -39,7 +39,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
     {
       id: 3,
       name: "Hyundai Starex",
-      price: "LKR 4000/ hour",
+      price: "$12/ hour",
       passengers: "7-8",
       luggage: "X 2 Big",
       handCarry: "X 4 Hand",
@@ -55,10 +55,26 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [passengerFilter, setPassengerFilter] = useState("all")
+  const [shuffledGradients, setShuffledGradients] = useState<string[]>([])
 
   useEffect(() => {
     setAllVehicles([...initialVehicles.map(vehicle => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...defaultVehicles])
   }, [initialVehicles])
+
+  useEffect(() => {
+    // Shuffle gradients only on client side to avoid hydration mismatch
+    const gradients = [
+      "bg-gradient-to-br from-yellow-400 to-orange-500",
+      "bg-gradient-to-br from-orange-400 to-red-500",
+      "bg-gradient-to-br from-slate-500 to-slate-600"
+    ]
+    const shuffled = [...gradients]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setShuffledGradients(shuffled)
+  }, [currentPage])
 
   const filteredVehicles = useMemo(() => {
     return allVehicles.filter((vehicle) => {
@@ -66,21 +82,6 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
       return matchesFilter
     })
   }, [allVehicles, passengerFilter])
-
-  const gradients = [
-    "bg-gradient-to-br from-yellow-400 to-orange-500",
-    "bg-gradient-to-br from-orange-400 to-red-500",
-    "bg-gradient-to-br from-slate-500 to-slate-600"
-  ]
-
-  const shuffledGradients = useMemo(() => {
-    const shuffled = [...gradients]
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled
-  }, [currentPage])
 
   const vehiclesPerPage = 3
   const totalPages = Math.ceil(filteredVehicles.length / vehiclesPerPage)

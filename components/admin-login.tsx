@@ -54,7 +54,7 @@ export function AdminLogin({ isOpen, onClose, onLogin }: AdminLoginProps) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Enter username"
-                className="w-full"
+                className="w-full border-2 border-gray-400 focus:border-blue-500"
               />
             </div>
 
@@ -65,7 +65,7 @@ export function AdminLogin({ isOpen, onClose, onLogin }: AdminLoginProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password"
-                className="w-full"
+                className="w-full border-2 border-gray-400 focus:border-blue-500"
               />
             </div>
 
