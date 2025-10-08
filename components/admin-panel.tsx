@@ -59,6 +59,254 @@ interface AdminPanelProps {
   onAddVehicle: (vehicle: VehicleData) => void
 }
 
+interface Vehicle {
+  id: string;
+  name: string;
+  price: string;
+  passengers: string;
+  luggage: string;
+  handCarry: string;
+  image?: string;
+  features?: string[];
+  isAvailable: boolean;
+  createdAt: any;
+}
+
+// Manage Vehicles Tab Component
+function ManageVehiclesTab() {
+  const { vehicles, loading, getAllVehicles, deleteVehicle, updateVehicleAvailability } = useAdminVehicles();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterAvailable, setFilterAvailable] = useState("all");
+
+  useEffect(() => {
+    getAllVehicles();
+  }, [getAllVehicles]);
+
+  const handleToggleAvailability = async (vehicleId: string, currentAvailability: boolean) => {
+    try {
+      await updateVehicleAvailability(vehicleId, !currentAvailability);
+    } catch (error) {
+      console.error('Failed to update vehicle availability:', error);
+    }
+  };
+
+  const handleDeleteVehicle = async (vehicleId: string, vehicleName: string) => {
+    if (window.confirm(`Are you sure you want to delete "${vehicleName}"?`)) {
+      try {
+        await deleteVehicle(vehicleId);
+      } catch (error) {
+        console.error('Failed to delete vehicle:', error);
+      }
+    }
+  };
+
+  // Filter vehicles based on search and availability
+  const filteredVehicles = vehicles.filter((vehicle: Vehicle) => {
+    const matchesSearch = vehicle.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (vehicle.features && vehicle.features.some(feature => 
+                           feature.toLowerCase().includes(searchTerm.toLowerCase())
+                         ));
+    
+    const matchesFilter = filterAvailable === "all" || 
+                         (filterAvailable === "available" && vehicle.isAvailable) ||
+                         (filterAvailable === "unavailable" && !vehicle.isAvailable);
+    
+    return matchesSearch && matchesFilter;
+  });
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center">Loading vehicles...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Manage Vehicles ({vehicles.length} total, {filteredVehicles.length} shown)</CardTitle>
+        
+        {/* Search and Filter Controls */}
+        <div className="flex flex-col sm:flex-row gap-4 mt-4">
+          <div className="flex-1">
+            <Input
+              placeholder="Search vehicles by name or features..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <div className="sm:w-48">
+            <Select value={filterAvailable} onValueChange={setFilterAvailable}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Vehicles</SelectItem>
+                <SelectItem value="available">Available Only</SelectItem>
+                <SelectItem value="unavailable">Unavailable Only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
+      
+      <CardContent>
+        {filteredVehicles.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            {vehicles.length === 0 ? (
+              <div>
+                <p className="text-lg mb-2">No vehicles found</p>
+                <p className="text-sm">Add some vehicles using the &quot;Add Vehicle&quot; tab first.</p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-lg mb-2">No vehicles match your search</p>
+                <p className="text-sm">Try adjusting your search terms or filters.</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredVehicles.map((vehicle: Vehicle) => (
+              <div key={vehicle.id} className="border rounded-lg p-6 bg-white shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    {/* Vehicle Header with Image */}
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="relative">
+                        <img 
+                          src={vehicle.image || "/images/default-vehicle.jpg"} 
+                          alt={vehicle.name}
+                          className="w-20 h-16 object-cover rounded-lg border-2 border-gray-200"
+                        />
+                        <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full ${
+                          vehicle.isAvailable ? 'bg-green-500' : 'bg-red-500'
+                        }`}></div>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-xl text-gray-800">{vehicle.name}</h3>
+                        <p className="text-lg font-semibold text-blue-600">${vehicle.price} per trip</p>
+                        <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                          <span className="flex items-center gap-1">
+                            👥 {vehicle.passengers} passengers
+                          </span>
+                          <span className="flex items-center gap-1">
+                            🧳 {vehicle.luggage} luggage
+                          </span>
+                          <span className="flex items-center gap-1">
+                            👜 {vehicle.handCarry} hand carry
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Vehicle Features */}
+                    {vehicle.features && vehicle.features.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Features:</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {vehicle.features.map((feature: string, index: number) => (
+                            <span 
+                              key={index} 
+                              className="bg-blue-100 text-blue-800 text-xs font-medium px-3 py-1 rounded-full"
+                            >
+                              ✨ {feature}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Vehicle Status and Metadata */}
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        vehicle.isAvailable 
+                          ? 'bg-green-100 text-green-800 border border-green-200' 
+                          : 'bg-red-100 text-red-800 border border-red-200'
+                      }`}>
+                        {vehicle.isAvailable ? '✅ Available' : '❌ Unavailable'}
+                      </span>
+                      <span className="text-gray-500">
+                        📅 Added: {new Date(vehicle.createdAt?.seconds * 1000 || vehicle.createdAt).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
+                      </span>
+                      <span className="text-gray-500">
+                        🆔 ID: {vehicle.id.substring(0, 8)}...
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex flex-col gap-3 ml-6">
+                    <Button
+                      size="sm"
+                      variant={vehicle.isAvailable ? "outline" : "default"}
+                      onClick={() => handleToggleAvailability(vehicle.id, vehicle.isAvailable)}
+                      className={`min-w-24 ${
+                        vehicle.isAvailable 
+                          ? 'border-orange-300 text-orange-600 hover:bg-orange-50' 
+                          : 'bg-green-600 hover:bg-green-700'
+                      }`}
+                    >
+                      {vehicle.isAvailable ? '⏸️ Disable' : '▶️ Enable'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleDeleteVehicle(vehicle.id, vehicle.name)}
+                      className="min-w-24"
+                    >
+                      🗑️ Delete
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* Summary Stats */}
+        {vehicles.length > 0 && (
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h4 className="font-semibold text-gray-700 mb-2">📊 Summary</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+              <div className="text-center">
+                <div className="font-bold text-lg text-blue-600">{vehicles.length}</div>
+                <div className="text-gray-600">Total Vehicles</div>
+              </div>
+              <div className="text-center">
+                <div className="font-bold text-lg text-green-600">
+                  {vehicles.filter((v: Vehicle) => v.isAvailable).length}
+                </div>
+                <div className="text-gray-600">Available</div>
+              </div>
+              <div className="text-center">
+                <div className="font-bold text-lg text-red-600">
+                  {vehicles.filter((v: Vehicle) => !v.isAvailable).length}
+                </div>
+                <div className="text-gray-600">Unavailable</div>
+              </div>
+              <div className="text-center">
+                <div className="font-bold text-lg text-purple-600">
+                  ${Math.round(vehicles.reduce((sum: number, v: Vehicle) => sum + parseFloat(v.price), 0) / vehicles.length)}
+                </div>
+                <div className="text-gray-600">Avg. Price</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps) {
   const { createSharedRide, loading: rideLoading } = useAdminSharedRides();
   const { createVehicle, loading: vehicleLoading } = useAdminVehicles();
@@ -69,6 +317,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   ]
 
   const passengerOptions = Array.from({ length: 10 }, (_, i) => (i + 1).toString())
+  const luggageOptions = Array.from({ length: 6 }, (_, i) => i.toString())
   const handCarryOptions = Array.from({ length: 6 }, (_, i) => i.toString())
 
   // Shared Ride Form State
@@ -81,6 +330,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     time: "",
     duration: "",
     passengers: "1",
+    luggage: "0",
     handCarry: "0",
     availableSeats: "",
     totalSeats: "",
@@ -93,6 +343,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     name: "",
     price: "",
     passengers: "4",
+    luggage: "2",
     handCarry: "2",
     image: "",
     feature1: "",
@@ -344,11 +595,44 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
     setIsRideSubmitting(true)
 
-    // Simulate processing time
-    setTimeout(() => {
+    try {
       const availableSeats = Number.parseInt(rideForm.availableSeats)
       const totalSeats = Number.parseInt(rideForm.totalSeats)
 
+      if (isNaN(availableSeats) || isNaN(totalSeats) || availableSeats < 0 || totalSeats < 0) {
+        alert("Please enter valid positive numbers for available seats and total seats.")
+        setIsRideSubmitting(false)
+        return
+      }
+
+      if (availableSeats > totalSeats) {
+        alert("Available seats cannot exceed total seats.")
+        setIsRideSubmitting(false)
+        return
+      }
+
+      // Create shared ride data for backend
+      const sharedRideData = {
+        driverName: rideForm.driverName,
+        driverImage: rideForm.driverImage || "/images/default-driver.jpg",
+        vehicle: rideForm.vehicle,
+        pickupLocation: rideForm.pickupLocation,
+        destinationLocation: rideForm.destinationLocation,
+        time: rideForm.time,
+        duration: rideForm.duration,
+        passengers: rideForm.passengers,
+        luggage: rideForm.luggage,
+        handCarry: rideForm.handCarry,
+        availableSeats: availableSeats,
+        totalSeats: totalSeats,
+        price: rideForm.price,
+        frequency: rideForm.frequency,
+      };
+
+      // Submit to backend
+      await createSharedRide(sharedRideData);
+
+      // Also call the original callback for UI updates
       const newRide = {
         id: Date.now(),
         timeAgo: "Just now",
@@ -370,57 +654,6 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         time: rideForm.time,
         duration: rideForm.duration.trim(),
         passengers: rideForm.passengers,
-        handCarry: rideForm.handCarry,
-        seats: {
-          available: availableSeats,
-          total: totalSeats,
-        },
-        price: rideForm.price,
-      }
-    try {
-      // Create shared ride data for backend
-      const sharedRideData = {
-        driverName: rideForm.driverName,
-        driverImage: rideForm.driverImage || "/images/default-driver.jpg",
-        vehicle: rideForm.vehicle,
-        pickupLocation: rideForm.pickupLocation,
-        destinationLocation: rideForm.destinationLocation,
-        time: rideForm.time,
-        duration: rideForm.duration,
-        passengers: rideForm.passengers,
-        luggage: rideForm.luggage,
-        handCarry: rideForm.handCarry,
-        availableSeats: availableSeats,
-        totalSeats: totalSeats,
-        price: rideForm.price,
-        frequency: rideForm.frequency,
-      };
-
-      // Submit to backend
-      const createdRide = await createSharedRide(sharedRideData);
-
-      // Also call the original callback for UI updates
-      const newRide = {
-        id: Date.now(),
-        timeAgo: "Just now",
-        postedDate: new Date(),
-        frequency: rideForm.frequency,
-        driver: {
-          name: rideForm.driverName,
-          image: rideForm.driverImage || "/images/alex-chen-driver.jpg",
-        },
-        vehicle: rideForm.vehicle,
-        pickup: {
-          location: rideForm.pickupLocation,
-          type: "Pickup point",
-        },
-        destination: {
-          location: rideForm.destinationLocation,
-          type: "Destination",
-        },
-        time: rideForm.time,
-        duration: rideForm.duration,
-        passengers: rideForm.passengers,
         luggage: rideForm.luggage,
         handCarry: rideForm.handCarry,
         seats: {
@@ -431,7 +664,6 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       };
 
       onAddRide(newRide);
-      onAddRide(newRide)
 
       // Reset form
       setRideForm({
@@ -451,37 +683,29 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         frequency: "one-time",
       });
       setDriverImageFile(null);
-      // Reset form with trimmed values
-      setRideForm({
-        driverName: "",
-        driverImage: "",
-        vehicle: "",
-        pickupLocation: "",
-        destinationLocation: "",
-        time: "",
-        duration: "",
-        passengers: "1",
-        handCarry: "0",
-        availableSeats: "",
-        totalSeats: "",
-        price: "",
-        frequency: "one-time",
-      })
-      setDriverImageFile(null)
-      setRideErrors({})
-      setRateStatus("✅ Shared ride added successfully!")
-      setTimeout(() => setRateStatus(""), 3000)
+      setRideErrors({});
+      setRateStatus("✅ Shared ride added successfully!");
+      setTimeout(() => setRateStatus(""), 3000);
+      setIsRideSubmitting(false);
 
     } catch (error) {
       console.error('Failed to create shared ride:', error);
+      setIsRideSubmitting(false);
       // Error is already handled by the hook with toast
     }
-      setIsRideSubmitting(false)
-    }, 800) // Simulate network delay
   }
 
   const handleVehicleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    const errors = validateVehicleForm(vehicleForm)
+    setVehicleErrors(errors)
+
+    if (Object.keys(errors).length > 0) {
+      return
+    }
+
+    setIsVehicleSubmitting(true)
 
     try {
       // Create vehicle data for backend
@@ -503,42 +727,18 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       // Also call the original callback for UI updates
       const newVehicle = {
         id: Date.now(),
-        name: vehicleForm.name,
+        name: vehicleForm.name.trim(),
         price: vehicleForm.price,
         passengers: vehicleForm.passengers,
         luggage: vehicleForm.luggage,
         handCarry: vehicleForm.handCarry,
         image: vehicleForm.image || "/images/toyota-innova.jpg",
-        features: [vehicleForm.feature1, vehicleForm.feature2, vehicleForm.feature3].filter((f) => f),
-        gradient: "bg-gradient-to-br from-blue-400 to-blue-600",
-        buttonColor: "bg-blue-600 hover:bg-blue-700",
-      };
-    setVehicleErrors({})
-
-    const errors = validateVehicleForm(vehicleForm)
-    if (Object.keys(errors).length > 0) {
-      setVehicleErrors(errors)
-      return
-    }
-
-    setIsVehicleSubmitting(true)
-
-    // Simulate processing time
-    setTimeout(() => {
-      const newVehicle = {
-        id: Date.now(),
-        name: vehicleForm.name.trim(),
-        price: vehicleForm.price,
-        passengers: vehicleForm.passengers,
-        handCarry: vehicleForm.handCarry,
-        image: vehicleForm.image || "/images/toyota-innova.jpg",
         features: [vehicleForm.feature1, vehicleForm.feature2, vehicleForm.feature3].filter((f) => f.trim()),
         gradient: "bg-gradient-to-br from-blue-400 to-blue-600",
         buttonColor: "bg-blue-600 hover:bg-blue-700",
-      }
+      };
 
       onAddVehicle(newVehicle);
-      onAddVehicle(newVehicle)
 
       // Reset form
       setVehicleForm({
@@ -553,29 +753,16 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         feature3: "",
       });
       setVehicleImageFile(null);
+      setVehicleErrors({});
+      setRateStatus("✅ Vehicle added successfully!");
+      setTimeout(() => setRateStatus(""), 3000);
+      setIsVehicleSubmitting(false);
 
     } catch (error) {
       console.error('Failed to create vehicle:', error);
+      setIsVehicleSubmitting(false);
       // Error is already handled by the hook with toast
     }
-      // Reset form
-      setVehicleForm({
-        name: "",
-        price: "",
-        passengers: "4",
-        handCarry: "2",
-        image: "",
-        feature1: "",
-        feature2: "",
-        feature3: "",
-      })
-      setVehicleImageFile(null)
-      setVehicleErrors({})
-      setRateStatus("✅ Vehicle added successfully!")
-      setTimeout(() => setRateStatus(""), 3000)
-
-      setIsVehicleSubmitting(false)
-    }, 800) // Simulate network delay
   }
 
   const saveRate = () => {
@@ -625,9 +812,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         <h1 className="text-3xl font-bold text-center mb-8">Admin Panel</h1>
 
         <Tabs defaultValue="rides" className="max-w-4xl mx-auto">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="rides">Add Shared Ride</TabsTrigger>
             <TabsTrigger value="vehicles">Add Vehicle</TabsTrigger>
+            <TabsTrigger value="manage-vehicles">Manage Vehicles</TabsTrigger>
             <TabsTrigger value="rates">Set Rates</TabsTrigger>
           </TabsList>
 
@@ -875,8 +1063,6 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600" disabled={rideLoading}>
-                    {rideLoading ? 'Adding Shared Ride...' : 'Add Shared Ride'}
                   <Button type="submit" disabled={isRideSubmitting} className="w-full bg-yellow-500 hover:bg-yellow-600">
                     {isRideSubmitting ? "Adding Ride..." : "Add Shared Ride"}
                   </Button>
@@ -924,7 +1110,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     )}
                   </div>
 
-                  <div className="grid md:grid-cols-2 gap-4">
+                  <div className="grid md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium mb-2">Passengers</label>
                       <Select
@@ -936,6 +1122,25 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         </SelectTrigger>
                         <SelectContent>
                           {passengerOptions.map((num) => (
+                            <SelectItem key={num} value={num}>
+                              {num}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Luggage</label>
+                      <Select
+                        value={vehicleForm.luggage}
+                        onValueChange={(value) => setVehicleForm({ ...vehicleForm, luggage: value })}
+                      >
+                        <SelectTrigger className="border-2 border-gray-400 focus:border-blue-500">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {luggageOptions.map((num) => (
                             <SelectItem key={num} value={num}>
                               {num}
                             </SelectItem>
@@ -1007,14 +1212,16 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600" disabled={vehicleLoading}>
-                    {vehicleLoading ? 'Adding Vehicle...' : 'Add Vehicle'}
                   <Button type="submit" disabled={isVehicleSubmitting} className="w-full bg-yellow-500 hover:bg-yellow-600">
                     {isVehicleSubmitting ? "Adding Vehicle..." : "Add Vehicle"}
                   </Button>
                 </form>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="manage-vehicles">
+            <ManageVehiclesTab />
           </TabsContent>
 
           <TabsContent value="rates">

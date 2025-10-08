@@ -5,61 +5,130 @@ import { Button } from "@/components/ui/button"
 import { Users, Briefcase, ShoppingBag, Filter, ChevronLeft, ChevronRight } from "lucide-react"
 import { BookRidePopup } from "./book-ride-popup"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import Image from 'next/image'
+
+interface Vehicle {
+  id: string
+  name: string
+  price: string
+  passengers: string
+  luggage: string
+  handCarry: string
+  image?: string
+  features?: string[]
+  gradient?: string
+  buttonColor?: string
+  isAvailable?: boolean
+}
+
+interface APIVehicle {
+  id: string
+  name: string
+  price: number
+  passengers: number
+  luggage: number
+  handCarry: number
+  image: string
+  features: string[]
+  gradient: string
+  isAvailable: boolean
+}
 
 interface VehicleOptionsSectionProps {
-  initialVehicles?: any[]
+  initialVehicles?: Vehicle[]
 }
 
 export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSectionProps) {
-  const defaultVehicles = [
-    {
-      id: 1,
-      name: "Toyota Innova",
-      price: "$6/ hour",
-      passengers: "5-6",
-      luggage: "X 1 Big",
-      handCarry: "X 3 Hand",
-      image: "/toyota-innova-white-mpv-car.jpg",
-      features: ["Air Conditioning", "GPS Navigation", "USB Charging"],
-      gradient: "bg-gradient-to-br from-yellow-400 to-orange-500",
-      buttonColor: "bg-gray-600 hover:bg-gray-700",
-    },
-    {
-      id: 2,
-      name: "Toyota Alphard",
-      price: "$9/ hour",
-      passengers: "5-6",
-      luggage: "X 2 Big",
-      handCarry: "X 4 Hand",
-      image: "/toyota-alphard-luxury-van.jpg",
-      features: ["Premium Interior", "Entertainment System", "Privacy Curtain"],
-      gradient: "bg-gradient-to-br from-orange-400 to-red-500",
-      buttonColor: "bg-gray-600 hover:bg-gray-700",
-    },
-    {
-      id: 3,
-      name: "Hyundai Starex",
-      price: "$12/ hour",
-      passengers: "7-8",
-      luggage: "X 2 Big",
-      handCarry: "X 4 Hand",
-      image: "/hyundai-starex-van.jpg",
-      features: ["Extra Space", "Family Friendly", "Comfortable Seating"],
-      gradient: "bg-gradient-to-br from-slate-500 to-slate-600",
-      buttonColor: "bg-gray-600 hover:bg-gray-700",
-    },
-  ]
-
-  const [allVehicles, setAllVehicles] = useState([...initialVehicles.map(vehicle => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...defaultVehicles])
-  const [selectedVehicle, setSelectedVehicle] = useState(null)
+  const [allVehicles, setAllVehicles] = useState<Vehicle[]>([])
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [passengerFilter, setPassengerFilter] = useState("all")
   const [shuffledGradients, setShuffledGradients] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
+  // Fetch vehicles from API
   useEffect(() => {
-    setAllVehicles([...initialVehicles.map(vehicle => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...defaultVehicles])
-  }, [initialVehicles])
+    const fetchVehicles = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        
+        const response = await fetch('http://localhost:5000/api/vehicles')
+        if (!response.ok) {
+          throw new Error('Failed to fetch vehicles')
+        }
+        
+        const data = await response.json()
+        
+        // Transform API data to match component interface
+        const transformedVehicles: Vehicle[] = data.data.vehicles.map((vehicle: APIVehicle) => ({
+          id: String(vehicle.id),
+          name: vehicle.name,
+          price: `$${vehicle.price}/trip`,
+          passengers: vehicle.passengers.toString(),
+          luggage: vehicle.luggage.toString(),
+          handCarry: vehicle.handCarry.toString(),
+          image: vehicle.image || "/placeholder.svg",
+          features: vehicle.features || [],
+          gradient: vehicle.gradient || "bg-gradient-to-br from-blue-400 to-blue-600",
+          buttonColor: "bg-gray-600 hover:bg-gray-700",
+          isAvailable: vehicle.isAvailable
+        })).filter((vehicle: Vehicle) => vehicle.isAvailable) // Only show available vehicles
+
+        setAllVehicles(transformedVehicles)
+      } catch (err) {
+        console.error('Error fetching vehicles:', err)
+        setError('Failed to load vehicles. Please try again later.')
+        
+        // Fall back to default vehicles if API fails
+        const defaultVehicles: Vehicle[] = [
+          {
+            id: "1",
+            name: "Toyota Innova",
+            price: "$6/hour",
+            passengers: "5",
+            luggage: "1",
+            handCarry: "3",
+            image: "/toyota-innova-white-mpv-car.jpg",
+            features: ["Air Conditioning", "GPS Navigation", "USB Charging"],
+            gradient: "bg-gradient-to-br from-yellow-400 to-orange-500",
+            buttonColor: "bg-gray-600 hover:bg-gray-700",
+          },
+          {
+            id: "2",
+            name: "Toyota Alphard",
+            price: "$9/hour",
+            passengers: "6",
+            luggage: "2",
+            handCarry: "4",
+            image: "/toyota-alphard-luxury-van.jpg",
+            features: ["Premium Interior", "Entertainment System", "Privacy Curtain"],
+            gradient: "bg-gradient-to-br from-orange-400 to-red-500",
+            buttonColor: "bg-gray-600 hover:bg-gray-700",
+          },
+          {
+            id: "3",
+            name: "Hyundai Starex",
+            price: "$12/hour",
+            passengers: "8",
+            luggage: "2",
+            handCarry: "4",
+            image: "/hyundai-starex-van.jpg",
+            features: ["Extra Space", "Family Friendly", "Comfortable Seating"],
+            gradient: "bg-gradient-to-br from-slate-500 to-slate-600",
+            buttonColor: "bg-gray-600 hover:bg-gray-700",
+          },
+        ]
+        setAllVehicles(defaultVehicles)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchVehicles()
+  }, [])
 
   useEffect(() => {
     // Shuffle gradients only on client side to avoid hydration mismatch
@@ -101,7 +170,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
     setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1))
   }
 
-  const handleBookNow = (vehicle: any) => {
+  const handleBookNow = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle)
     setIsPopupOpen(true)
   }
@@ -109,6 +178,21 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
   const closePopup = () => {
     setIsPopupOpen(false)
     setSelectedVehicle(null)
+  }
+
+  // Convert our Vehicle type to BookRidePopup Vehicle type
+  const convertVehicleForBooking = (vehicle: Vehicle | null) => {
+    if (!vehicle) return null
+    return {
+      id: parseInt(vehicle.id) || 0,
+      name: vehicle.name,
+      price: vehicle.price,
+      passengers: vehicle.passengers,
+      luggage: vehicle.luggage,
+      handCarry: vehicle.handCarry,
+      image: vehicle.image || "/placeholder.svg",
+      features: vehicle.features || []
+    }
   }
 
   return (
@@ -137,10 +221,24 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
             </div>
           </div>
 
+          {loading && (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+              <p className="mt-4 text-gray-600">Loading vehicles...</p>
+            </div>
+          )}
+          
+          {error && (
+            <div className="text-center py-12">
+              <p className="text-red-600 mb-4">{error}</p>
+              <p className="text-gray-500">Showing default vehicles instead.</p>
+            </div>
+          )}
+
           {displayedVehicles.length > 0 ? (
             <>
               <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                {displayedVehicles.map((vehicle: any, index: number) => (
+                {displayedVehicles.map((vehicle: Vehicle, index: number) => (
                   <div key={vehicle.id} className={`${shuffledGradients[index]} rounded-3xl p-6 text-white shadow-xl`}>
                     <div className="text-center mb-6">
                       <h3 className="text-2xl font-bold mb-2">{vehicle.name}</h3>
@@ -166,9 +264,11 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
                     </div>
 
                     <div className="mb-6 rounded-2xl overflow-hidden">
-                      <img
+                      <Image
                         src={vehicle.image || "/placeholder.svg"}
                         alt={vehicle.name}
+                        width={400}
+                        height={192}
                         className="w-full h-48 object-cover"
                       />
                     </div>
@@ -176,7 +276,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
                     <div className="mb-6">
                       <p className="font-semibold mb-3">Features:</p>
                       <ul className="space-y-1">
-                        {vehicle.features.map((feature: string, index: number) => (
+                        {(vehicle.features || []).map((feature: string, index: number) => (
                           <li key={index} className="text-sm flex items-center">
                             <span className="w-2 h-2 bg-white rounded-full mr-3"></span>
                             {feature}
@@ -238,7 +338,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
         </div>
       </section>
 
-      <BookRidePopup isOpen={isPopupOpen} onClose={closePopup} vehicle={selectedVehicle} />
+      <BookRidePopup isOpen={isPopupOpen} onClose={closePopup} vehicle={convertVehicleForBooking(selectedVehicle)} />
     </>
   )
 }
