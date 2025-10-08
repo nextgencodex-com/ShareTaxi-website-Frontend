@@ -229,16 +229,12 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   }
 
   const calculateFareForType = (tripType: string, distance: number) => {
-    const ratePerKm = parseFloat(localStorage.getItem("ratePerKm") || "0")
-
-    if (!ratePerKm) {
-      setFareResults(prev => ({ ...prev, [tripType]: "⚠️ Please set the rate per KM in the Admin Dashboard first." }))
-      return
-    }
     if (!distance || distance <= 0) {
       setFareResults(prev => ({ ...prev, [tripType]: "⚠️ Please enter a valid distance." }))
       return
     }
+
+    const ratePerKm = parseFloat(localStorage.getItem("ratePerKm") || "0")
 
     // Apply trip multiplier for return trips and other trip types
     const tripMultiplier = getTripMultiplier(tripType as "one-way" | "round-trip" | "multi-city")
