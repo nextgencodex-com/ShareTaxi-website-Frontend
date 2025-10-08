@@ -1,14 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Calendar, ChevronDown, Plus, X, MapPin, ChevronUp } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Calendar as CalendarIcon, ChevronDown, Plus, X, MapPin, ChevronUp, AlertTriangle } from "lucide-react"
 import dynamic from 'next/dynamic'
 import { BookingDetailsPopup } from "./booking-details-popup"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { cn } from "@/lib/utils"
+import { format, parseISO, isAfter, startOfDay } from "date-fns"
+import { calculateSimpleFare, calculateIndividualFare, getTripMultiplier } from "@/lib/pricing"
 
 const Map = dynamic(() => import('./map'), { ssr: false })
 
@@ -17,28 +23,66 @@ interface Destination {
   location: string
 }
 
-export function BookingSection() {
+interface BookingSectionProps {
+  onAddSharedRide?: (bookingData: any) => void
+}
+
+export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const isMobile = useIsMobile()
   const [showMapMobile, setShowMapMobile] = useState(false)
 
   const [tripType, setTripType] = useState("one-way")
   const [rideType, setRideType] = useState("shared")
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("")
-  const [passengers, setPassengers] = useState("02")
-  const [luggage, setLuggage] = useState("04")
-  const [from, setFrom] = useState("Galle")
-  const [to, setTo] = useState("Colombo")
+  const [passengers, setPassengers] = useState(1)
+  const [from, setFrom] = useState("")
+  const [to, setTo] = useState("")
   const [date, setDate] = useState("2025-09-20")
   const [customTime, setCustomTime] = useState("")
+
+  const [mapDistance, setMapDistance] = useState<string | null>(null)
+  const [mapDuration, setMapDuration] = useState<string | null>(null)
 
   const [destinations, setDestinations] = useState<Destination[]>([
     { id: '1', location: '' },
     { id: '2', location: '' }
   ])
 
-  const [startingPoint, setStartingPoint] = useState("Colombo")
+  const [startingPoint, setStartingPoint] = useState("")
 
   const [showBookingPopup, setShowBookingPopup] = useState(false)
+  const [calendarOpen, setCalendarOpen] = useState(false)
+
+  // Fare calculator state for each trip type
+  const [oneWayDistance, setOneWayDistance] = useState("")
+  const [roundTripDistance, setRoundTripDistance] = useState("")
+  const [multiCityDistance, setMultiCityDistance] = useState("")
+  const [fareResults, setFareResults] = useState<{ [key: string]: string }>({})
+
+  // Validation state
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
+
+  // Auto-calculate fare when relevant values change
+  useEffect(() => {
+    const ratePerKm = parseFloat(localStorage.getItem("ratePerKm") || "0")
+    if (!ratePerKm) return
+
+    let distance = 0
+    if (tripType === "round-trip" && roundTripDistance) {
+      distance = parseFloat(roundTripDistance)
+    } else if (tripType === "one-way" && oneWayDistance) {
+      distance = parseFloat(oneWayDistance)
+    } else if (tripType === "multi-city" && multiCityDistance) {
+      distance = parseFloat(multiCityDistance)
+    } else if (mapDistance) {
+      distance = parseFloat(mapDistance)
+    }
+
+    if (distance > 0) {
+      calculateFareForType(tripType, distance)
+    }
+  }, [tripType, rideType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance])
 
   const timeSlots = [
     "6 - 8 am", "8 - 10 am", "10 - 12 pm", "12 - 2 pm", "2 - 4 pm",
@@ -62,7 +106,104 @@ export function BookingSection() {
     ))
   }
 
+  const handlePassengerChange = (change: number) => {
+    setPassengers((prev) => {
+      const newPassengers = Math.max(1, Math.min(20, prev + change));
+      // Recalculate fare when passenger count changes (for multi-city tours)
+      if (tripType === 'multi-city' && multiCityDistance) {
+        calculateFareForType('multi-city', parseFloat(multiCityDistance));
+      }
+      return newPassengers;
+    }); // Allow up to 20 passengers for large bookings
+  }
+
+  const handleDistanceChange = (distance: string | null, duration: string | null) => {
+    setMapDistance(distance)
+    setMapDuration(duration)
+  }
+
+  // Validation functions
+  const validateBookingData = () => {
+    const errors: string[] = []
+    const today = startOfDay(new Date())
+
+    // Location validations
+    if (tripType === 'multi-city') {
+      if (!startingPoint.trim()) {
+        errors.push("Starting point is required for multi-city trips")
+      }
+      const validDestinations = destinations.filter(dest =>
+        dest.location && dest.location.trim().length > 0
+      )
+      if (validDestinations.length < 2) {
+        errors.push("At least 2 destinations are required for multi-city trips")
+      }
+    } else {
+      if (!from.trim()) {
+        errors.push("Pickup location (From) is required")
+      }
+      if (!to.trim()) {
+        errors.push("Destination (To) is required")
+      }
+    }
+
+    // Date validation
+    if (!date || date.trim() === "") {
+      errors.push("Pickup date is required")
+    } else {
+      const selectedDate = parseISO(date)
+      const todayStart = startOfDay(new Date())
+      if (selectedDate < todayStart) {
+        errors.push("Pickup date must be today or in the future")
+      }
+      // Max 1 year ahead
+      const oneYearFromNow = new Date()
+      oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1)
+      if (selectedDate > oneYearFromNow) {
+        errors.push("Pickup date cannot be more than 1 year in the future")
+      }
+    }
+
+    // Time validation
+    if (rideType === "shared") {
+      if (!selectedTimeSlot) {
+        errors.push("Time slot selection is required for shared rides")
+      }
+    } else {
+      if (!customTime) {
+        errors.push("Pickup time is required for personal rides")
+      }
+    }
+
+    // Fare calculation validation
+    const currentFare = fareResults[tripType]
+    if (!currentFare || currentFare.includes("⚠️")) {
+      errors.push("Please calculate the fare before proceeding")
+    }
+
+    // Passenger validation (already handled by min/max in onChange)
+    if (passengers < 1 || passengers > 20) {
+      errors.push("Number of passengers must be between 1 and 20")
+    }
+
+    return errors
+  }
+
   const handleNextClick = () => {
+    setHasAttemptedSubmit(true)
+    const errors = validateBookingData()
+
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      return
+    }
+
+    setValidationErrors([])
+
+    // Get the calculated fare for current trip type
+    const currentFareKey = tripType;
+    const currentFare = fareResults[tripType];
+
     const bookingData = {
       from: tripType === 'multi-city' ? startingPoint : from,
       to,
@@ -70,11 +211,56 @@ export function BookingSection() {
       date,
       time: rideType === "shared" ? selectedTimeSlot : customTime,
       passengers,
-      luggage,
       tripType,
       destinations: tripType === 'multi-city' ? destinations : undefined,
+      startingPoint: tripType === 'multi-city' ? startingPoint : undefined,
+      mapDistance,
+      mapDuration,
+      calculatedFare: currentFare, // Pass the fare calculator result
     }
     setShowBookingPopup(true)
+  }
+
+  // Clear validation errors when user starts fixing them
+  const clearValidationErrors = () => {
+    if (hasAttemptedSubmit) {
+      setValidationErrors([])
+    }
+  }
+
+  const calculateFareForType = (tripType: string, distance: number) => {
+    const ratePerKm = parseFloat(localStorage.getItem("ratePerKm") || "0")
+
+    if (!ratePerKm) {
+      setFareResults(prev => ({ ...prev, [tripType]: "⚠️ Please set the rate per KM in the Admin Dashboard first." }))
+      return
+    }
+    if (!distance || distance <= 0) {
+      setFareResults(prev => ({ ...prev, [tripType]: "⚠️ Please enter a valid distance." }))
+      return
+    }
+
+    // Apply trip multiplier for return trips and other trip types
+    const tripMultiplier = getTripMultiplier(tripType as "one-way" | "round-trip" | "multi-city")
+
+    let fareDisplay = ""
+    if (rideType === "shared") {
+      const basePerPersonFare = calculateSimpleFare(distance, ratePerKm)
+      const perPersonFare = basePerPersonFare * tripMultiplier
+      fareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${ratePerKm.toFixed(2)} per km<br>👥 Per Person Fare: <span style="color:green;">$${perPersonFare.toFixed(2)}</span>`
+      if (tripMultiplier > 1) {
+        fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
+      }
+    } else {
+      const baseFullFare = calculateIndividualFare(distance, ratePerKm)
+      const fullFare = baseFullFare * tripMultiplier
+      fareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${ratePerKm.toFixed(2)} per km<br>💰 Total Fare: <span style="color:blue;">$${fullFare.toFixed(2)}</span>`
+      if (tripMultiplier > 1) {
+        fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
+      }
+    }
+
+    setFareResults(prev => ({ ...prev, [tripType]: fareDisplay }))
   }
 
   return (
@@ -88,6 +274,23 @@ export function BookingSection() {
               we'll handle the rest.
             </p>
           </div>
+
+          {/* Validation Errors Display */}
+          {validationErrors.length > 0 && (
+            <Alert variant="destructive" className="mb-8">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="space-y-1">
+                  <strong>Please fix the following errors:</strong>
+                  <ul className="list-disc list-inside mt-2 space-y-1">
+                    {validationErrors.map((error, index) => (
+                      <li key={index}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="space-y-8">
             <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:space-y-0 space-y-8">
@@ -150,7 +353,10 @@ export function BookingSection() {
                         <Label className="text-gray-700 font-medium">Starting Point</Label>
                         <Input
                           value={startingPoint}
-                          onChange={(e) => setStartingPoint(e.target.value)}
+                          onChange={(e) => {
+                            setStartingPoint(e.target.value)
+                            clearValidationErrors()
+                          }}
                           className="bg-blue-50 border-blue-200 text-gray-800 placeholder:text-gray-500 h-12"
                           placeholder="Enter starting location"
                         />
@@ -198,12 +404,33 @@ export function BookingSection() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-gray-700 font-medium">Pickup Date</Label>
-                          <Input
-                            type="date"
-                            value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                            className="bg-blue-50 border-blue-200 text-gray-800 h-12"
-                          />
+                          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                            <PopoverTrigger asChild>
+                              <div className="relative">
+                                <Input
+                                  type="text"
+                                  value={date ? format(parseISO(date), "PPP") : ""}
+                                  onChange={(e) => setDate(e.target.value)}
+                                  className="bg-blue-50 border-blue-200 text-gray-800 h-12"
+                                  placeholder="Select a date"
+                                />
+                                <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 cursor-pointer" onClick={() => setCalendarOpen(true)} />
+                              </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={date ? parseISO(date) : undefined}
+                                onSelect={(selectedDate) => {
+                                  if (selectedDate) {
+                                    setDate(format(selectedDate, 'yyyy-MM-dd'))
+                                  }
+                                  setCalendarOpen(false)
+                                }}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
                         </div>
                         <div className="space-y-2">
                           <Label className="text-gray-700 font-medium">Pickup Time</Label>
@@ -215,41 +442,59 @@ export function BookingSection() {
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+
+                      {/* Fare Calculator for Multi-City */}
+                      <div className="space-y-3 bg-gray-50 p-4 rounded-lg border">
+                        <h4 className="flex items-center gap-2 font-semibold">
+                          <span className="text-lg">📍</span> Fare Calculator
+                        </h4>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            placeholder="Distance (km) e.g. 40"
+                            value={multiCityDistance}
+                            onChange={(e) => setMultiCityDistance(e.target.value)}
+                            className="bg-white"
+                          />
+                          <Button
+                            type="button"
+                            onClick={() => calculateFareForType("multi-city", parseFloat(multiCityDistance))}
+                            className="bg-yellow-500 hover:bg-yellow-600 text-black px-4"
+                          >
+                            Calculate
+                          </Button>
+                        </div>
+                        {fareResults["multi-city"] && (
+                          <div
+                            className="p-2 bg-white border rounded text-sm"
+                            dangerouslySetInnerHTML={{ __html: fareResults["multi-city"] }}
+                          />
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4">
                         <div className="space-y-2">
                           <Label className="text-gray-700 font-medium">No of Passengers</Label>
-                          <div className="relative">
-                            <select
-                              value={passengers}
-                              onChange={(e) => setPassengers(e.target.value)}
-                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10"
+                          <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
+                            <button
+                              type="button"
+                              onClick={() => handlePassengerChange(-1)}
+                              disabled={passengers <= 1}
+                              className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
                             >
-                              <option value="01">01</option>
-                              <option value="02">02</option>
-                              <option value="03">03</option>
-                              <option value="04">04</option>
-                              <option value="05">05</option>
-                              <option value="06">06</option>
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-gray-700 font-medium">No of Luggage</Label>
-                          <div className="relative">
-                            <select
-                              value={luggage}
-                              onChange={(e) => setLuggage(e.target.value)}
-                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10"
+                              −
+                            </button>
+                            <span className="flex-1 text-center font-semibold text-gray-900">
+                              {passengers}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handlePassengerChange(1)}
+                              disabled={passengers >= 20}
+                              className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
                             >
-                              <option value="01">01</option>
-                              <option value="02">02</option>
-                              <option value="03">03</option>
-                              <option value="04">04</option>
-                              <option value="05">05</option>
-                              <option value="06">06</option>
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                              +
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -265,7 +510,10 @@ export function BookingSection() {
                           <Input
                             id="from"
                             value={from}
-                            onChange={(e) => setFrom(e.target.value)}
+                            onChange={(e) => {
+                              setFrom(e.target.value)
+                              clearValidationErrors()
+                            }}
                             className="bg-blue-50 border-blue-200 text-gray-800 placeholder:text-gray-500 h-12"
                           />
                         </div>
@@ -276,7 +524,10 @@ export function BookingSection() {
                           <Input
                             id="to"
                             value={to}
-                            onChange={(e) => setTo(e.target.value)}
+                            onChange={(e) => {
+                              setTo(e.target.value)
+                              clearValidationErrors()
+                            }}
                             className="bg-blue-50 border-blue-200 text-gray-800 placeholder:text-gray-500 h-12"
                           />
                         </div>
@@ -315,16 +566,34 @@ export function BookingSection() {
                         <Label htmlFor="pickup-date" className="text-gray-700 font-medium">
                           Pickup Date
                         </Label>
-                        <div className="relative">
-                          <Input
-                            id="pickup-date"
-                            type="date"
-                            value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                            className="bg-blue-50 border-blue-200 text-gray-800 h-12"
-                          />
-                          <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
-                        </div>
+                        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                          <PopoverTrigger asChild>
+                            <div className="relative">
+                              <Input
+                                id="pickup-date"
+                                type="text"
+                                value={date ? format(parseISO(date), "PPP") : ""}
+                                onChange={(e) => setDate(e.target.value)}
+                                className="bg-blue-50 border-blue-200 text-gray-800 h-12"
+                                placeholder="Select a date"
+                              />
+                              <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 cursor-pointer" onClick={() => setCalendarOpen(true)} />
+                            </div>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={date ? parseISO(date) : undefined}
+                              onSelect={(selectedDate) => {
+                                if (selectedDate) {
+                                  setDate(format(selectedDate, 'yyyy-MM-dd'))
+                                }
+                                setCalendarOpen(false)
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-gray-700 font-medium">Pickup Time</Label>
@@ -353,53 +622,55 @@ export function BookingSection() {
                           />
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-gray-700 font-medium">No of Passengers</Label>
-                          <div className="relative">
-                            <select
-                              value={passengers}
-                              onChange={(e) => setPassengers(e.target.value)}
-                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10"
-                            >
-                              <option value="01">01</option>
-                              <option value="02">02</option>
-                              <option value="03">03</option>
-                              <option value="04">04</option>
-                              <option value="05">05</option>
-                              <option value="06">06</option>
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
-                          </div>
+
+                      {/* Fare Calculator for One-Way/Round-Trip */}
+                      <div className="space-y-3 bg-gray-50 p-4 rounded-lg border">
+                        <h4 className="flex items-center gap-2 font-semibold">
+                          <span className="text-lg">📍</span> Fare Calculator
+                        </h4>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            placeholder={"Distance (km) e.g. 40"}
+                            value={tripType === "round-trip" ? roundTripDistance : oneWayDistance}
+                            onChange={(e) =>
+                              tripType === "round-trip"
+                                ? setRoundTripDistance(e.target.value)
+                                : setOneWayDistance(e.target.value)
+                            }
+                            className="bg-white"
+                          />
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              const distanceKey = tripType === "round-trip" ? roundTripDistance : oneWayDistance;
+                              calculateFareForType(tripType, parseFloat(distanceKey));
+                            }}
+                            className="bg-yellow-500 hover:bg-yellow-600 text-black px-4"
+                          >
+                            Calculate
+                          </Button>
                         </div>
-                        <div className="space-y-2">
-                          <Label className="text-gray-700 font-medium">No of Luggage</Label>
-                          <div className="relative">
-                            <select
-                              value={luggage}
-                              onChange={(e) => setLuggage(e.target.value)}
-                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10"
-                            >
-                              <option value="01">01</option>
-                              <option value="02">02</option>
-                              <option value="03">03</option>
-                              <option value="04">04</option>
-                              <option value="05">05</option>
-                              <option value="06">06</option>
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
-                          </div>
-                        </div>
+                        {(fareResults["one-way"] || fareResults["round-trip"]) && (
+                          <div
+                            className="p-2 bg-white border rounded text-sm"
+                            dangerouslySetInnerHTML={{
+                              __html: fareResults[tripType] || ""
+                            }}
+                          />
+                        )}
                       </div>
+
                     </div>
                   )}
 
                   <Button
                     onClick={handleNextClick}
-                    className="w-full bg-blue-500 text-white hover:bg-blue-600 py-3 text-lg font-medium"
+                    disabled={!(fareResults[tripType] && !fareResults[tripType].includes("⚠️"))}
+                    className="w-full bg-blue-500 text-white hover:bg-blue-600 py-3 text-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     size="lg"
                   >
-                    Next →
+                    {!fareResults[tripType] || fareResults[tripType].includes("⚠️") ? "Calculate Fare First →" : "Next →"}
                   </Button>
                 </div>
               </CardContent>
@@ -414,9 +685,16 @@ export function BookingSection() {
                     <p className="text-muted-foreground text-sm">Track available rides in real-time</p>
                   </div>
                   <div className="h-[500px] relative">
-                    <Map keyName="booking" />
+                    <Map from={from} to={to} onDistanceChange={handleDistanceChange} />
                     <div className="absolute inset-0 bg-gradient-to-t from-background/10 to-transparent pointer-events-none" />
                   </div>
+                  {mapDistance && mapDuration && (
+                    <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-b-xl p-6">
+                      <div className="text-center text-lg font-semibold text-muted-foreground">
+                        {mapDistance} • {mapDuration}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -450,12 +728,21 @@ export function BookingSection() {
                     <p className="text-muted-foreground text-sm">Track available rides in real-time</p>
                   </div>
                   <div className="h-[400px] relative">
-                    <Map keyName="booking" />
+                    <Map from={from} to={to} onDistanceChange={handleDistanceChange} />
                     <div className="absolute inset-0 bg-gradient-to-t from-background/10 to-transparent pointer-events-none" />
                   </div>
+                  {mapDistance && mapDuration && (
+                    <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-b-xl p-6">
+                      <div className="text-center text-lg font-semibold text-muted-foreground">
+                        {mapDistance} • {mapDuration}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
+
+            {/* Integrated fare calculators moved into each trip type section */}
           </div>
         </div>
       </section>
@@ -463,20 +750,21 @@ export function BookingSection() {
       <BookingDetailsPopup
         isOpen={showBookingPopup}
         onClose={() => setShowBookingPopup(false)}
-        bookingData={
-          showBookingPopup
-            ? {
-                from,
-                to,
-                rideType,
-                date,
-                time: rideType === "shared" ? selectedTimeSlot : customTime,
-                passengers,
-                luggage,
-                tripType,
-              }
-            : null
-        }
+        onAddSharedRide={onAddSharedRide}
+        bookingData={showBookingPopup ? {
+          from: tripType === 'multi-city' ? startingPoint : from,
+          to,
+          rideType,
+          date,
+          time: rideType === "shared" ? selectedTimeSlot : customTime,
+          passengers,
+          tripType,
+          destinations: tripType === 'multi-city' ? destinations : undefined,
+          startingPoint: tripType === 'multi-city' ? startingPoint : undefined,
+          mapDistance,
+          mapDuration,
+          calculatedFare: fareResults[tripType],
+        } : null}
       />
     </>
   )

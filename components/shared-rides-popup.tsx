@@ -9,6 +9,10 @@ import { Clock, Users, MapPin, X, CreditCard, Share2, ChevronDown, ArrowLeft } f
 import { JoinRidePopup } from "./join-ride-popup"
 import { PaymentDetailsPopup } from "./payment-popup"
 import { BookingDetailsPopup } from "./booking-details-popup"
+import { calculateTotalPrice, formatPriceUSD, getPerKmRate, getTripMultiplier } from "@/lib/pricing"
+
+const DEFAULT_SHARED_DISTANCE = 45; // km
+const DEFAULT_PASSENGERS_FOR_CALC = 6; // for medium vehicle
 
 const sharedRides = [
   {
@@ -33,7 +37,8 @@ const sharedRides = [
       available: 3,
       total: 6,
     },
-    price: "LKR 2000.00",
+    distanceKm: DEFAULT_SHARED_DISTANCE,
+    price: formatPriceUSD(Math.round(calculateTotalPrice(DEFAULT_SHARED_DISTANCE, DEFAULT_PASSENGERS_FOR_CALC, DEFAULT_PASSENGERS_FOR_CALC, "one-way") / DEFAULT_PASSENGERS_FOR_CALC)),
   },
   {
     id: 2,
@@ -57,7 +62,8 @@ const sharedRides = [
       available: 3,
       total: 6,
     },
-    price: "LKR 2000.00",
+    distanceKm: DEFAULT_SHARED_DISTANCE,
+    price: formatPriceUSD(Math.round(calculateTotalPrice(DEFAULT_SHARED_DISTANCE, DEFAULT_PASSENGERS_FOR_CALC, DEFAULT_PASSENGERS_FOR_CALC, "one-way") / DEFAULT_PASSENGERS_FOR_CALC)),
   },
   {
     id: 3,
@@ -81,7 +87,8 @@ const sharedRides = [
       available: 3,
       total: 6,
     },
-    price: "LKR 2000.00",
+    distanceKm: DEFAULT_SHARED_DISTANCE,
+    price: formatPriceUSD(Math.round(calculateTotalPrice(DEFAULT_SHARED_DISTANCE, DEFAULT_PASSENGERS_FOR_CALC, DEFAULT_PASSENGERS_FOR_CALC, "one-way") / DEFAULT_PASSENGERS_FOR_CALC)),
   },
 ]
 
@@ -100,12 +107,15 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
   const [tripType, setTripType] = useState("one-way")
   const [rideType, setRideType] = useState("shared")
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("")
-  const [passengers, setPassengers] = useState("02")
-  const [luggage, setLuggage] = useState("04")
+  const [passengers, setPassengers] = useState(1)
   const [from, setFrom] = useState("Downtown Plaza")
   const [to, setTo] = useState("Airport Terminal 1")
   const [date, setDate] = useState("2025-09-20")
   const [customTime, setCustomTime] = useState("")
+
+  const handlePassengerChange = (change: number) => {
+    setPassengers((prev) => Math.max(1, Math.min(20, prev + change))); // Allow up to 20 passengers for large bookings
+  }
 
   if (!isOpen) return null
 
@@ -126,6 +136,17 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
     "6 - 8 am", "8 - 10 am", "10 - 12 pm", "12 - 2 pm", "2 - 4 pm",
     "4 - 6 pm", "6 - 8 pm", "8 - 10 pm", "10 - 12 am"
   ]
+
+  const calculatedPriceForShare = formatPriceUSD(
+    Math.round(
+      calculateTotalPrice(
+        DEFAULT_SHARED_DISTANCE,
+        passengers,
+        passengers,
+        tripType as any
+      )
+    )
+  )
 
   return (
     <>
@@ -196,25 +217,6 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
                       </p>
                       <p className="text-gray-600 text-sm">Available</p>
                     </div>
-                  </div>
-                </div>
-
-                <hr className="border-gray-200 my-4" />
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src="/images/alex-chen-driver.jpg" alt="Alex Chen" />
-                      <AvatarFallback>AC</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-semibold text-gray-900">Alex Chen</p>
-                      <p className="text-gray-600">Toyota Alphard</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-gray-900">LKR 2000.00</p>
-                    <p className="text-gray-600">per seat</p>
                   </div>
                 </div>
               </div>
@@ -373,41 +375,29 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
                             />
                           )}
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4">
                           <div className="space-y-2">
                             <Label className="text-gray-700 font-medium">No of Passengers</Label>
-                            <div className="relative">
-                              <select
-                                value={passengers}
-                                onChange={(e) => setPassengers(e.target.value)}
-                                className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10 h-12"
+                            <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
+                              <button
+                                type="button"
+                                onClick={() => handlePassengerChange(-1)}
+                                disabled={passengers <= 1}
+                                className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
                               >
-                                <option value="01">01</option>
-                                <option value="02">02</option>
-                                <option value="03">03</option>
-                                <option value="04">04</option>
-                                <option value="05">05</option>
-                                <option value="06">06</option>
-                              </select>
-                              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-gray-700 font-medium">No of Luggage</Label>
-                            <div className="relative">
-                              <select
-                                value={luggage}
-                                onChange={(e) => setLuggage(e.target.value)}
-                                className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10 h-12"
+                                −
+                              </button>
+                              <span className="flex-1 text-center font-semibold text-gray-900">
+                                {passengers}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handlePassengerChange(1)}
+                              disabled={passengers >= 20}
+                                className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
                               >
-                                <option value="01">01</option>
-                                <option value="02">02</option>
-                                <option value="03">03</option>
-                                <option value="04">04</option>
-                                <option value="05">05</option>
-                                <option value="06">06</option>
-                              </select>
-                              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                                +
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -435,12 +425,12 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
                     if (navigator.share) {
                       navigator.share({
                         title: 'Shared Ride Available',
-                        text: `Join ride from ${from} to ${to} for LKR 2000.00`,
+                        text: `Join ride from ${from} to ${to} for ${calculatedPriceForShare}`,
                         url: window.location.href,
                       })
                     } else {
                       // Fallback: copy to clipboard
-                      navigator.clipboard.writeText(`Join ride from ${from} to ${to} for LKR 2000.00`)
+                      navigator.clipboard.writeText(`Join ride from ${from} to ${to} for ${calculatedPriceForShare}`)
                       alert('Ride details copied to clipboard!')
                     }
                   }}
@@ -467,8 +457,8 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
           date,
           time: rideType === "shared" ? selectedTimeSlot : customTime,
           passengers,
-          luggage,
           tripType,
+          mapDistance: DEFAULT_SHARED_DISTANCE.toString(),
         }}
       />
     </>

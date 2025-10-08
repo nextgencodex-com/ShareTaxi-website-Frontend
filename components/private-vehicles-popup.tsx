@@ -9,7 +9,7 @@ const vehicles = [
   {
     id: 1,
     name: "Toyota Innova",
-    price: "LKR 2000/ hour",
+    price: "$6/ hour",
     passengers: "5-6",
     luggage: "X 1 Big",
     handCarry: "X 3 Hand",
@@ -21,7 +21,7 @@ const vehicles = [
   {
     id: 2,
     name: "Toyota Alphard",
-    price: "LKR 3000/ hour",
+    price: "$9/ hour",
     passengers: "5-6",
     luggage: "X 2 Big",
     handCarry: "X 4 Hand",
@@ -33,7 +33,7 @@ const vehicles = [
   {
     id: 3,
     name: "Hyundai Starex",
-    price: "LKR 4000/ hour",
+    price: "$12/ hour",
     passengers: "7-8",
     luggage: "X 2 Big",
     handCarry: "X 4 Hand",

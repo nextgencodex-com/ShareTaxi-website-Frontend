@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -49,8 +49,8 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
       postedDate: new Date(Date.now() - 10 * 60 * 1000),
       frequency: "one-time",
       driver: {
-        name: "Alex Chen",
-        image: "/images/alex-chen-driver.jpg",
+      name: "Alex Chen",
+      image: "/professional-driver-headshot.jpg",
       },
       vehicle: "Toyota Alphard",
       pickup: {
@@ -67,7 +67,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         available: 3,
         total: 6,
       },
-      price: "LKR 2000.00",
+      price: "$20.00",
     },
     {
       id: 2,
@@ -76,7 +76,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
       frequency: "daily",
       driver: {
         name: "Sarah Wilson",
-        image: "/images/sarah-wilson-driver.jpg",
+        image: "/female-professional-driver.jpg",
       },
       vehicle: "Hyundai Starex",
       pickup: {
@@ -93,7 +93,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         available: 4,
         total: 8,
       },
-      price: "LKR 1500.00",
+      price: "$15.00",
     },
     {
       id: 3,
@@ -102,7 +102,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
       frequency: "monthly",
       driver: {
         name: "Michael Chen",
-        image: "/images/michael-chen-driver.jpg",
+        image: "/professional-driver-headshot.jpg",
       },
       vehicle: "Toyota Innova",
       pickup: {
@@ -119,7 +119,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         available: 2,
         total: 6,
       },
-      price: "LKR 2500.00",
+      price: "$25.00",
     },
     {
       id: 4,
@@ -128,7 +128,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
       frequency: "daily",
       driver: {
         name: "David Kim",
-        image: "/images/david-kim-driver.jpg",
+      image: "/professional-driver-headshot.jpg",
       },
       vehicle: "Toyota Alphard",
       pickup: {
@@ -145,7 +145,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         available: 5,
         total: 6,
       },
-      price: "LKR 1000.00",
+      price: "$10.00",
     },
     {
       id: 5,
@@ -154,7 +154,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
       frequency: "yearly",
       driver: {
         name: "Emma Johnson",
-        image: "/images/emma-johnson-driver.jpg",
+      image: "/young-professional-woman.png",
       },
       vehicle: "Hyundai Starex",
       pickup: {
@@ -171,7 +171,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         available: 3,
         total: 8,
       },
-      price: "LKR 3500.00",
+      price: "$35.00",
     },
     {
       id: 6,
@@ -197,7 +197,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         available: 4,
         total: 6,
       },
-      price: "LKR 800.00",
+      price: "$2.00",
     },
     {
       id: 7,
@@ -223,7 +223,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         available: 2,
         total: 6,
       },
-      price: "LKR 2200.00",
+      price: "$22.00",
     },
     {
       id: 8,
@@ -249,7 +249,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         available: 6,
         total: 8,
       },
-      price: "LKR 500.00",
+      price: "$5.00",
     },
     {
       id: 9,
@@ -275,19 +275,23 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         available: 3,
         total: 6,
       },
-      price: "LKR 1800.00",
+      price: "$18.00",
     },
   ], [])
 
-  const allRides = useMemo(() => [...initialRides, ...defaultRides], [initialRides, defaultRides])
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterFrequency, setFilterFrequency] = useState("all")
   const [currentPage, setCurrentPage] = useState(0)
+  const [rides, setRides] = useState<Ride[]>([])
+
+  useEffect(() => {
+    setRides([...initialRides, ...defaultRides])
+  }, [initialRides])
 
   const filteredRides = useMemo(() => {
-    return allRides.filter((ride) => {
+    return rides.filter((ride) => {
       const searchLower = searchQuery.toLowerCase()
       const matchesSearch =
         searchQuery === "" ||
@@ -300,7 +304,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
 
       return matchesSearch && matchesFrequency
     })
-  }, [allRides, searchQuery, filterFrequency])
+  }, [rides, searchQuery, filterFrequency])
 
   const ridesPerPage = 3
   const totalPages = Math.ceil(filteredRides.length / ridesPerPage)

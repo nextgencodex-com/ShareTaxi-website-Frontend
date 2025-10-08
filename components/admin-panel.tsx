@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowLeft } from "lucide-react"
+import { Footer } from "@/components/footer"
 
 interface RideData {
   id: number
@@ -35,7 +36,6 @@ interface RideData {
     total: number
   }
   passengers: string
-  luggage: string
   handCarry: string
   price: string
 }
@@ -45,7 +45,6 @@ interface VehicleData {
   name: string
   price: string
   passengers: string
-  luggage: string
   handCarry: string
   image: string
   features: string[]
@@ -66,7 +65,6 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   ]
 
   const passengerOptions = Array.from({ length: 10 }, (_, i) => (i + 1).toString())
-  const luggageOptions = Array.from({ length: 7 }, (_, i) => i.toString())
   const handCarryOptions = Array.from({ length: 6 }, (_, i) => i.toString())
 
   // Shared Ride Form State
@@ -79,7 +77,6 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     time: "",
     duration: "",
     passengers: "1",
-    luggage: "0",
     handCarry: "0",
     availableSeats: "",
     totalSeats: "",
@@ -92,7 +89,6 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     name: "",
     price: "",
     passengers: "4",
-    luggage: "2",
     handCarry: "2",
     image: "",
     feature1: "",
@@ -103,6 +99,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   // File states for image uploads
   const [driverImageFile, setDriverImageFile] = useState<File | null>(null)
   const [vehicleImageFile, setVehicleImageFile] = useState<File | null>(null)
+
+  // Rate setting state
+  const [ratePerKm, setRatePerKm] = useState("")
+  const [rateStatus, setRateStatus] = useState("")
 
   // Handle file selection and convert to data URL
   const handleDriverImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,7 +155,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       frequency: rideForm.frequency,
       driver: {
         name: rideForm.driverName,
-        image: rideForm.driverImage || "/images/alex-chen-driver.jpg",
+                image: rideForm.driverImage || "/professional-driver-headshot.jpg",
       },
       vehicle: rideForm.vehicle,
       pickup: {
@@ -169,7 +169,6 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       time: rideForm.time,
       duration: rideForm.duration,
       passengers: rideForm.passengers,
-      luggage: rideForm.luggage,
       handCarry: rideForm.handCarry,
       seats: {
         available: availableSeats,
@@ -190,7 +189,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       time: "",
       duration: "",
       passengers: "1",
-      luggage: "0",
+      
       handCarry: "0",
       availableSeats: "",
       totalSeats: "",
@@ -210,7 +209,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       name: vehicleForm.name,
       price: vehicleForm.price,
       passengers: vehicleForm.passengers,
-      luggage: vehicleForm.luggage,
+
       handCarry: vehicleForm.handCarry,
       image: vehicleForm.image || "/images/toyota-innova.jpg",
       features: [vehicleForm.feature1, vehicleForm.feature2, vehicleForm.feature3].filter((f) => f),
@@ -225,7 +224,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       name: "",
       price: "",
       passengers: "4",
-      luggage: "2",
+
       handCarry: "2",
       image: "",
       feature1: "",
@@ -235,6 +234,16 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     setVehicleImageFile(null)
 
     alert("Vehicle added successfully!")
+  }
+
+  const saveRate = () => {
+    const rate = parseFloat(ratePerKm)
+    if (!rate || rate <= 0) {
+      alert("Please enter a valid rate per KM.")
+      return
+    }
+    localStorage.setItem("ratePerKm", rate.toString())
+    setRateStatus("✅ Rate saved successfully!")
   }
 
   return (
@@ -250,9 +259,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         <h1 className="text-3xl font-bold text-center mb-8">Admin Panel</h1>
 
         <Tabs defaultValue="rides" className="max-w-4xl mx-auto">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="rides">Add Shared Ride</TabsTrigger>
             <TabsTrigger value="vehicles">Add Vehicle</TabsTrigger>
+            <TabsTrigger value="rates">Set Rates</TabsTrigger>
           </TabsList>
 
           <TabsContent value="rides">
@@ -395,18 +405,13 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <div>
                       <label className="block text-sm font-medium mb-2">Luggage</label>
                       <Select
-                        value={rideForm.luggage}
-                        onValueChange={(value) => setRideForm({ ...rideForm, luggage: value })}
+                      
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {luggageOptions.map((num) => (
-                            <SelectItem key={num} value={num}>
-                              {num}
-                            </SelectItem>
-                          ))}
+                          
                         </SelectContent>
                       </Select>
                     </div>
@@ -516,19 +521,12 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <div>
                       <label className="block text-sm font-medium mb-2">Luggage</label>
                       <Select
-                        value={vehicleForm.luggage}
-                        onValueChange={(value) => setVehicleForm({ ...vehicleForm, luggage: value })}
+                        
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
-                          {luggageOptions.map((num) => (
-                            <SelectItem key={num} value={num}>
-                              {num}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
+                        
                       </Select>
                     </div>
 
@@ -593,8 +591,41 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="rates">
+            <Card>
+              <CardHeader>
+                <CardTitle>🚖 Admin: Set Price per KM</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label htmlFor="ratePerKm" className="block text-sm font-medium mb-2">
+                    Enter Rate ($ per KM):
+                  </label>
+                  <Input
+                    type="number"
+                    id="ratePerKm"
+                    placeholder="e.g. 1.50"
+                    value={ratePerKm}
+                    onChange={(e) => setRatePerKm(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <Button
+                  onClick={saveRate}
+                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-black"
+                >
+                  Save Rate
+                </Button>
+                {rateStatus && (
+                  <p className="text-green-600 font-bold text-center">{rateStatus}</p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
+      <Footer />
     </div>
   )
 }

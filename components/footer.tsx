@@ -1,7 +1,11 @@
 import { Button } from "@/components/ui/button"
 import { Car, Phone, Mail, MapPin, Facebook, Twitter, Instagram, MessageCircle } from "lucide-react"
 
-export function Footer() {
+interface FooterProps {
+  onAdminLoginClick?: () => void
+}
+
+export function Footer({ onAdminLoginClick }: FooterProps) {
   return (
     <footer className="bg-black text-white border-t border-gray-700">
       {/* Main Footer */}
@@ -122,7 +126,20 @@ export function Footer() {
           </div>
 
           <div className="border-t border-gray-700 mt-8 pt-8 text-center text-sm text-gray-300">
-            <p>&copy; 2024 Share Taxi Sri Lanka. All rights reserved. | Developed by NextGen-CodeX</p>
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <p className="text-center md:text-left">&copy; 2024 Share Taxi Sri Lanka. All rights reserved. | Developed by NextGen-CodeX</p>
+
+              {/* Admin button moved here for careful placement */}
+              <div>
+                <Button
+                  variant="ghost"
+                  className="text-white hover:text-yellow-400 hover:bg-transparent px-3"
+                  onClick={() => onAdminLoginClick?.()}
+                >
+                  Admin
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
