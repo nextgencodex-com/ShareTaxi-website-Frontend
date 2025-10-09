@@ -129,7 +129,7 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <p className="text-center md:text-left">&copy; 2024 Share Taxi Sri Lanka. All rights reserved. | Developed by NextGen-CodeX</p>
 
-              {/* Admin button moved here for careful placement */}
+              {/* Admin button moved here for  placement */}
               <div>
                 <Button
                   variant="ghost"

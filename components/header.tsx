@@ -26,14 +26,14 @@ export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: 
             <img src="/images/logo.png" alt="Share Taxi Sri Lanka" className="lg:hidden h-6 md:h-8" />
 
             {/* Mobile Centered Title */}
-            <span className="lg:hidden absolute inset-0 flex items-center justify-center text-white font-medium text-xs md:text-sm whitespace-nowrap pointer-events-none">
+            <span className="lg:hidden absolute inset-0 flex items-center justify-center text-white font-medium text-base md:text-lg whitespace-nowrap pointer-events-none">
               Share Taxi Sri Lanka
             </span>
 
             {/* Desktop Logo and Brand Name */}
             <div className="hidden lg:flex items-center gap-2 md:gap-3">
               <img src="/images/logo.png" alt="Share Taxi Sri Lanka" className="h-8 md:h-10" />
-              <span className="text-white font-semibold text-sm md:text-base whitespace-nowrap">
+              <span className="text-white font-semibold text-base md:text-lg whitespace-nowrap">
                 Share Taxi Sri Lanka
               </span>
             </div>
@@ -108,7 +108,7 @@ export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: 
                 className="block bg-gray-900/90 hover:bg-gray-800 rounded-xl px-4 py-3 transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                <h3 className="text-yellow-400 font-semibold text-sm">{tNav('home')}</h3>
+                <h3 className="text-yellow-400 font-semibold text-base">{tNav('home')}</h3>
               </a>
 
               <a
@@ -116,7 +116,7 @@ export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: 
                 className="block bg-gray-900/90 hover:bg-gray-800 rounded-xl px-4 py-3 transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                <h3 className="text-white font-semibold text-sm">{tNav('bookTaxi')}</h3>
+                <h3 className="text-white font-semibold text-base">{tNav('bookTaxi')}</h3>
               </a>
 
               <a
@@ -124,7 +124,7 @@ export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: 
                 className="block bg-gray-900/90 hover:bg-gray-800 rounded-xl px-4 py-3 transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                <h3 className="text-white font-semibold text-sm">{tNav('sharedRides')}</h3>
+                <h3 className="text-white font-semibold text-base">{tNav('sharedRides')}</h3>
               </a>
 
               <a
@@ -132,7 +132,7 @@ export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: 
                 className="block bg-gray-900/90 hover:bg-gray-800 rounded-xl px-4 py-3 transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                <h3 className="text-white font-semibold text-sm">{tNav('carOption')}</h3>
+                <h3 className="text-white font-semibold text-base">{tNav('carOption')}</h3>
               </a>
 
               {/* Profile tile */}
@@ -150,7 +150,7 @@ export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: 
                 <div className="w-9 h-9 rounded-full bg-black flex items-center justify-center">
                   <User className="h-4 w-4 text-yellow-400" />
                 </div>
-                <span className="text-white font-medium text-sm">{isLoggedIn ? tNav('profile') : tNav('signIn')}</span>
+                <span className="text-white font-medium text-base">{isLoggedIn ? tNav('profile') : tNav('signIn')}</span>
               </button>
             </div>
           </div>
