@@ -169,7 +169,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
                       <img
                         src={vehicle.image || "/placeholder.svg"}
                         alt={vehicle.name}
-                        className="w-full h-48 object-cover"
+                        className="w-98 h-58 object-cover"
                       />
                     </div>
 

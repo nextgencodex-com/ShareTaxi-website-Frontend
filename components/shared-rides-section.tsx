@@ -351,7 +351,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
             <div className="max-w-2xl mx-auto mb-12 flex gap-4 items-center">
               <div className="flex-1">
                 <Input
-                  placeholder="Search by location and vehicle..."
+                  placeholder="Search"
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   className="h-12 text-center border-2 border-blue-200 rounded-full bg-white text-gray-500"

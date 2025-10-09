@@ -303,19 +303,21 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 bg-gray-100 rounded-lg p-1">
+                  <div className="grid grid-cols-1 gap-2 bg-gray-100 rounded-lg p-1">
                     <Button
                       variant={tripType === "one-way" ? "default" : "ghost"}
                       size="sm"
                       className={
                         tripType === "one-way"
-                          ? "bg-blue-500 text-white hover:bg-blue-600"
-                          : "text-gray-600 hover:text-gray-800"
+                          ? "bg-blue-500 text-white hover:bg-blue-600 w-24 mx-auto"
+                          : "text-gray-600 hover:text-gray-800 w-24 mx-auto"
                       }
                       onClick={() => setTripType("one-way")}
                     >
                       One Way
                     </Button>
+                
+                    {/*
                     <Button
                       variant={tripType === "round-trip" ? "default" : "ghost"}
                       size="sm"
@@ -328,6 +330,9 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                     >
                       Return Trip
                     </Button>
+                    */}
+                  
+                    {/*
                     <Button
                       variant={tripType === "multi-city" ? "default" : "ghost"}
                       size="sm"
@@ -340,164 +345,11 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                     >
                       Multi-City
                     </Button>
+                    */}
                   </div>
 
-                  {tripType === 'multi-city' ? (
-                    <div className="space-y-6">
-                      <h3 className="text-lg font-semibold text-gray-800">Multi-City Tour</h3>
-                      <div className="space-y-3">
-                        <Label className="text-gray-700 font-medium">Starting Point</Label>
-                        <Input
-                          value={startingPoint}
-                          onChange={(e) => {
-                            setStartingPoint(e.target.value)
-                            clearValidationErrors()
-                          }}
-                          className="bg-blue-50 border-blue-200 text-gray-800 placeholder:text-gray-500 h-12"
-                          placeholder="Enter starting location"
-                        />
-                      </div>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-gray-700 font-medium">Destinations</Label>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={addDestination}
-                            className="h-8 px-3 rounded-lg"
-                          >
-                            <Plus className="h-3 w-3 mr-1" />
-                            Add Stop
-                          </Button>
-                        </div>
-                        <div className="space-y-3">
-                          {destinations.map((dest, index) => (
-                            <div key={dest.id} className="flex gap-2 items-center">
-                              <div className="flex-1">
-                                <Input
-                                  placeholder={`Stop ${index + 1}`}
-                                  value={dest.location}
-                                  onChange={(e) => updateDestination(dest.id, e.target.value)}
-                                  className="bg-blue-50 border-blue-200 text-gray-800 h-12"
-                                />
-                              </div>
-                              {destinations.length > 2 && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => removeDestination(dest.id)}
-                                  className="h-12 px-3 rounded-lg hover:bg-destructive hover:text-destructive-foreground"
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-gray-700 font-medium">Pickup Date</Label>
-                          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                            <PopoverTrigger asChild>
-                              <div className="relative">
-                                <Input
-                                  type="text"
-                                  value={date ? format(parseISO(date), "PPP") : ""}
-                                  onChange={(e) => setDate(e.target.value)}
-                                  className="bg-blue-50 border-blue-200 text-gray-800 h-12"
-                                  placeholder="Select a date"
-                                />
-                                <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 cursor-pointer" onClick={() => setCalendarOpen(true)} />
-                              </div>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={date ? parseISO(date) : undefined}
-                                onSelect={(selectedDate) => {
-                                  if (selectedDate) {
-                                    setDate(format(selectedDate, 'yyyy-MM-dd'))
-                                  }
-                                  setCalendarOpen(false)
-                                }}
-                                initialFocus
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-gray-700 font-medium">Pickup Time</Label>
-                          <Input
-                            type="time"
-                            value={customTime}
-                            onChange={(e) => setCustomTime(e.target.value)}
-                            className="bg-blue-50 border-blue-200 text-gray-800 h-12"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Fare Calculator for Multi-City */}
-                      <div className="space-y-3 bg-gray-50 p-4 rounded-lg border">
-                        <h4 className="flex items-center gap-2 font-semibold">
-                          <span className="text-lg">📍</span> Fare Calculator
-                        </h4>
-                        <div className="flex gap-2">
-                          <Input
-                            type="number"
-                            placeholder="Distance (km) e.g. 40"
-                            value={multiCityDistance}
-                            onChange={(e) => setMultiCityDistance(e.target.value)}
-                            className="bg-white"
-                          />
-                          <Button
-                            type="button"
-                            onClick={() => calculateFareForType("multi-city", parseFloat(multiCityDistance))}
-                            className="bg-yellow-500 hover:bg-yellow-600 text-black px-4"
-                          >
-                            Calculate
-                          </Button>
-                        </div>
-                        {fareResults["multi-city"] && (
-                          <div
-                            className="p-2 bg-white border rounded text-sm"
-                            dangerouslySetInnerHTML={{ __html: fareResults["multi-city"] }}
-                          />
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-gray-700 font-medium">No of Passengers</Label>
-                          <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
-                            <button
-                              type="button"
-                              onClick={() => handlePassengerChange(-1)}
-                              disabled={passengers <= 1}
-                              className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
-                            >
-                              −
-                            </button>
-                            <span className="flex-1 text-center font-semibold text-gray-900">
-                              {passengers}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handlePassengerChange(1)}
-                              disabled={passengers >= 20}
-                              className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      <h3 className="text-lg font-semibold text-gray-800">{tripType === 'round-trip' ? 'Return Trip' : 'Tour'} Details</h3>
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-semibold text-gray-800">Tour Details</h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="from" className="text-gray-700 font-medium">
@@ -658,7 +510,6 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                       </div>
 
                     </div>
-                  )}
 
                   <Button
                     onClick={handleNextClick}
