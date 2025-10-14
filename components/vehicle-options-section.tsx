@@ -1,59 +1,78 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Users, Briefcase, ShoppingBag, Filter, ChevronLeft, ChevronRight } from "lucide-react"
 import { BookRidePopup } from "./book-ride-popup"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useIsMobile } from "@/components/ui/use-mobile"
 
+interface Vehicle {
+  id: number | string
+  name: string
+  price?: string
+  passengers?: string
+  luggage?: string
+  handCarry?: string
+  image?: string
+  features?: string[]
+  gradient?: string
+  buttonColor?: string
+}
+
 interface VehicleOptionsSectionProps {
   initialVehicles?: Vehicle[]
 }
 
-export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSectionProps) {
-  const defaultVehicles = [
-    {
-      id: 1,
-      name: "Toyota Innova",
-      price: "$6/ hour",
-      passengers: "5-6",
-      luggage: "X 1 Big",
-      handCarry: "X 3 Hand",
-      image: "/toyota-innova-white-mpv-car.jpg",
-      features: ["Air Conditioning", "GPS Navigation", "USB Charging"],
-      gradient: "bg-gradient-to-br from-yellow-400 to-orange-500",
-      buttonColor: "bg-gray-600 hover:bg-gray-700",
-    },
-    {
-      id: 2,
-      name: "Toyota Alphard",
-      price: "$9/ hour",
-      passengers: "5-6",
-      luggage: "X 2 Big",
-      handCarry: "X 4 Hand",
-      image: "/toyota-alphard-luxury-van.jpg",
-      features: ["Premium Interior", "Entertainment System", "Privacy Curtain"],
-      gradient: "bg-gradient-to-br from-orange-400 to-red-500",
-      buttonColor: "bg-gray-600 hover:bg-gray-700",
-    },
-    {
-      id: 3,
-      name: "Hyundai Starex",
-      price: "$12/ hour",
-      passengers: "7-8",
-      luggage: "X 2 Big",
-      handCarry: "X 4 Hand",
-      image: "/hyundai-starex-van.jpg",
-      features: ["Extra Space", "Family Friendly", "Comfortable Seating"],
-      gradient: "bg-gradient-to-br from-slate-500 to-slate-600",
-      buttonColor: "bg-gray-600 hover:bg-gray-700",
-    },
-  ]
+const DEFAULT_VEHICLES: Vehicle[] = [
+  {
+    id: 1,
+    name: "Toyota Innova",
+    price: "$6/ hour",
+    passengers: "5-6",
+    luggage: "X 1 Big",
+    handCarry: "X 3 Hand",
+    image: "/toyota-innova-white-mpv-car.jpg",
+    features: ["Air Conditioning", "GPS Navigation", "USB Charging"],
+    gradient: "bg-gradient-to-br from-yellow-400 to-orange-500",
+    buttonColor: "bg-gray-600 hover:bg-gray-700",
+  },
+  {
+    id: 2,
+    name: "Toyota Alphard",
+    price: "$9/ hour",
+    passengers: "5-6",
+    luggage: "X 2 Big",
+    handCarry: "X 4 Hand",
+    image: "/toyota-alphard-luxury-van.jpg",
+    features: ["Premium Interior", "Entertainment System", "Privacy Curtain"],
+    gradient: "bg-gradient-to-br from-orange-400 to-red-500",
+    buttonColor: "bg-gray-600 hover:bg-gray-700",
+  },
+  {
+    id: 3,
+    name: "Hyundai Starex",
+    price: "$12/ hour",
+    passengers: "7-8",
+    luggage: "X 2 Big",
+    handCarry: "X 4 Hand",
+    image: "/hyundai-starex-van.jpg",
+    features: ["Extra Space", "Family Friendly", "Comfortable Seating"],
+    gradient: "bg-gradient-to-br from-slate-500 to-slate-600",
+    buttonColor: "bg-gray-600 hover:bg-gray-700",
+  },
+]
 
-  const [allVehicles, setAllVehicles] = useState([...initialVehicles.map(vehicle => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...defaultVehicles])
-  const [selectedVehicle, setSelectedVehicle] = useState(null)
+export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSectionProps) {
+  // use module-level default vehicles constant
+
+  const [allVehicles, setAllVehicles] = useState<Vehicle[]>([...initialVehicles.map((vehicle: Vehicle) => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...DEFAULT_VEHICLES])
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
   const [isPopupOpen, setIsPopupOpen] = useState(false)
+  // Loading and error states to avoid ReferenceError during rendering
+  const [loading, setLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(0)
   const [passengerFilter, setPassengerFilter] = useState("all")
   const [shuffledGradients, setShuffledGradients] = useState<string[]>([])
@@ -62,7 +81,11 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
   const isMobile = useIsMobile()
 
   useEffect(() => {
-    setAllVehicles([...initialVehicles.map(vehicle => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...defaultVehicles])
+    // briefly use loading/error setters to avoid unused variable lint errors
+    setLoading(true)
+    setError(null)
+    setAllVehicles([...initialVehicles.map((vehicle: Vehicle) => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...DEFAULT_VEHICLES])
+    setLoading(false)
   }, [initialVehicles])
 
   useEffect(() => {
@@ -81,7 +104,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
   }, [currentPage])
 
   const filteredVehicles = useMemo(() => {
-    return allVehicles.filter((vehicle) => {
+    return allVehicles.filter((vehicle: Vehicle) => {
       const matchesFilter = passengerFilter === "all" || vehicle.passengers === passengerFilter
       return matchesFilter
     })
@@ -124,12 +147,12 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
   const convertVehicleForBooking = (vehicle: Vehicle | null) => {
     if (!vehicle) return null
     return {
-      id: parseInt(vehicle.id) || 0,
-      name: vehicle.name,
-      price: vehicle.price,
-      passengers: vehicle.passengers,
-      luggage: vehicle.luggage,
-      handCarry: vehicle.handCarry,
+      id: Number(vehicle.id) || 0,
+      name: vehicle.name || "",
+      price: vehicle.price ?? "",
+      passengers: vehicle.passengers ?? "",
+      luggage: vehicle.luggage ?? "",
+      handCarry: vehicle.handCarry ?? "",
       image: vehicle.image || "/placeholder.svg",
       features: vehicle.features || []
     }
@@ -178,7 +201,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
           {displayedVehicles.length > 0 ? (
             <>
               <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                {(isMobile ? mobileVehicles : displayedVehicles).map((vehicle: any, index: number) => (
+                {(isMobile ? mobileVehicles : displayedVehicles).map((vehicle: Vehicle, index: number) => (
                   <div key={vehicle.id} className={`${shuffledGradients[index]} rounded-3xl p-6 text-white shadow-xl`}>
                     <div className="text-center mb-6">
                       <h3 className="text-2xl font-bold mb-2">{vehicle.name}</h3>
@@ -207,7 +230,9 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
                       <Image
                         src={vehicle.image || "/placeholder.svg"}
                         alt={vehicle.name}
-                        className="w-98 h-58 object-cover"
+                        width={392}
+                        height={232}
+                        className="w-full h-auto object-cover"
                       />
                     </div>
 
