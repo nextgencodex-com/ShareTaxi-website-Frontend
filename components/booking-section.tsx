@@ -34,6 +34,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const [tripType, setTripType] = useState("one-way")
   const [rideType, setRideType] = useState("shared")
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("")
+  const [pickupTime, setPickupTime] = useState("")
+  const [pickupAmPm, setPickupAmPm] = useState("AM")
   const [passengers, setPassengers] = useState(1)
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
@@ -165,14 +167,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     }
 
     // Time validation
-    if (rideType === "shared") {
-      if (!selectedTimeSlot) {
-        errors.push("Time slot selection is required for shared rides")
-      }
-    } else {
-      if (!customTime) {
-        errors.push("Pickup time is required for personal rides")
-      }
+    if (!pickupTime) {
+      errors.push("Pickup time selection is required")
     }
 
     // Fare calculation validation
@@ -209,7 +205,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       to,
       rideType,
       date,
-      time: rideType === "shared" ? selectedTimeSlot : customTime,
+      time: `${pickupTime} ${pickupAmPm}`,
       passengers,
       tripType,
       destinations: tripType === 'multi-city' ? destinations : undefined,
@@ -226,6 +222,33 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     if (hasAttemptedSubmit) {
       setValidationErrors([])
     }
+  }
+
+  // Reset form to initial state
+  const resetForm = () => {
+    setTripType("one-way")
+    setRideType("shared")
+    setSelectedTimeSlot("")
+    setPickupTime("")
+    setPickupAmPm("AM")
+    setPassengers(1)
+    setFrom("")
+    setTo("")
+    setDate("2025-09-20")
+    setCustomTime("")
+    setMapDistance(null)
+    setMapDuration(null)
+    setDestinations([
+      { id: '1', location: '' },
+      { id: '2', location: '' }
+    ])
+    setStartingPoint("")
+    setOneWayDistance("")
+    setRoundTripDistance("")
+    setMultiCityDistance("")
+    setFareResults({})
+    setValidationErrors([])
+    setHasAttemptedSubmit(false)
   }
 
   const calculateFareForType = (tripType: string, distance: number) => {
@@ -445,30 +468,34 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                       </div>
                       <div className="space-y-2">
                         <Label className="text-gray-700 font-medium">Pickup Time</Label>
-                        {rideType === "shared" ? (
-                          <div className="relative">
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
                             <select
-                              value={selectedTimeSlot}
-                              onChange={(e) => setSelectedTimeSlot(e.target.value)}
-                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10"
+                              value={pickupTime}
+                              onChange={(e) => setPickupTime(e.target.value)}
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10 h-12"
                             >
-                              <option value="">Select a time slot</option>
-                              {timeSlots.map((slot) => (
-                                <option key={slot} value={slot}>
-                                  {slot}
-                                </option>
-                              ))}
+                              <option value="">Select time slot</option>
+                              <option value="12-2">12-2</option>
+                              <option value="2-4">2-4</option>
+                              <option value="4-6">4-6</option>
+                              <option value="6-8">6-8</option>
+                              <option value="8-10">8-10</option>
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
                           </div>
-                        ) : (
-                          <Input
-                            type="time"
-                            value={customTime}
-                            onChange={(e) => setCustomTime(e.target.value)}
-                            className="bg-blue-50 border-blue-200 text-gray-800 h-12"
-                          />
-                        )}
+                          <div className="relative">
+                            <select
+                              value={pickupAmPm}
+                              onChange={(e) => setPickupAmPm(e.target.value)}
+                              className="w-20 p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-8 h-12"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                          </div>
+                        </div>
                       </div>
 
                       {/* Fare Calculator for One-Way/Round-Trip */}
@@ -596,14 +623,17 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
       <BookingDetailsPopup
         isOpen={showBookingPopup}
-        onClose={() => setShowBookingPopup(false)}
+        onClose={() => {
+          setShowBookingPopup(false)
+          resetForm()
+        }}
         onAddSharedRide={onAddSharedRide}
         bookingData={showBookingPopup ? {
           from: tripType === 'multi-city' ? startingPoint : from,
           to,
           rideType,
           date,
-          time: rideType === "shared" ? selectedTimeSlot : customTime,
+          time: `${pickupTime} ${pickupAmPm}`,
           passengers,
           tripType,
           destinations: tripType === 'multi-city' ? destinations : undefined,

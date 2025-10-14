@@ -76,7 +76,6 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
     fullName: "",
     email: "",
     phone: "",
-    emergencyContact: "",
     specialRequests: "",
     seatCount: 2,
   })
@@ -138,15 +137,6 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
           error = "Phone number must be 8-10 digits"
         } else if (!/^7[0-9]{7}|^9[0-9]{7}|^6[0-9]{7}|^11[0-9]{6}|^[0-9]{9,10}$/.test(trimmedValue)) {
           error = "Please enter a valid Sri Lankan phone number"
-        }
-        break
-      case "emergencyContact":
-        if (trimmedValue) {
-          if (!/^\d{8,10}$/.test(trimmedValue)) {
-            error = "Emergency contact must be 8-10 digits if provided"
-          } else if (!/^7[0-9]{7}|^9[0-9]{7}|^6[0-9]{7}|^11[0-9]{6}|^[0-9]{9,10}$/.test(trimmedValue)) {
-            error = "Please enter a valid Sri Lankan phone number"
-          }
         }
         break
       case "specialRequests":
@@ -240,15 +230,6 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
       errors.push("Please enter a valid Sri Lankan phone number")
     }
 
-    // Emergency Contact validation (optional but if provided must be valid)
-    const emergencyContact = formData.emergencyContact.trim()
-    if (emergencyContact) {
-      if (!/^\d{8,10}$/.test(emergencyContact)) {
-        errors.push("Emergency contact must be 8-10 digits if provided")
-      } else if (!/^7[0-9]{7}|^9[0-9]{7}|^6[0-9]{7}|^11[0-9]{6}|^[0-9]{9,10}$/.test(emergencyContact)) {
-        errors.push("Emergency contact must be a valid Sri Lankan phone number")
-      }
-    }
 
     // Special Requests validation (optional, but reasonable length)
     if (formData.specialRequests.length > 500) {
@@ -290,7 +271,7 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
 
   const handleClosePaymentPopup = () => {
     setShowPaymentPopup(false)
-    onClose() // Close the booking details popup as well to go back to home
+    // Don't close the booking details popup, just go back to it
   }
 
   return (
@@ -368,7 +349,13 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
                     <Clock className="h-3 w-3 text-blue-400" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">{bookingData.time}</p>
+                    <p className="font-semibold text-gray-900">
+                      Pickup Time: {bookingData.time} | Pickup Date: {new Date(bookingData.date).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: '2-digit', 
+                        day: '2-digit' 
+                      })}
+                    </p>
                     <p className="text-gray-600 text-sm">{bookingData.mapDuration || "Estimated duration"}</p>
                   </div>
                 </div>
@@ -477,18 +464,6 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
                   <p className="text-red-600 text-sm mt-1">{fieldErrors.phone}</p>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Emergency Contact Phone</label>
-                <Input
-                  value={formData.emergencyContact}
-                  onChange={(e) => handleInputChange("emergencyContact", e.target.value)}
-                  className={`bg-blue-50 border-0 h-12 ${fieldErrors.emergencyContact ? 'border-red-300' : ''}`}
-                  placeholder="011258945"
-                />
-                {fieldErrors.emergencyContact && (
-                  <p className="text-red-600 text-sm mt-1">{fieldErrors.emergencyContact}</p>
-                )}
-              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -575,6 +550,7 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
       <PaymentDetailsPopup
         isOpen={showPaymentPopup}
         onClose={handleClosePaymentPopup}
+        onBack={handleClosePaymentPopup}
         bookingData={currentBookingData || bookingData}
         personalData={formData}
       />

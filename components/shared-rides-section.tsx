@@ -283,11 +283,92 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
   const [rides, setRides] = useState<Ride[]>([])
 
   useEffect(() => {
-    setRides([...initialRides, ...defaultRides])
+    // Load booked rides from localStorage
+    const loadBookedRides = () => {
+      try {
+        const bookedRides = localStorage.getItem('bookedRides')
+        if (bookedRides) {
+          const parsedBookedRides = JSON.parse(bookedRides).map((ride: any) => ({
+            ...ride,
+            postedDate: new Date(ride.postedDate)
+          }))
+          const allRides = [...parsedBookedRides, ...initialRides, ...defaultRides]
+          // Sort by postedDate (newest first)
+          allRides.sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime())
+          setRides(allRides)
+        } else {
+          const allRides = [...initialRides, ...defaultRides]
+          // Sort by postedDate (newest first)
+          allRides.sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime())
+          setRides(allRides)
+        }
+      } catch (error) {
+        console.error('Error loading booked rides:', error)
+        setRides([...initialRides, ...defaultRides])
+      }
+    }
+
+    loadBookedRides()
+
+    // Listen for new booked rides
+    const handleRideBooked = () => {
+      loadBookedRides()
+    }
+
+    window.addEventListener('rideBooked', handleRideBooked)
+
+    return () => {
+      window.removeEventListener('rideBooked', handleRideBooked)
+    }
   }, [initialRides])
 
-  const oneTimeRides = useMemo(() => rides.filter((ride) => ride.frequency === "one-time"), [rides])
-  const dailyRides = useMemo(() => rides.filter((ride) => ride.frequency === "daily"), [rides])
+  // Filter out expired rides
+  const isRideExpired = (ride: Ride) => {
+    try {
+      // Parse the time string to extract date and time
+      const timeString = ride.time
+      if (!timeString) return false
+      
+      // Split by space to get date, time, and AM/PM
+      const parts = timeString.split(' ')
+      if (parts.length >= 3) {
+        const dateStr = parts[0]
+        const timeStr = parts[1]
+        const ampm = parts[2]
+        
+        // Create a date object from the date string
+        const rideDate = new Date(dateStr)
+        if (isNaN(rideDate.getTime())) return false
+        
+        // Parse time and AM/PM
+        const [timeRange] = timeStr.split('-')
+        const hour = parseInt(timeRange)
+        let adjustedHour = hour
+        
+        if (ampm === 'PM' && hour !== 12) {
+          adjustedHour += 12
+        } else if (ampm === 'AM' && hour === 12) {
+          adjustedHour = 0
+        }
+        
+        // Set the time on the date
+        rideDate.setHours(adjustedHour, 0, 0, 0)
+        
+        // Check if the ride date/time is in the past
+        return rideDate < new Date()
+      }
+      
+      return false
+    } catch (error) {
+      console.error('Error parsing ride time:', error)
+      return false
+    }
+  }
+
+  const oneTimeRides = useMemo(() => 
+    rides.filter((ride) => ride.frequency === "one-time" && !isRideExpired(ride)), [rides])
+  const dailyRides = useMemo(() => 
+    rides.filter((ride) => ride.frequency === "daily" && !isRideExpired(ride)), [rides])
 
   const ridesPerPage = 3
   const oneTimeTotalPages = Math.ceil(oneTimeRides.length / ridesPerPage)
@@ -331,18 +412,73 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
     setSelectedRide(null)
   }
 
+  const handleUpdateSeats = (rideId: number, seatsBooked: number) => {
+    console.log('handleUpdateSeats called - rideId:', rideId, 'seatsBooked:', seatsBooked)
+    console.log('Current rides before update:', rides)
+    setRides(prevRides => {
+      const updatedRides = prevRides.map(ride => 
+        ride.id === rideId 
+          ? { 
+              ...ride, 
+              seats: { 
+                ...ride.seats, 
+                available: Math.max(0, ride.seats.available - seatsBooked) 
+              } 
+            }
+          : ride
+      )
+      console.log('Updated rides after seat update:', updatedRides)
+      return updatedRides
+    })
+  }
+
+  // Helper function to parse ride time and extract date and pickup time
+  const parseRideTime = (timeString: string) => {
+    try {
+      if (!timeString) return { date: 'N/A', pickupTime: 'N/A' }
+      
+      // Split by space to get date, time, and AM/PM
+      const parts = timeString.split(' ')
+      if (parts.length >= 3) {
+        const dateStr = parts[0]
+        const timeStr = parts[1]
+        const ampm = parts[2]
+        
+        // Format the date
+        const date = new Date(dateStr)
+        const formattedDate = date.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: '2-digit', 
+          day: '2-digit' 
+        })
+        
+        // Format the pickup time
+        const formattedPickupTime = `${timeStr} ${ampm}`
+        
+        return { date: formattedDate, pickupTime: formattedPickupTime }
+      }
+      
+      return { date: 'N/A', pickupTime: timeString }
+    } catch (error) {
+      console.error('Error parsing ride time:', error)
+      return { date: 'N/A', pickupTime: timeString }
+    }
+  }
+
   const renderRideCards = (rides: Ride[]) => (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-      {rides.map((ride) => (
+      {rides.map((ride) => {
+        const { date, pickupTime } = parseRideTime(ride.time)
+        return (
         <Card key={ride.id} className="bg-white border-0 shadow-lg rounded-2xl overflow-hidden">
           <CardContent className="p-6">
             <div className="space-y-4">
               <div className="flex justify-center mb-4 space-x-2">
                 <Badge className="bg-blue-100 text-blue-600 hover:bg-blue-100 rounded-full px-3 py-1 text-sm">
-                  {ride.timeAgo}
+                  Date: {date}
                 </Badge>
                 <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100 rounded-full px-3 py-1 text-sm">
-                  {new Date(ride.postedDate).toLocaleDateString()} at {new Date(ride.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  Pickup Time: {pickupTime}
                 </Badge>
               </div>
 
@@ -373,8 +509,8 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
                     <Clock className="h-3 w-3 text-blue-400" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">{ride.time}</p>
-                    <p className="text-gray-500 text-sm">{ride.duration}</p>
+                    <p className="font-semibold text-gray-900">{pickupTime}</p>
+                    <p className="text-gray-500 text-sm">Pickup Time</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -394,7 +530,9 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
 
               <div className="flex items-center justify-between pt-4">
                 <div>
-                  <p className="text-xl font-bold text-gray-900">{ride.price}</p>
+                  <p className="text-xl font-bold text-gray-900">
+                    {ride.price && !ride.price.startsWith('$') ? `$${ride.price}` : ride.price}
+                  </p>
                   <p className="text-gray-500 text-sm">per seat</p>
                 </div>
                 <Button
@@ -407,7 +545,8 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
             </div>
           </CardContent>
         </Card>
-      ))}
+        )
+      })}
     </div>
   )
 
@@ -502,7 +641,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         </div>
       </section>
 
-      <JoinRidePopup isOpen={isPopupOpen} onClose={handleClosePopup} rideData={selectedRide} />
+      <JoinRidePopup isOpen={isPopupOpen} onClose={handleClosePopup} rideData={selectedRide} onUpdateSeats={handleUpdateSeats} />
     </>
   )
 }

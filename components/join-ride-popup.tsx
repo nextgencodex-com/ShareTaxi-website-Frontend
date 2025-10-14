@@ -45,7 +45,6 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
     fullName: "",
     email: "",
     phone: "",
-    emergencyContact: "",
     specialRequests: "",
     seatCount: 1,
   })
@@ -58,7 +57,6 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
         fullName: "",
         email: "",
         phone: "",
-        emergencyContact: "",
         specialRequests: "",
         seatCount: 1,
       })
@@ -80,6 +78,8 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
   }
 
   const handleContinueToPayment = () => {
+    console.log('Continue to payment clicked - formData:', formData)
+    console.log('Continue to payment clicked - rideData:', rideData)
     setShowPaymentPopup(true)
   }
 
@@ -218,15 +218,6 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Emergency Contact Phone</label>
-                <Input
-                  value={formData.emergencyContact}
-                  onChange={(e) => handleInputChange("emergencyContact", e.target.value)}
-                  className="bg-blue-50 border-0 h-12"
-                  placeholder=""
-                />
-              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -305,13 +296,13 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
       <PaymentDetailsPopup
         isOpen={showPaymentPopup}
         onClose={onClose}
+        onBack={handleClosePaymentPopup}
         rideData={rideData}
         selectedSeats={formData.seatCount}
         personalData={{
           fullName: formData.fullName,
           email: formData.email,
           phone: formData.phone,
-          emergencyContact: formData.emergencyContact,
           specialRequests: formData.specialRequests,
           seatCount: formData.seatCount.toString(),
         }}
