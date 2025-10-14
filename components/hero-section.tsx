@@ -27,7 +27,7 @@ export function HeroSection() {
           <div className="space-y-4">
             <Badge className="bg-primary/20 text-primary border-primary/30">{t('badge')}</Badge>
             <h1 className="text-4xl lg:text-7xl font-bold text-balance">
-              <span className="text-2xl lg:text-5xl">{t('title.line1')}</span> <br /><span className="text-primary text-4xl lg:text-7xl">Share Taxi Sri Lanka</span>
+              <span className="text-2xl lg:text-5xl">{t('title.line1')}</span> <br /><span className="text-primary text-5xl lg:text-7xl">Share Taxi Sri Lanka</span>
             </h1>
             <p className="text-lg text-muted-foreground text-pretty">
               {t('description')}

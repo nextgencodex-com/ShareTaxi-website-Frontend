@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -50,6 +50,21 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
     seatCount: 1,
   })
   const [showPaymentPopup, setShowPaymentPopup] = useState(false)
+
+  // Reset form data and payment popup state when popup opens
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({
+        fullName: "",
+        email: "",
+        phone: "",
+        emergencyContact: "",
+        specialRequests: "",
+        seatCount: 1,
+      })
+      setShowPaymentPopup(false)
+    }
+  }, [isOpen])
 
   if (!isOpen || !rideData) return null
 
@@ -154,29 +169,14 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
 
               <hr className="border-gray-200 my-4" />
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-12 w-12">
-                    <AvatarImage src={rideData.driver.image || "/placeholder.svg"} alt={rideData.driver.name} />
-                    <AvatarFallback>
-                      {rideData.driver.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-semibold text-gray-900">{rideData.driver.name}</p>
-                    <p className="text-gray-600">{rideData.vehicle}</p>
-                  </div>
-                </div>
+              <div className="flex items-center justify-end">
                 <div className="text-right">
                   <p className="text-2xl font-bold text-gray-900">
                     {formatPriceUSD(calculateProgressiveSharedTotal(formData.seatCount))}
                   </p>
-                  <p className="text-gray-600">for {formData.seatCount} seat{formData.seatCount > 1 ? 's' : ''}</p>
+                  <p className="text-gray-600">for {formData.seatCount} person{formData.seatCount > 1 ? 's' : ''}</p>
                   <div className="text-xs text-gray-500 mt-1">
-                    Avg: {formatPriceUSD(calculateProgressiveSharedTotal(formData.seatCount) / formData.seatCount)}/seat
+                    Per person: {formatPriceUSD(calculateProgressiveSharedTotal(formData.seatCount) / formData.seatCount)}
                   </div>
                 </div>
               </div>
@@ -304,7 +304,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
       {/* Payment Popup */}
       <PaymentDetailsPopup
         isOpen={showPaymentPopup}
-        onClose={handleClosePaymentPopup}
+        onClose={onClose}
         rideData={rideData}
         selectedSeats={formData.seatCount}
         personalData={{
