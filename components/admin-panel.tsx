@@ -17,16 +17,13 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogClose,
 } from "@/components/ui/dialog";
 import {
   ArrowLeft,
-  X,
   MapPin,
   Users,
   Car,
   DollarSign,
-  TrendingUp,
   Menu,
   Search,
   Eye,
@@ -83,6 +80,7 @@ interface RideData {
   };
   passengers?: string;
   handCarry?: string;
+  luggage?: string;
   price?: string;
   customer?: {
     fullName?: string;
@@ -98,6 +96,7 @@ interface VehicleData {
   name: string;
   price: string;
   passengers: string;
+  luggage?: string;
   handCarry: string;
   image: string;
   features: string[];
@@ -212,38 +211,114 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
   /* ---------- small demo seed (if empty) ---------- */
   useEffect(() => {
-    if (sharedRides.length === 0) {
-      const seed: RideData[] = [
-        {
-          id: Date.now(),
-          bookingId: generateBookingId(),
-          timeAgo: "2 min ago",
-          postedDate: new Date().toISOString(),
-          frequency: "one-time",
-          status: "Pending",
-          driver: { name: "Alice", image: "/professional-driver-headshot.jpg" },
-          vehicle: "Toyota Innova",
-          pickup: { location: "Galle", type: "Pickup" },
-          destination: { location: "Colombo", type: "Destination" },
-          time: "8:00 AM",
-          duration: "2h",
-          seats: { available: 3, total: 6 },
-          passengers: "3",
-          handCarry: "2",
-          price: "25.00",
-          customer: { fullName: "Alice Customer", email: "alice@example.com", phone: "711234567" },
-          type: "shared",
-        },
-      ];
-      persistSharedRides(seed);
-    }
-    if (vehicleCatalog.length === 0) {
-      const seedV: VehicleData[] = [
-        { id: 1, name: "Toyota Innova", price: "50", passengers: "6", handCarry: "4", image: "/images/toyota-innova.jpg", features: ["A/C", "GPS"], gradient: "bg-gradient-to-br from-blue-400 to-blue-600", buttonColor: "bg-blue-600 hover:bg-blue-700" },
-      ];
-      persistVehicleCatalog(seedV);
+    try {
+      // allow explicit demo seeding via localStorage flag 'admin_enable_demo' === '1'
+      const allowDemoSeed = localStorage.getItem('admin_enable_demo') === '1'
+      // if there is no persisted data and demo seeding is allowed, seed defaults
+      if (allowDemoSeed && !localStorage.getItem(localKeys.SHARED_RIDES)) {
+        const seed: RideData[] = [
+          {
+            id: Date.now(),
+            bookingId: generateBookingId(),
+            timeAgo: "2 min ago",
+            postedDate: new Date().toISOString(),
+            frequency: "one-time",
+            status: "Pending",
+            driver: { name: "Alice", image: "/professional-driver-headshot.jpg" },
+            vehicle: "Toyota Innova",
+            pickup: { location: "Galle", type: "Pickup" },
+            destination: { location: "Colombo", type: "Destination" },
+            time: "8:00 AM",
+            duration: "2h",
+            seats: { available: 3, total: 6 },
+            passengers: "3",
+            handCarry: "2",
+            luggage: "0",
+            price: "25.00",
+            customer: { fullName: "Alice Customer", email: "alice@example.com", phone: "711234567" },
+            type: "shared",
+          },
+        ];
+        persistSharedRides(seed);
+      }
+      if (allowDemoSeed && !localStorage.getItem(localKeys.VEHICLE_CATALOG)) {
+        const seedV: VehicleData[] = [
+          { id: 1, name: "Toyota Innova", price: "50", passengers: "6", luggage: "2", handCarry: "4", image: "/images/toyota-innova.jpg", features: ["A/C", "GPS"], gradient: "bg-gradient-to-br from-blue-400 to-blue-600", buttonColor: "bg-blue-600 hover:bg-blue-700" },
+        ];
+        persistVehicleCatalog(seedV);
+      }
+    } catch (e) {
+      console.error("Failed to seed admin demo data:", e);
     }
   }, []); // run once
+
+  // Fetch live shared rides from API and map to RideData; keep local storage as fallback
+  const [sharedLoading, setSharedLoading] = useState<boolean>(false)
+  const [sharedError, setSharedError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    const fetchShared = async () => {
+      setSharedLoading(true)
+      setSharedError(null)
+      try {
+        const res = await fetch("http://localhost:5000/api/shared-rides")
+        if (!res.ok) throw new Error(`API ${res.status}`)
+        const json = await res.json()
+        const apiRides = json?.data?.rides as unknown
+        if (Array.isArray(apiRides) && mounted) {
+          const mapped: RideData[] = apiRides.map((raw) => {
+            const r = raw as Record<string, unknown>
+            const idVal = r.id
+            const id = typeof idVal === 'number' ? idVal : Date.now() + Math.floor(Math.random() * 1000)
+            const bookingId = typeof idVal === 'string' ? idVal : undefined
+            const timeRaw = r.time
+            const timeStr = typeof timeRaw === 'string' || typeof timeRaw === 'number' ? String(timeRaw) : new Date().toISOString()
+            const seatsObj = (r.seats as Record<string, unknown>) || undefined
+            const available = typeof r.availableSeats === 'number' ? r.availableSeats : (seatsObj && typeof seatsObj.available === 'number' ? (seatsObj.available as number) : 0)
+            const total = typeof r.totalSeats === 'number' ? r.totalSeats : (seatsObj && typeof seatsObj.total === 'number' ? (seatsObj.total as number) : 0)
+            const priceVal = typeof r.price === 'number' ? (r.price as number).toFixed(2) : (typeof r.price === 'string' ? r.price : undefined)
+            const driverObj = (r.driver as Record<string, unknown>) || undefined
+            const pickupObj = (r.pickup as Record<string, unknown>) || undefined
+            const destObj = (r.destination as Record<string, unknown>) || undefined
+
+            return {
+              id,
+              bookingId,
+              timeAgo: "just now",
+              postedDate: timeStr,
+              frequency: typeof r.frequency === 'string' ? r.frequency : "one-time",
+              status: typeof r.status === 'string' ? r.status : "Pending",
+              driver: { name: typeof r.driverName === 'string' ? r.driverName : (driverObj && typeof driverObj.name === 'string' ? (driverObj.name as string) : "Unknown"), image: typeof r.driverImage === 'string' ? r.driverImage : (driverObj && typeof driverObj.image === 'string' ? (driverObj.image as string) : "/professional-driver-headshot.jpg") },
+              vehicle: typeof r.vehicle === 'string' ? r.vehicle : "",
+              pickup: { location: typeof r.pickupLocation === 'string' ? r.pickupLocation : (pickupObj && typeof pickupObj.location === 'string' ? (pickupObj.location as string) : ""), type: "Pickup point" },
+              destination: { location: typeof r.destinationLocation === 'string' ? r.destinationLocation : (destObj && typeof destObj.location === 'string' ? (destObj.location as string) : ""), type: "Destination" },
+              time: new Date(timeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              duration: typeof r.duration === 'string' ? r.duration : "",
+              seats: { available, total },
+              passengers: typeof r.passengers === 'string' ? r.passengers : String(total || ""),
+              handCarry: typeof r.handCarry === 'string' ? r.handCarry : "",
+              price: priceVal,
+              customer: { fullName: "N/A", email: "N/A", phone: "N/A" },
+              type: "shared",
+            } as RideData
+          })
+
+          // Persist and replace shared rides
+          persistSharedRides(mapped)
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.warn("Failed to load shared rides from API:", msg)
+        if (mounted) setSharedError(msg)
+      } finally {
+        if (mounted) setSharedLoading(false)
+      }
+    }
+
+    fetchShared()
+    return () => { mounted = false }
+  }, [])
 
   /* ---------- Shared Ride / Vehicle Add handlers (reuse your original logic) ---------- */
   // For brevity we maintain simplified forms internal to this file but reuse validation spirit.
@@ -404,7 +479,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       persistVehicleCatalog(updated);
       onAddVehicle?.(newVehicle);
 
-      setVehicleForm({ name: "", price: "", passengers: "4", handCarry: "2", image: "", imageFile: null, feature1: "", feature2: "", feature3: "" });
+  setVehicleForm({ name: "", price: "", passengers: "4", luggage: "", handCarry: "2", image: "", imageFile: null, feature1: "", feature2: "", feature3: "" });
       setIsVehicleSubmitting(false);
       setActivePage("vehicleBookings");
       setRateStatus("✅ Vehicle added");
@@ -517,8 +592,38 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
   /* ---------- Status update helpers ---------- */
   const updateSharedRideStatus = (id: number, status: string) => {
+    const ride = sharedRides.find((r) => r.id === id)
     const updated = sharedRides.map((ride) => ride.id === id ? { ...ride, status } : ride);
+    // Persist local change optimistically
     persistSharedRides(updated);
+
+    // If the ride maps to a remote API id, attempt to update the remote resource
+    const remoteId = ride?.bookingId
+    if (remoteId) {
+      (async () => {
+        try {
+          const body = {
+            status,
+            // Optionally send some useful fields so API can reconcile state
+            driverName: ride?.driver?.name,
+            vehicle: ride?.vehicle,
+            pickupLocation: ride?.pickup?.location,
+            destinationLocation: ride?.destination?.location,
+          }
+          const res = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(remoteId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          if (!res.ok) {
+            console.warn('Remote update failed', res.status)
+            // Optionally: surface an admin notification. For now, log and continue.
+          }
+        } catch (err) {
+          console.error('Failed to update remote shared ride status:', err)
+        }
+      })()
+    }
   };
 
   const updateVehicleBookingStatus = (id: number, status: string) => {
@@ -557,11 +662,13 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   }> = ({ items, onDelete, onOpen }) => {
     return (
       <Card className="bg-white/80 backdrop-blur-sm border border-white/50 shadow-xl w-full">
-        <CardHeader className="border-b border-slate-200/50">
+          <CardHeader className="border-b border-slate-200/50">
           <CardTitle className="flex items-center justify-between text-lg">
             <span className="flex items-center gap-2">
               <Users className="h-5 w-5 text-blue-600" />
               Shared Rides Requests ({items.length})
+              {sharedLoading && <span className="ml-3 text-xs text-slate-500">Loading…</span>}
+              {sharedError && <span className="ml-3 text-xs text-red-500">API error</span>}
             </span>
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -619,21 +726,23 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                       </div>
                     </td>
                     <td className="py-4 px-6">
-                      <Select
-                        value={it.status || "Pending"}
-                        onValueChange={(value) => updateSharedRideStatus(it.id, value)}
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Pending">Pending</SelectItem>
-                          <SelectItem value="Confirmed">Confirmed</SelectItem>
-                          <SelectItem value="In Progress">In Progress</SelectItem>
-                          <SelectItem value="Completed">Completed</SelectItem>
-                          <SelectItem value="Cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-3">
+                        {getStatusBadge(it.status)}
+                        <Select
+                          value={it.status || "Pending"}
+                          onValueChange={(value) => updateSharedRideStatus(it.id, value)}
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Pending">Pending</SelectItem>
+                            <SelectItem value="Confirmed">Confirmed</SelectItem>
+                            <SelectItem value="Completed">Completed</SelectItem>
+                            <SelectItem value="Cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex gap-2 flex-wrap">
@@ -850,8 +959,28 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
   /* ---------- Action handlers for tables ---------- */
   const handleDeleteShared = (id: number) => {
+    const ride = sharedRides.find((r) => r.id === id)
     const updated = sharedRides.filter((r) => r.id !== id);
+    // Optimistically remove locally
     persistSharedRides(updated);
+
+    // If the ride has a bookingId that likely maps to the API id, attempt remote delete
+    const remoteId = ride?.bookingId
+    if (remoteId) {
+      (async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(remoteId)}`, {
+            method: 'DELETE',
+          })
+          if (!res.ok) {
+            console.warn('Remote delete failed', res.status)
+            // Optionally: re-add locally or show message. For now, notify in console.
+          }
+        } catch (err) {
+          console.error('Failed to delete remote shared ride:', err)
+        }
+      })()
+    }
   };
 
   const updateRideDate = (rideId: number, newDate: string) => {

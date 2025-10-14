@@ -36,245 +36,11 @@ interface Ride {
 
 interface SharedRidesSectionProps {
   initialRides?: Ride[]
+  backendDown?: boolean
 }
 
-export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProps) {
-  const defaultRides = useMemo(() => [
-    {
-      id: 1,
-      timeAgo: "10 min ago",
-      postedDate: new Date(Date.now() - 10 * 60 * 1000),
-      frequency: "one-time",
-      driver: {
-      name: "Alex Chen",
-      image: "/professional-driver-headshot.jpg",
-      },
-      vehicle: "Toyota Alphard",
-      pickup: {
-        location: "Downtown Plaza",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Airport Terminal 1",
-        type: "Destination",
-      },
-      time: "02-04 pm",
-      duration: "45 min",
-      seats: {
-        available: 3,
-        total: 6,
-      },
-      price: "$20.00",
-    },
-    {
-      id: 2,
-      timeAgo: "25 min ago",
-      postedDate: new Date(Date.now() - 25 * 60 * 1000),
-      frequency: "daily",
-      driver: {
-        name: "Sarah Wilson",
-        image: "/female-professional-driver.jpg",
-      },
-      vehicle: "Hyundai Starex",
-      pickup: {
-        location: "Galle Fort",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Colombo City Center",
-        type: "Destination",
-      },
-      time: "06-08 am",
-      duration: "2 hours",
-      seats: {
-        available: 4,
-        total: 8,
-      },
-      price: "$15.00",
-    },
-    {
-      id: 3,
-      timeAgo: "1 hour ago",
-      postedDate: new Date(Date.now() - 60 * 60 * 1000),
-      frequency: "monthly",
-      driver: {
-        name: "Michael Chen",
-        image: "/professional-driver-headshot.jpg",
-      },
-      vehicle: "Toyota Innova",
-      pickup: {
-        location: "Kandy Central",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Nuwara Eliya",
-        type: "Destination",
-      },
-      time: "08-10 am",
-      duration: "3 hours",
-      seats: {
-        available: 2,
-        total: 6,
-      },
-      price: "$25.00",
-    },
-    {
-      id: 4,
-      timeAgo: "2 hours ago",
-      postedDate: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      frequency: "daily",
-      driver: {
-        name: "David Kim",
-      image: "/professional-driver-headshot.jpg",
-      },
-      vehicle: "Toyota Alphard",
-      pickup: {
-        location: "Negombo Beach",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Airport Terminal 2",
-        type: "Destination",
-      },
-      time: "04-06 pm",
-      duration: "30 min",
-      seats: {
-        available: 5,
-        total: 6,
-      },
-      price: "$10.00",
-    },
-    {
-      id: 5,
-      timeAgo: "3 hours ago",
-      postedDate: new Date(Date.now() - 3 * 60 * 60 * 1000),
-      frequency: "yearly",
-      driver: {
-        name: "Emma Johnson",
-      image: "/young-professional-woman.png",
-      },
-      vehicle: "Hyundai Starex",
-      pickup: {
-        location: "Downtown Plaza",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Sigiriya Rock",
-        type: "Destination",
-      },
-      time: "05-07 am",
-      duration: "4 hours",
-      seats: {
-        available: 3,
-        total: 8,
-      },
-      price: "$35.00",
-    },
-    {
-      id: 6,
-      timeAgo: "5 hours ago",
-      postedDate: new Date(Date.now() - 5 * 60 * 60 * 1000),
-      frequency: "one-time",
-      driver: {
-        name: "James Brown",
-        image: "/images/james-brown-driver.jpg",
-      },
-      vehicle: "Toyota Innova",
-      pickup: {
-        location: "Colombo Fort",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Galle Face",
-        type: "Destination",
-      },
-      time: "12-02 pm",
-      duration: "20 min",
-      seats: {
-        available: 4,
-        total: 6,
-      },
-      price: "$2.00",
-    },
-    {
-      id: 7,
-      timeAgo: "6 hours ago",
-      postedDate: new Date(Date.now() - 6 * 60 * 60 * 1000),
-      frequency: "monthly",
-      driver: {
-        name: "Lisa Anderson",
-        image: "/images/lisa-anderson-driver.jpg",
-      },
-      vehicle: "Toyota Alphard",
-      pickup: {
-        location: "Airport Terminal 1",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Bentota Beach",
-        type: "Destination",
-      },
-      time: "10-12 am",
-      duration: "2.5 hours",
-      seats: {
-        available: 2,
-        total: 6,
-      },
-      price: "$22.00",
-    },
-    {
-      id: 8,
-      timeAgo: "8 hours ago",
-      postedDate: new Date(Date.now() - 8 * 60 * 60 * 1000),
-      frequency: "daily",
-      driver: {
-        name: "Robert Taylor",
-        image: "/images/robert-taylor-driver.jpg",
-      },
-      vehicle: "Hyundai Starex",
-      pickup: {
-        location: "Kandy Lake",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Temple of Tooth",
-        type: "Destination",
-      },
-      time: "03-05 pm",
-      duration: "15 min",
-      seats: {
-        available: 6,
-        total: 8,
-      },
-      price: "$5.00",
-    },
-    {
-      id: 9,
-      timeAgo: "10 hours ago",
-      postedDate: new Date(Date.now() - 10 * 60 * 60 * 1000),
-      frequency: "yearly",
-      driver: {
-        name: "Maria Garcia",
-        image: "/images/maria-garcia-driver.jpg",
-      },
-      vehicle: "Toyota Innova",
-      pickup: {
-        location: "Ella Station",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Nine Arch Bridge",
-        type: "Destination",
-      },
-      time: "07-09 am",
-      duration: "1 hour",
-      seats: {
-        available: 3,
-        total: 6,
-      },
-      price: "$18.00",
-    },
-  ], [])
+export function SharedRidesSection({ initialRides = [], backendDown = false }: SharedRidesSectionProps) {
+  // Removed demo/default rides; component will render only rides passed via `initialRides`.
 
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null)
@@ -283,7 +49,8 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
   const [rides, setRides] = useState<Ride[]>([])
 
   useEffect(() => {
-    setRides([...initialRides, ...defaultRides])
+    // Use only provided initialRides; keep predictable behavior for production data.
+    setRides(initialRides)
   }, [initialRides])
 
   const oneTimeRides = useMemo(() => rides.filter((ride) => ride.frequency === "one-time"), [rides])
@@ -455,7 +222,10 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
           <div className="text-center mb-8">
             <h2 className="text-5xl font-bold text-yellow-500 mb-4">Available Shared Rides</h2>
             <p className="text-gray-600 text-lg mb-2">Join other passengers and save money while traveling.</p>
-            <p className="text-gray-600 text-lg mb-8">Real-time updates show live availability</p>
+            <p className="text-gray-600 text-lg mb-2">Real-time updates show live availability</p>
+            {backendDown && (
+              <p className="text-red-600 text-sm mt-2">Backend appears to be offline — live shared rides are unavailable.</p>
+            )}
           </div>
 
           {/* One Time Rides Section */}

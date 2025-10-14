@@ -238,43 +238,58 @@ export function PaymentDetailsPopup({ isOpen, onClose, bookingData, personalData
     const totalSeats = 6 // Standard vehicle capacity
     const availableSeats = Math.max(0, totalSeats - seatCount)
 
-    const newRide = {
-      id: Date.now(),
-      timeAgo: "Just now",
-      postedDate: new Date(),
-      frequency: "one-time",
-      driver: {
-        name: personalData.fullName || "User Driver",
-        image: "/professional-driver-headshot.jpg",
-      },
-      vehicle: "Assigned Vehicle",
-      pickup: {
-        location: bookingData.from || "",
-        type: "Pickup point",
-      },
-      destination: {
-        location: bookingData.to || "",
-        type: "Destination",
-      },
-      time: bookingData.time || "",
-      duration: bookingData.mapDuration || "45 min",
-      seats: {
-        available: availableSeats,
-        total: totalSeats,
-      },
-      price: `$${PER_SEAT_RATE_USD}.00`,
+    // Build a flat payload to match backend expectations (avoid nested objects)
+    const parsedPrice = typeof bookingData?.calculatedFare === 'string' ? (Number(String(bookingData.calculatedFare).replace(/[^0-9\.\-]/g, '')) || PER_SEAT_RATE_USD) : PER_SEAT_RATE_USD
+
+    const payload = {
+      driverName: personalData.fullName || 'User Driver',
+      driverImage: '/professional-driver-headshot.jpg',
+      vehicle: 'Assigned Vehicle',
+      pickupLocation: bookingData.from || '',
+      destinationLocation: bookingData.to || '',
+      time: bookingData.time || '',
+      duration: bookingData.mapDuration || '45 min',
+      availableSeats: availableSeats,
+      totalSeats: totalSeats,
+      passengers: String(availableSeats),
+      luggage: personalData.specialRequests || '',
+      handCarry: '',
+      price: parsedPrice,
+      frequency: 'one-time',
     }
 
-    try {
-      const storedUserRides = localStorage.getItem('userAddedRides')
-      const existingRides = storedUserRides ? JSON.parse(storedUserRides) : []
-      const updatedRides = [...existingRides, newRide]
-      localStorage.setItem('userAddedRides', JSON.stringify(updatedRides))
-      // Dispatch custom event to notify page.tsx of the change
-      window.dispatchEvent(new CustomEvent('userRideAdded'))
-    } catch (error) {
-      console.error('Error adding user shared ride:', error)
-    }
+    const postUrl = 'http://localhost:5000/api/shared-rides'
+
+    // POST the new shared ride to the backend. Do NOT save to localStorage.
+    fetch(postUrl, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          console.error('Failed to POST user shared ride to server. Status:', res.status)
+          alert('Failed to create shared ride on server. Please try again later.')
+          return
+        }
+
+        try {
+          const created = await res.json()
+          // Notify the app that a new ride was created (include server response)
+          window.dispatchEvent(new CustomEvent('userRideAdded', { detail: created }))
+        } catch (err) {
+          console.warn('Shared ride created but response JSON parse failed:', err)
+          // Still notify app, without server detail
+          window.dispatchEvent(new CustomEvent('userRideAdded'))
+        }
+      })
+      .catch((err) => {
+        console.error('Network error when posting user shared ride:', err)
+        alert('Network error while creating shared ride. Please check your connection and try again.')
+      })
   }, [bookingData, personalData])
 
   if (!isOpen || (!bookingData && !personalData && !rideData)) return null

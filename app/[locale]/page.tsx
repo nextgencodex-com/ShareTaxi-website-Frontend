@@ -75,6 +75,62 @@ export default function HomePage() {
     }
   }, [])
 
+  // Try to load live shared rides from backend; if unavailable, we'll fall back to local stored rides
+  const [apiRides, setApiRides] = useState<any[] | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/shared-rides')
+        if (!res.ok) throw new Error(`API ${res.status}`)
+        const json = await res.json()
+        const apiList = (json?.data?.rides as unknown) || []
+        if (!Array.isArray(apiList)) throw new Error('Unexpected API shape')
+
+        const mapped = apiList.map((r: any) => {
+          const idVal = r.id
+          const id = typeof idVal === 'number' ? idVal : Date.now() + Math.floor(Math.random() * 1000)
+          const timeRaw = r.time || r.postedDate || new Date().toISOString()
+          const postedDate = new Date(timeRaw)
+          const seatsObj = r.seats || {}
+          const available = typeof r.availableSeats === 'number' ? r.availableSeats : (typeof seatsObj.available === 'number' ? seatsObj.available : 0)
+          const total = typeof r.totalSeats === 'number' ? r.totalSeats : (typeof seatsObj.total === 'number' ? seatsObj.total : 0)
+          const priceVal = typeof r.price === 'number' ? `$${r.price.toFixed(2)}` : (typeof r.price === 'string' ? r.price : '')
+
+          return {
+            id,
+            timeAgo: 'just now',
+            postedDate,
+            frequency: typeof r.frequency === 'string' ? r.frequency : 'one-time',
+            driver: { name: r.driverName || (r.driver && r.driver.name) || 'Unknown', image: r.driverImage || (r.driver && r.driver.image) || '/professional-driver-headshot.jpg' },
+            vehicle: r.vehicle || '',
+            pickup: { location: r.pickupLocation || (r.pickup && r.pickup.location) || '', type: 'Pickup point' },
+            destination: { location: r.destinationLocation || (r.destination && r.destination.location) || '', type: 'Destination' },
+            time: new Date(postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            duration: r.duration || '',
+            seats: { available, total },
+            price: priceVal,
+          }
+        })
+
+        if (mounted) {
+          setApiRides(mapped)
+          setApiError(null)
+        }
+      } catch (err) {
+        if (!mounted) return
+        const msg = err instanceof Error ? err.message : String(err)
+        console.warn('Failed to fetch shared rides API:', msg)
+        setApiError(msg)
+        setApiRides(null)
+      }
+    })()
+
+    return () => { mounted = false }
+  }, [])
+
   const handleLogin = (userData: NonNullable<typeof user>) => {
     login(userData)
     setIsLoginSignupOpen(false)
@@ -162,7 +218,8 @@ export default function HomePage() {
       <main>
         <HeroSection />
         <BookingSection onAddSharedRide={handleAddCustomerSharedRide} />
-        <SharedRidesSection initialRides={[...customRides, ...addedRides, ...userAddedRides]} />
+  {/* prefer live API rides when available; if backend is down show no rides (avoid showing local/demo data) */}
+  <SharedRidesSection initialRides={apiRides ?? []} />
         <VehicleOptionsSection initialVehicles={addedVehicles} />
         <WhyChooseUsSection />
         <ReviewsSection />
