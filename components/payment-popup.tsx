@@ -666,32 +666,13 @@ Please confirm this booking. Thank you!
               )}
 
               {isJoinRideFlow && (
-                <div className="space-y-2 text-sm mb-4">
-                  <h4 className="font-semibold text-gray-900">Progressive Pricing Breakdown</h4>
-                  {(() => {
-                    const selectedSeatCount = selectedSeats || 1;
-                    let breakdown = [];
-                    for (let i = 1; i <= selectedSeatCount; i++) {
-                      breakdown.push(
-                        <div key={i} className="flex justify-between">
-                          <span>{i === 1 ? '1st' : i === 2 ? '2nd' : i === 3 ? '3rd' : i + 'th'} seat cost:</span>
-                          <span>{formatPriceUSD(calculateProgressiveSeatPrice(i))}</span>
-                        </div>
-                      );
-                    }
-                    return (
-                      <>
-                        {breakdown}
-                        <div className="flex justify-between font-bold text-lg border-t pt-2">
-                          <span>Total:</span>
-                          <span>{formatPriceUSD(calculateProgressiveSharedTotal(selectedSeatCount))}</span>
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          Average: {formatPriceUSD(calculateProgressiveSharedTotal(selectedSeatCount) / selectedSeatCount)} / seat
-                        </div>
-                      </>
-                    );
-                  })()}
+                <div className="flex justify-end mb-4">
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-gray-900">
+                      {formatPriceUSD(calculateProgressiveSharedTotal(selectedSeats || 1))}
+                    </p>
+                    <p className="text-gray-600">for {selectedSeats || 1} seat{(selectedSeats || 1) > 1 ? 's' : ''}</p>
+                  </div>
                 </div>
               )}
 
