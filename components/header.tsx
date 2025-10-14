@@ -23,7 +23,7 @@ export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: 
         <div className="bg-black rounded-full px-4 md:px-8 py-3 md:py-4 max-w-6xl mx-auto relative">
           <div className="flex items-center justify-between">
             {/* Mobile Logo */}
-            <img src="/images/logo.png" alt="Share Taxi Sri Lanka" className="lg:hidden h-6 md:h-8" />
+            <img src="/placeholder-logo.svg" alt="Share Taxi Sri Lanka" className="lg:hidden h-6 md:h-8" />
 
             {/* Mobile Centered Title */}
             <span className="lg:hidden absolute inset-0 flex items-center justify-center text-white font-medium text-base md:text-lg whitespace-nowrap pointer-events-none">
@@ -32,7 +32,7 @@ export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: 
 
             {/* Desktop Logo and Brand Name */}
             <div className="hidden lg:flex items-center gap-2 md:gap-3">
-              <img src="/images/logo.png" alt="Share Taxi Sri Lanka" className="h-8 md:h-10" />
+              <img src="/placeholder-logo.svg" alt="Share Taxi Sri Lanka" className="h-8 md:h-10" />
               <span className="text-white font-semibold text-base md:text-lg whitespace-nowrap">
                 Share Taxi Sri Lanka
               </span>

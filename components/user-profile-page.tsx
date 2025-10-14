@@ -61,8 +61,7 @@ export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600">Toyota Alphard • Driver: Michael Chen</div>
+              <div className="flex items-center justify-end">
                 <div className="flex gap-2">
                   <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white">
                     10 min
@@ -103,8 +102,7 @@ export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600">Hyundai Starex • Driver: Sarah Wilson</div>
+              <div className="flex items-center justify-end">
                 <div className="flex gap-2">
                   <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white">
                     Yesterday
@@ -152,8 +150,7 @@ export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600">Toyota Alphard • Driver: Michael Chen</div>
+              <div className="flex items-center justify-end">
                 <Button size="sm" className="bg-yellow-400 hover:bg-yellow-500 text-black">
                   Write Reviews
                 </Button>
@@ -185,8 +182,7 @@ export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600">Hyundai Starex • Driver: Sarah Wilson</div>
+              <div className="flex items-center justify-end">
                 <div className="flex items-center gap-2">
                   <div className="flex">
                     {[1, 2, 3, 4].map((star) => (
@@ -224,8 +220,7 @@ export function UserProfilePage({ onBackToHome }: UserProfilePageProps) {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600">Toyota Innova • Driver: David Kim</div>
+              <div className="flex items-center justify-end">
                 <div className="flex items-center gap-2">
                   <div className="flex">
                     {[1, 2, 3, 4, 5].map((star) => (

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Users, Briefcase, ShoppingBag, Filter, ChevronLeft, ChevronRight } from "lucide-react"
 import { BookRidePopup } from "./book-ride-popup"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useIsMobile } from "@/components/ui/use-mobile"
 
 interface VehicleOptionsSectionProps {
   initialVehicles?: any[]
@@ -56,6 +57,9 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
   const [currentPage, setCurrentPage] = useState(0)
   const [passengerFilter, setPassengerFilter] = useState("all")
   const [shuffledGradients, setShuffledGradients] = useState<string[]>([])
+  const [showMore, setShowMore] = useState(false)
+
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     setAllVehicles([...initialVehicles.map(vehicle => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...defaultVehicles])
@@ -88,9 +92,14 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
   const startIndex = currentPage * vehiclesPerPage
   const displayedVehicles = filteredVehicles.slice(startIndex, startIndex + vehiclesPerPage)
 
+  // For mobile: show first 2 initially, then all after showMore
+  const mobileVehicles = showMore ? displayedVehicles : displayedVehicles.slice(0, 2)
+  const shouldShowMoreButton = isMobile && filteredVehicles.length > 2
+
   const handleFilterChange = (value: string) => {
     setPassengerFilter(value)
     setCurrentPage(0)
+    setShowMore(false) // Reset showMore when filter changes
   }
 
   const handlePrevPage = () => {
@@ -140,7 +149,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
           {displayedVehicles.length > 0 ? (
             <>
               <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                {displayedVehicles.map((vehicle: any, index: number) => (
+                {(isMobile ? mobileVehicles : displayedVehicles).map((vehicle: any, index: number) => (
                   <div key={vehicle.id} className={`${shuffledGradients[index]} rounded-3xl p-6 text-white shadow-xl`}>
                     <div className="text-center mb-6">
                       <h3 className="text-2xl font-bold mb-2">{vehicle.name}</h3>
@@ -195,40 +204,54 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
                 ))}
               </div>
 
-              <div className="flex items-center justify-center gap-4 mt-8">
-                <Button
-                  onClick={handlePrevPage}
-                  disabled={currentPage === 0}
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full disabled:opacity-30"
-                >
-                  <ChevronLeft className="h-6 w-6" />
-                </Button>
-
-                <div className="flex justify-center gap-2">
-                  {Array.from({ length: totalPages }).map((_, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setCurrentPage(index)}
-                      className={`w-3 h-3 rounded-full transition-colors ${
-                        index === currentPage ? "bg-yellow-500" : "bg-gray-300"
-                      }`}
-                      aria-label={`Go to page ${index + 1}`}
-                    />
-                  ))}
+              {shouldShowMoreButton ? (
+                <div className="flex items-center justify-center mt-8">
+                  <Button
+                    onClick={() => setShowMore(true)}
+                    variant="outline"
+                    className="px-6 py-2 rounded-full border-2 border-gray-300 bg-white hover:bg-gray-50"
+                  >
+                    Show More
+                  </Button>
                 </div>
+              ) : (
+                !isMobile && (
+                  <div className="flex items-center justify-center gap-4 mt-8">
+                    <Button
+                      onClick={handlePrevPage}
+                      disabled={currentPage === 0}
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full disabled:opacity-30"
+                    >
+                      <ChevronLeft className="h-6 w-6" />
+                    </Button>
 
-                <Button
-                  onClick={handleNextPage}
-                  disabled={currentPage === totalPages - 1}
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full disabled:opacity-30"
-                >
-                  <ChevronRight className="h-6 w-6" />
-                </Button>
-              </div>
+                    <div className="flex justify-center gap-2">
+                      {Array.from({ length: totalPages }).map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setCurrentPage(index)}
+                          className={`w-3 h-3 rounded-full transition-colors ${
+                            index === currentPage ? "bg-yellow-500" : "bg-gray-300"
+                          }`}
+                          aria-label={`Go to page ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+
+                    <Button
+                      onClick={handleNextPage}
+                      disabled={currentPage === totalPages - 1}
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full disabled:opacity-30"
+                    >
+                      <ChevronRight className="h-6 w-6" />
+                    </Button>
+                  </div>
+                )
+              )}
             </>
           ) : (
             <div className="text-center py-12">
