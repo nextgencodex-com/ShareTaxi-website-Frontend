@@ -31,6 +31,7 @@ interface ReviewFormDialogProps {
 
 export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogProps) {
   const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
   const { isLoggedIn, user } = useAuth()
 
   const form = useForm<ReviewFormData>({
@@ -52,31 +53,63 @@ export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogPr
     }
   }, [user, form])
 
-  const onSubmit = (data: ReviewFormData) => {
-    const newReview = {
-      id: Date.now(), // Simple ID generation
-      name: data.name,
-      avatar: user?.phone ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.phone}` : "/placeholder.svg",
-      vehicle: data.vehicle,
-      driver: data.driver,
-      date: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
-      rating: data.rating,
-      review: data.review,
-      helpful: 0,
-      tag: data.tag,
-      tagColor: data.tag === "Individual" ? "bg-purple-100 text-purple-600" : "bg-blue-100 text-blue-600"
-    }
+  const onSubmit = async (data: ReviewFormData) => {
+    setLoading(true)
+    try {
+      // Build payload — include form fields and user info where available
+      const payload = {
+        name: data.name,
+        rating: data.rating,
+        review: data.review,
+        vehicle: data.vehicle,
+        driver: data.driver,
+        tag: data.tag,
+        user: user ? { id: user.id || user.uid, phone: user.phone, email: user.email } : undefined,
+      }
 
-    onSubmitReview(newReview)
-    form.reset()
-    setOpen(false)
+      const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '')
+      const apiUrl = base.endsWith('/api') ? `${base}/reviews` : `${base}/api/reviews`
+
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        console.error('Failed to submit review', res.status, body)
+        throw new Error(body.message || 'Failed to submit review')
+      }
+
+      const json = await res.json().catch(() => null)
+      const saved = json && json.data ? json.data : {
+        id: Date.now(),
+        ...payload,
+        createdAt: new Date()
+      }
+
+      // Normalize for UI: build avatar, tagColor, date, helpful count
+      const newReview = {
+        ...saved,
+        avatar: user?.phone ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.phone}` : "/placeholder.svg",
+        date: new Date(saved.createdAt || Date.now()).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
+        helpful: saved.helpful || 0,
+        tagColor: saved.tag === "Individual" ? "bg-purple-100 text-purple-600" : "bg-blue-100 text-blue-600"
+      }
+
+      onSubmitReview(newReview)
+      form.reset()
+      setOpen(false)
+    } catch (err) {
+      console.error('Submit review error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleTriggerClick = () => {
-    if (!isLoggedIn) {
-      alert("Please log in to write a review")
-      return
-    }
+  
     setOpen(true)
   }
 
@@ -230,8 +263,8 @@ export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogPr
               <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">
                 Cancel
               </Button>
-              <Button type="submit" className="flex-1">
-                Submit Review
+              <Button type="submit" className="flex-1" disabled={loading}>
+                {loading ? 'Submitting...' : 'Submit Review'}
               </Button>
             </div>
           </form>

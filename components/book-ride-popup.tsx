@@ -26,7 +26,8 @@ interface BookRidePopupProps {
 }
 
 export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) {
-  const { bookRide, loading, getCurrentLocation } = useRideBooking();
+  const { getCurrentLocation } = useRideBooking();
+  const [loadingLocal, setLoadingLocal] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -40,29 +41,43 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
+    setLoadingLocal(true)
     try {
       // Get current location for pickup
       const currentLocation = await getCurrentLocation();
-      
-      // Create ride data
-      const rideData = {
+
+      const payload = {
         passengerName: formData.name,
         passengerPhone: formData.phone,
         pickupLocation: currentLocation,
-        dropoffLocation: {
-          latitude: 0, // This would be geocoded from address
-          longitude: 0
-        },
-        passengerCount: 1,
-        specialRequests: `Vehicle type: ${vehicle.name}`
-      };
-      
-      // Book the ride
-      await bookRide(rideData);
-      onClose();
+        pickupAddress: formData.pickupAddress,
+        destination: { address: formData.dropoffAddress },
+        passengers: 1,
+        notes: `Vehicle: ${vehicle.name}`,
+      }
+
+  const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '')
+  const apiUrl = base.endsWith('/api') ? `${base}/private-rides` : `${base}/api/private-rides`
+
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        console.error('Private ride POST failed', res.status, body)
+        throw new Error(body.message || 'Failed to create private ride')
+      }
+
+      // Success — close popup
+      onClose()
     } catch (error) {
-      console.error('Booking failed:', error);
+      console.error('Booking failed:', error)
+    } finally {
+      setLoadingLocal(false)
     }
   }
 
@@ -223,10 +238,10 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
             {/* Submit Button */}
             <Button
               type="submit"
-              disabled={loading}
+              disabled={loadingLocal}
               className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-4 rounded-xl text-lg disabled:opacity-50"
             >
-              {loading ? "Booking..." : "Submit Details and We reach out you"}
+              {loadingLocal ? "Booking..." : "Submit Details and We reach out you"}
             </Button>
           </form>
         </div>

@@ -231,8 +231,8 @@ export function PaymentDetailsPopup({ isOpen, onClose, bookingData, personalData
     vehicle: "Assigned Vehicle",
   }
 
-  const addUserSharedRide = useCallback(() => {
-    if (!bookingData || !personalData || bookingData.rideType !== 'shared') return
+  const addUserSharedRide = useCallback(async () => {
+    if (!bookingData || !personalData || bookingData.rideType !== 'shared') return null
 
     const seatCount = parseInt(String(personalData.seatCount || "1"), 10)
     const totalSeats = 6 // Standard vehicle capacity
@@ -260,36 +260,37 @@ export function PaymentDetailsPopup({ isOpen, onClose, bookingData, personalData
 
     const postUrl = 'http://localhost:5000/api/shared-rides'
 
-    // POST the new shared ride to the backend. Do NOT save to localStorage.
-    fetch(postUrl, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          console.error('Failed to POST user shared ride to server. Status:', res.status)
-          alert('Failed to create shared ride on server. Please try again later.')
-          return
-        }
+    try {
+      const res = await fetch(postUrl, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      })
 
-        try {
-          const created = await res.json()
-          // Notify the app that a new ride was created (include server response)
-          window.dispatchEvent(new CustomEvent('userRideAdded', { detail: created }))
-        } catch (err) {
-          console.warn('Shared ride created but response JSON parse failed:', err)
-          // Still notify app, without server detail
-          window.dispatchEvent(new CustomEvent('userRideAdded'))
-        }
-      })
-      .catch((err) => {
-        console.error('Network error when posting user shared ride:', err)
-        alert('Network error while creating shared ride. Please check your connection and try again.')
-      })
+      if (!res.ok) {
+        console.error('Failed to POST user shared ride to server. Status:', res.status)
+        alert('Failed to create shared ride on server. Please try again later.')
+        return null
+      }
+
+      try {
+        const created = await res.json()
+        // Notify the app that a new ride was created (include server response)
+        window.dispatchEvent(new CustomEvent('userRideAdded', { detail: created }))
+        return created
+      } catch (err) {
+        console.warn('Shared ride created but response JSON parse failed:', err)
+        window.dispatchEvent(new CustomEvent('userRideAdded'))
+        return null
+      }
+    } catch (err) {
+      console.error('Network error when posting user shared ride:', err)
+      alert('Network error while creating shared ride. Please check your connection and try again.')
+      return null
+    }
   }, [bookingData, personalData])
 
   if (!isOpen || (!bookingData && !personalData && !rideData)) return null
@@ -314,11 +315,12 @@ export function PaymentDetailsPopup({ isOpen, onClose, bookingData, personalData
 
     // Always call addUserSharedRide if this is a shared ride booking, regardless of join flow
     if (bookingData?.rideType === 'shared' && !isJoinRideFlow) {
-      addUserSharedRide()
+      const created = await addUserSharedRide()
+      // If creation failed, stop the flow so user can retry
+      if (created === null) return
     }
 
-    let bookingDetails = ""
-    let subject = ""
+  let bookingDetails = ""
 
     if (isJoinRideFlow) {
       // For shared rides, simulate booking success, update seats, show confirmation
@@ -328,9 +330,9 @@ export function PaymentDetailsPopup({ isOpen, onClose, bookingData, personalData
         setShowConfirmation(true)
 
         // Send confirmation email after booking confirmation
-        let extractedSeats = selectedSeats || 1;
-        let extractedTotal = "N/A";
-        let extractedPerPersonFare = "N/A";
+  const extractedSeats = selectedSeats || 1;
+  let extractedTotal = "N/A";
+  let extractedPerPersonFare = "N/A";
 
         // Extract pricing for shared rides
         if (bookingData?.calculatedFare) {
@@ -341,14 +343,13 @@ export function PaymentDetailsPopup({ isOpen, onClose, bookingData, personalData
           if (perPersonElement) extractedPerPersonFare = perPersonElement.textContent || "N/A";
           if (totalElement) extractedTotal = totalElement.textContent || "N/A";
         }
-
         await sendConfirmationEmail(bookingData, personalData, rideData, true, selectedSeats, extractedSeats, extractedTotal, extractedPerPersonFare)
       }
     } else {
       const rideTypeFormatted = bookingData?.rideType ? bookingData.rideType.charAt(0).toUpperCase() + bookingData.rideType.slice(1) : "N/A"
       const tripTypeFormatted = bookingData?.tripType ? bookingData.tripType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : "N/A"
 
-      const subject = `Taxi Booking Request - ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}`
+  const subject = `Taxi Booking Request - ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}`
 
       // Extract price from calculated fare HTML - prioritize total price (blue) over per-person (green)
       let priceText = "Price not calculated"
@@ -396,9 +397,9 @@ Please confirm this booking. Thank you!
       window.open(mailtoLink, "_blank")
 
       // Send confirmation email to customer immediately
-      let regularSeats = parseInt(String(personalData?.seatCount || "1"), 10);
-      let regularTotal = priceText;
-      let regularPerPersonFare = "N/A";
+  const regularSeats = parseInt(String(personalData?.seatCount || "1"), 10);
+  const regularTotal = priceText;
+  let regularPerPersonFare = "N/A";
 
       // For shared rides, extract per person fare
       if (bookingData?.rideType === "shared" && bookingData?.calculatedFare) {
@@ -432,11 +433,11 @@ Please confirm this booking. Thank you!
 
     // Always call addUserSharedRide if this is a shared ride booking, regardless of join flow
     if (bookingData?.rideType === 'shared' && !isJoinRideFlow) {
-      addUserSharedRide()
+      const created = await addUserSharedRide()
+      if (created === null) return
     }
 
-    let bookingDetails = ""
-    const calc = getCalculatedPrice()
+  let bookingDetails = ""
 
     if (isJoinRideFlow) {
       // For shared rides, simulate booking success, update seats, show confirmation
@@ -446,9 +447,9 @@ Please confirm this booking. Thank you!
         setShowConfirmation(true)
 
         // Send confirmation email after booking confirmation
-        let whatsappSeats = selectedSeats || 1;
-        let whatsappTotal = "N/A";
-        let whatsappPerPersonFare = "N/A";
+  const whatsappSeats = selectedSeats || 1;
+  let whatsappTotal = "N/A";
+  let whatsappPerPersonFare = "N/A";
 
         // Extract pricing for shared rides
         if (bookingData?.calculatedFare) {

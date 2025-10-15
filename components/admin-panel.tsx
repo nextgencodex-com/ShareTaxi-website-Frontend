@@ -82,6 +82,7 @@ interface RideData {
   handCarry?: string;
   luggage?: string;
   price?: string;
+  notes?: string;
   customer?: {
     fullName?: string;
     email?: string;
@@ -150,6 +151,34 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const [personalRides, setPersonalRides] = useState<RideData[]>([]);
   const [vehicleCatalog, setVehicleCatalog] = useState<VehicleData[]>([]);
 
+  // vehicle bookings API state
+  const [vehicleBookingsLoading, setVehicleBookingsLoading] = useState<boolean>(false);
+  const [vehicleBookingsError, setVehicleBookingsError] = useState<string | null>(null);
+
+  // helper: convert possible Firestore Timestamp / string / Date-like value to ISO string
+  const toISOStringSafe = (v: unknown) => {
+    if (typeof v === 'string') return v;
+    if (v instanceof Date) return v.toISOString();
+    if (v && typeof (v as Record<string, unknown>).toDate === 'function') {
+      try {
+        return (v as { toDate: () => Date }).toDate().toISOString();
+      } catch {
+        return new Date().toISOString();
+      }
+    }
+    return new Date().toISOString();
+  };
+
+  // format phone (basic): accepts strings like '2222222222' and returns '222 222 2222' or with +94 if needed
+  const formatPhone = (phone?: string | null) => {
+    if (!phone) return null;
+    const digits = phone.replace(/[^0-9]/g, '');
+    // if length looks like local (9-10) assume local and format groups
+    if (digits.length === 10) return `${digits.slice(0,3)} ${digits.slice(3,6)} ${digits.slice(6)}`;
+    if (digits.length === 9) return `${digits.slice(0,2)} ${digits.slice(2,5)} ${digits.slice(5)}`;
+    return digits;
+  };
+
   // ---- Rate state (reused from your original) ----
   const [ratePerKm, setRatePerKm] = useState("");
   const [rateLKRPerKm, setRateLKRPerKm] = useState("");
@@ -186,8 +215,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM`);
         }
       }
-    } catch (e) {
-      console.error("Failed to load admin data:", e);
+    } catch (_e) {
+      const err = _e as Error | string | null;
+      console.error("Failed to load admin data:", err);
     }
   }, []);
 
@@ -247,8 +277,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         ];
         persistVehicleCatalog(seedV);
       }
-    } catch (e) {
-      console.error("Failed to seed admin demo data:", e);
+    } catch (_e) {
+      const err = _e as Error | string | null;
+      console.error("Failed to seed admin demo data:", err);
     }
   }, []); // run once
 
@@ -307,10 +338,11 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           // Persist and replace shared rides
           persistSharedRides(mapped)
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        console.warn("Failed to load shared rides from API:", msg)
-        if (mounted) setSharedError(msg)
+      } catch (_e) {
+        const err = _e as Error | string | null;
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('Failed to load vehicle bookings from API:', msg);
+        if (mounted) setVehicleBookingsError(msg);
       } finally {
         if (mounted) setSharedLoading(false)
       }
@@ -319,6 +351,70 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     fetchShared()
     return () => { mounted = false }
   }, [])
+
+  // Fetch live private (vehicle) bookings from API and map to RideData; keep local storage as fallback
+  useEffect(() => {
+    let mounted = true;
+    const fetchBookings = async () => {
+      setVehicleBookingsLoading(true);
+      setVehicleBookingsError(null);
+      try {
+        const res = await fetch('http://localhost:5000/api/private-rides');
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const json = await res.json();
+        const apiRides = json?.data?.rides as unknown;
+        if (Array.isArray(apiRides) && mounted) {
+          const mapped: RideData[] = apiRides.map((raw) => {
+            const r = raw as Record<string, unknown>;
+            const idVal = r.id ?? r._id ?? r.bookingId ?? Date.now() + Math.floor(Math.random() * 1000);
+            const id = typeof idVal === 'number' ? idVal : Date.now() + Math.floor(Math.random() * 1000);
+            const bookingId = typeof r.bookingId === 'string' ? r.bookingId : (typeof r.id === 'string' ? r.id : undefined);
+            const posted = r.postedDate ?? r.createdAt ?? r.time ?? new Date().toISOString();
+            const postedDate = toISOStringSafe(posted);
+            const priceVal = typeof r.price === 'number' ? (r.price as number).toFixed(2) : (typeof r.price === 'string' ? r.price : undefined);
+            const customerObj = (r.customer as Record<string, unknown>) || undefined;
+            const pickupObj = (r.pickup as Record<string, unknown>) || undefined;
+            const destObj = (r.destination as Record<string, unknown>) || undefined;
+            const driverObj = (r.driver as Record<string, unknown>) || undefined;
+            const seatsObj = (r.seats as Record<string, unknown>) || undefined;
+
+            return {
+              id,
+              bookingId,
+              timeAgo: 'just now',
+              postedDate,
+              frequency: typeof r.frequency === 'string' ? r.frequency : 'one-time',
+              status: typeof r.status === 'string' ? r.status : 'Pending',
+              driver: { name: typeof r.driverName === 'string' ? r.driverName : (driverObj && typeof driverObj.name === 'string' ? (driverObj.name as string) : 'Company Driver'), image: driverObj && typeof driverObj.image === 'string' ? (driverObj.image as string) : '/professional-driver-headshot.jpg' },
+              vehicle: typeof r.vehicle === 'string' ? r.vehicle : (typeof r.vehicleName === 'string' ? r.vehicleName : ''),
+              notes: typeof r.notes === 'string' ? r.notes : (typeof r.notes === 'string' ? r.notes : undefined),
+              pickup: { location: typeof r.pickupLocation === 'string' ? r.pickupLocation : (pickupObj && typeof pickupObj.location === 'string' ? (pickupObj.location as string) : ''), type: 'Pickup point' },
+              destination: { location: typeof r.destinationLocation === 'string' ? r.destinationLocation : (destObj && typeof destObj.location === 'string' ? (destObj.location as string) : ''), type: 'Destination' },
+              time: typeof r.time === 'string' ? r.time : new Date(postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              duration: typeof r.duration === 'string' ? r.duration : '',
+              seats: { available: typeof r.availableSeats === 'number' ? (r.availableSeats as number) : (seatsObj && typeof seatsObj.available === 'number' ? (seatsObj.available as number) : 0), total: typeof r.totalSeats === 'number' ? (r.totalSeats as number) : (seatsObj && typeof seatsObj.total === 'number' ? (seatsObj.total as number) : 0) },
+              passengers: typeof r.passengers === 'string' ? r.passengers : String((seatsObj && seatsObj.total) || ''),
+              handCarry: typeof r.handCarry === 'string' ? r.handCarry : '',
+              price: priceVal,
+              customer: { fullName: typeof customerObj?.fullName === 'string' ? (customerObj.fullName as string) : (typeof r.customerName === 'string' ? r.customerName : 'Private Customer'), email: typeof customerObj?.email === 'string' ? (customerObj.email as string) : (typeof r.customerEmail === 'string' ? r.customerEmail : 'N/A'), phone: typeof customerObj?.phone === 'string' ? (customerObj.phone as string) : (typeof r.customerPhone === 'string' ? r.customerPhone : 'N/A') },
+              type: 'private',
+            } as RideData;
+          });
+
+          persistVehicleBookings(mapped);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('Failed to load vehicle bookings from API:', msg);
+        if (mounted) setVehicleBookingsError(msg);
+      } finally {
+        if (mounted) setVehicleBookingsLoading(false);
+      }
+    };
+
+    fetchBookings();
+    return () => { mounted = false };
+  }, []);
 
   /* ---------- Shared Ride / Vehicle Add handlers (reuse your original logic) ---------- */
   // For brevity we maintain simplified forms internal to this file but reuse validation spirit.
@@ -395,58 +491,100 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (Object.keys(errors).length > 0) return;
     setIsRideSubmitting(true);
 
-    setTimeout(() => {
-      const newRide: RideData = {
-        id: Date.now(),
-        bookingId: generateBookingId(),
-        timeAgo: "Just now",
-        postedDate: new Date(rideForm.postedDate).toISOString(),
-        frequency: rideForm.frequency,
-        driver: { name: rideForm.driverName.trim(), image: rideForm.driverImage || "/professional-driver-headshot.jpg" },
-        vehicle: rideForm.vehicle.trim(),
-        pickup: { location: rideForm.pickupLocation.trim(), type: "Pickup point" },
-        destination: { location: rideForm.destinationLocation.trim(), type: "Destination" },
-        time: rideForm.time,
-        duration: rideForm.duration.trim(),
-        seats: { available: Number.parseInt(rideForm.availableSeats || "0"), total: Number.parseInt(rideForm.totalSeats || "0") },
-        passengers: rideForm.passengers,
-        luggage: rideForm.luggage,
-        handCarry: rideForm.handCarry,
-        price: rideForm.price,
-        customer: { fullName: "N/A", email: `user${Date.now()}@example.com`, phone: "N/A" },
-        type: "shared",
-      };
+    // Build payload to send to server
+    const payload = {
+      driverName: rideForm.driverName.trim(),
+      driverImage: rideForm.driverImage || undefined,
+      vehicle: rideForm.vehicle.trim(),
+      pickupLocation: rideForm.pickupLocation.trim(),
+      destinationLocation: rideForm.destinationLocation.trim(),
+      time: rideForm.time,
+      duration: rideForm.duration.trim(),
+      availableSeats: rideForm.availableSeats ? Number(rideForm.availableSeats) : undefined,
+      totalSeats: rideForm.totalSeats ? Number(rideForm.totalSeats) : undefined,
+      passengers: rideForm.passengers,
+      luggage: rideForm.luggage,
+      handCarry: rideForm.handCarry,
+      price: rideForm.price,
+      frequency: rideForm.frequency,
+      postedDate: new Date(rideForm.postedDate).toISOString(),
+    } as Record<string, unknown>;
 
-      // Persist locally
-      const updated = [newRide, ...sharedRides];
-      persistSharedRides(updated);
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/shared-rides', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload),
+        });
 
-      // call prop if given
-      onAddRide?.(newRide);
+        if (!res.ok) {
+          const text = await res.text();
+          console.error('Failed to create shared ride:', res.status, text);
+          setRateStatus('❌ Failed to add shared ride');
+          setTimeout(() => setRateStatus(''), 3000);
+          return;
+        }
 
-      // reset
-      setRideForm({
-        driverName: "",
-        driverImage: "",
-        vehicle: "",
-        pickupLocation: "",
-        destinationLocation: "",
-        time: "",
-        duration: "",
-        passengers: "1",
-        luggage: "0",
-        handCarry: "0",
-        availableSeats: "",
-        totalSeats: "",
-        price: "",
-        frequency: "one-time",
-        postedDate: new Date().toISOString().slice(0, 16),
-      });
-      setIsRideSubmitting(false);
-      setActivePage("sharedRequests");
-      setRateStatus("✅ Shared ride added");
-      setTimeout(() => setRateStatus(""), 2500);
-    }, 600);
+        const json = await res.json();
+        const created = json?.data?.ride;
+
+        // Map server response to RideData and persist locally
+        const newRide: RideData = {
+          id: Date.now(),
+          bookingId: created?.id || created?.bookingId || generateBookingId(),
+          timeAgo: 'Just now',
+          postedDate: created?.postedDate || new Date().toISOString(),
+          frequency: created?.frequency || rideForm.frequency,
+          driver: { name: created?.driverName || rideForm.driverName.trim(), image: created?.driverImage || rideForm.driverImage || '/professional-driver-headshot.jpg' },
+          vehicle: created?.vehicle || rideForm.vehicle.trim(),
+          pickup: { location: created?.pickupLocation || rideForm.pickupLocation.trim(), type: 'Pickup point' },
+          destination: { location: created?.destinationLocation || rideForm.destinationLocation.trim(), type: 'Destination' },
+          time: created?.time || rideForm.time,
+          duration: created?.duration || rideForm.duration.trim(),
+          seats: { available: created?.availableSeats ?? (rideForm.availableSeats ? Number(rideForm.availableSeats) : 0), total: created?.totalSeats ?? (rideForm.totalSeats ? Number(rideForm.totalSeats) : 0) },
+          passengers: created?.passengers || rideForm.passengers,
+          luggage: created?.luggage || rideForm.luggage,
+          handCarry: created?.handCarry || rideForm.handCarry,
+          price: created?.price || rideForm.price,
+          customer: { fullName: created?.customer?.fullName || 'N/A', email: created?.customer?.email || `user${Date.now()}@example.com`, phone: created?.customer?.phone || 'N/A' },
+          type: 'shared',
+        } as RideData;
+
+        const updated = [newRide, ...sharedRides];
+        persistSharedRides(updated);
+        onAddRide?.(newRide);
+
+        // reset
+        setRideForm({
+          driverName: '',
+          driverImage: '',
+          vehicle: '',
+          pickupLocation: '',
+          destinationLocation: '',
+          time: '',
+          duration: '',
+          passengers: '1',
+          luggage: '0',
+          handCarry: '0',
+          availableSeats: '',
+          totalSeats: '',
+          price: '',
+          frequency: 'one-time',
+          postedDate: new Date().toISOString().slice(0, 16),
+        });
+
+        setActivePage('sharedRequests');
+        setRateStatus('✅ Shared ride added');
+        setTimeout(() => setRateStatus(''), 2500);
+      } catch (err) {
+        console.error('Error creating shared ride (network):', err);
+        setRateStatus('❌ Failed to add shared ride');
+        setTimeout(() => setRateStatus(''), 3000);
+      } finally {
+        setIsRideSubmitting(false);
+      }
+    })();
   };
 
   /* ---------- Add Vehicle ---------- */
@@ -627,8 +765,35 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   };
 
   const updateVehicleBookingStatus = (id: number, status: string) => {
+    // Optimistically update local state
+    const previous = vehicleBookings;
     const updated = vehicleBookings.map((booking) => booking.id === id ? { ...booking, status } : booking);
     persistVehicleBookings(updated);
+
+    // If this booking maps to a remote private-ride id, attempt remote update
+    const bookingItem = vehicleBookings.find((b) => b.id === id);
+    const remoteId = bookingItem?.bookingId;
+    if (remoteId) {
+      (async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/api/private-rides/${encodeURIComponent(remoteId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ status }),
+          });
+
+          if (!res.ok) {
+            console.warn('Remote status update failed', res.status);
+            // revert optimistic change
+            persistVehicleBookings(previous);
+          }
+        } catch (err) {
+          console.error('Failed to update remote private ride status:', err);
+          // revert optimistic change
+          persistVehicleBookings(previous);
+        }
+      })();
+    }
   };
 
   const updatePersonalRideStatus = (id: number, status: string) => {
@@ -783,6 +948,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           <span className="flex items-center gap-2">
             <Car className="h-5 w-5 text-blue-600" />
             Vehicle Bookings ({items.length})
+            {vehicleBookingsLoading && <span className="ml-3 text-xs text-slate-500">Loading…</span>}
+            {vehicleBookingsError && <span className="ml-3 text-xs text-red-500">API error</span>}
           </span>
         </CardTitle>
       </CardHeader>
@@ -810,11 +977,11 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         <span className="text-xs text-slate-500">{it.postedDate ? new Date(it.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
                       </div>
                     </td>
-                    <td className="py-4 px-6 text-slate-700 font-medium">{it.vehicle}</td>
+                    <td className="py-4 px-6 text-slate-700 font-medium">{it.notes || it.vehicle}</td>
                     <td className="py-4 px-6 text-slate-600">
                       <div className="min-w-0">
-                        <div className="truncate font-medium">{it.customer?.email || "N/A"}</div>
-                        <div className="text-xs text-slate-500">{it.customer?.phone ? `+94${it.customer.phone}` : "N/A"}</div>
+                        <div className="truncate font-medium">{it.customer?.fullName || it.customer?.email || it.bookingId || "N/A"}</div>
+                        <div className="text-xs text-slate-500">{it.customer?.phone ? `+94 ${formatPhone(it.customer.phone) || it.customer.phone}` : "N/A"}</div>
                       </div>
                     </td>
                     <td className="py-4 px-6 text-slate-700 font-medium">{it.price ? `$${it.price}` : "—"}</td>
@@ -1060,8 +1227,29 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     );
   };
   const handleDeleteVehicleBooking = (id: number) => {
+    const booking = vehicleBookings.find((r) => r.id === id);
     const updated = vehicleBookings.filter((r) => r.id !== id);
+    // Optimistically remove locally
     persistVehicleBookings(updated);
+
+    // If this booking maps to a remote private-ride id, attempt remote delete
+    const remoteId = booking?.bookingId;
+    if (remoteId) {
+      (async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/api/private-rides/${encodeURIComponent(remoteId)}`, {
+            method: 'DELETE',
+            headers: { 'Accept': 'application/json' },
+          });
+          if (!res.ok) {
+            console.warn('Remote delete failed', res.status);
+            // Optionally: re-add locally or show a notification. For now just log.
+          }
+        } catch (err) {
+          console.error('Failed to delete remote private ride:', err);
+        }
+      })();
+    }
   };
   const handleDeletePersonal = (id: number) => {
     const updated = personalRides.filter((r) => r.id !== id);
