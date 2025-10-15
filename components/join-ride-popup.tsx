@@ -40,6 +40,40 @@ interface JoinRidePopupProps {
   onUpdateSeats?: (rideId: number, seatsBooked: number) => void
 }
 
+// Helper function to format ride time consistently
+const formatRideTime = (timeString: string) => {
+  try {
+    if (!timeString) return "Date & Time: N/A"
+    
+    // Split by space to get date, time, and AM/PM
+    const parts = timeString.split(' ')
+    if (parts.length >= 3) {
+      const dateStr = parts[0]
+      const timeStr = parts[1]
+      const ampm = parts[2]
+      
+      // Format date (YYYY-MM-DD to MM/DD/YYYY)
+      const date = new Date(dateStr)
+      const formattedDate = date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+      })
+      
+      // Format time with proper time range format
+      const formattedTime = `${timeStr} ${ampm}`
+      
+      return `Date: ${formattedDate} | Time: ${formattedTime}`
+    }
+    
+    // Handle legacy format (time only)
+    return `Time: ${timeString}`
+  } catch (error) {
+    console.error('Error formatting ride time:', error)
+    return "Date & Time: N/A"
+  }
+}
+
 export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: JoinRidePopupProps) {
   const [formData, setFormData] = useState({
     fullName: "",
@@ -121,7 +155,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
           <div className="space-y-6">
             {/* Ride Summary */}
             <div className="bg-yellow-50 rounded-2xl p-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Ride Summary</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Date and Time</h3>
 
               <div className="grid grid-cols-2 gap-6 mb-4">
                 <div className="flex items-center gap-3">
@@ -139,7 +173,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
                     <Clock className="h-3 w-3 text-blue-400" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">{rideData.time}</p>
+                    <p className="font-semibold text-gray-900">{formatRideTime(rideData.time)}</p>
                     <p className="text-gray-600 text-sm">{rideData.duration}</p>
                   </div>
                 </div>

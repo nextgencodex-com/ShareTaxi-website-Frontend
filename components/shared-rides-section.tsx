@@ -58,7 +58,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         location: "Airport Terminal 1",
         type: "Destination",
       },
-      time: "02-04 pm",
+      time: "2025-10-20 2-4 PM",
       duration: "45 min",
       seats: {
         available: 3,
@@ -84,7 +84,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         location: "Colombo City Center",
         type: "Destination",
       },
-      time: "06-08 am",
+      time: "2025-10-21 6-8 AM",
       duration: "2 hours",
       seats: {
         available: 4,
@@ -110,7 +110,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         location: "Nuwara Eliya",
         type: "Destination",
       },
-      time: "08-10 am",
+      time: "2025-10-22 8-10 AM",
       duration: "3 hours",
       seats: {
         available: 2,
@@ -136,7 +136,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         location: "Airport Terminal 2",
         type: "Destination",
       },
-      time: "04-06 pm",
+      time: "2025-10-23 4-6 PM",
       duration: "30 min",
       seats: {
         available: 5,
@@ -162,7 +162,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         location: "Sigiriya Rock",
         type: "Destination",
       },
-      time: "05-07 am",
+      time: "2025-10-24 5-7 AM",
       duration: "4 hours",
       seats: {
         available: 3,
@@ -188,7 +188,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         location: "Galle Face",
         type: "Destination",
       },
-      time: "12-02 pm",
+      time: "2025-10-25 12-2 PM",
       duration: "20 min",
       seats: {
         available: 4,
@@ -214,7 +214,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         location: "Bentota Beach",
         type: "Destination",
       },
-      time: "10-12 am",
+      time: "2025-10-26 10-12 AM",
       duration: "2.5 hours",
       seats: {
         available: 2,
@@ -240,7 +240,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         location: "Temple of Tooth",
         type: "Destination",
       },
-      time: "03-05 pm",
+      time: "2025-10-27 3-5 PM",
       duration: "15 min",
       seats: {
         available: 6,
@@ -266,7 +266,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         location: "Nine Arch Bridge",
         type: "Destination",
       },
-      time: "07-09 am",
+      time: "2025-10-28 7-9 AM",
       duration: "1 hour",
       seats: {
         available: 3,
@@ -444,7 +444,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         const timeStr = parts[1]
         const ampm = parts[2]
         
-        // Format the date
+        // Format the date (YYYY-MM-DD to MM/DD/YYYY)
         const date = new Date(dateStr)
         const formattedDate = date.toLocaleDateString('en-US', { 
           year: 'numeric', 
@@ -452,12 +452,13 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
           day: '2-digit' 
         })
         
-        // Format the pickup time
+        // Format the pickup time with proper time range format
         const formattedPickupTime = `${timeStr} ${ampm}`
         
         return { date: formattedDate, pickupTime: formattedPickupTime }
       }
       
+      // Handle legacy format (time only)
       return { date: 'N/A', pickupTime: timeString }
     } catch (error) {
       console.error('Error parsing ride time:', error)
@@ -473,12 +474,9 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
         <Card key={ride.id} className="bg-white border-0 shadow-lg rounded-2xl overflow-hidden">
           <CardContent className="p-6">
             <div className="space-y-4">
-              <div className="flex justify-center mb-4 space-x-2">
-                <Badge className="bg-blue-100 text-blue-600 hover:bg-blue-100 rounded-full px-3 py-1 text-sm">
-                  Date: {date}
-                </Badge>
-                <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100 rounded-full px-3 py-1 text-sm">
-                  Pickup Time: {pickupTime}
+              <div className="flex justify-center mb-4">
+                <Badge className="bg-blue-100 text-blue-600 hover:bg-blue-100 rounded-full px-4 py-2 text-sm">
+                  Date and Time: {date} | {pickupTime}
                 </Badge>
               </div>
 

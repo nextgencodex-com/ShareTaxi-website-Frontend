@@ -71,6 +71,48 @@ interface BookingDetailsPopupProps {
   bookingData: BookingData | null
 }
 
+// Helper function to format date and time consistently
+const formatDateTime = (timeString: string, dateString: string) => {
+  try {
+    // If timeString already contains date (new format), parse it
+    if (timeString && timeString.includes(' ') && timeString.split(' ').length >= 3) {
+      const parts = timeString.split(' ')
+      const dateStr = parts[0]
+      const timeStr = parts[1]
+      const ampm = parts[2]
+      
+      // Format date
+      const date = new Date(dateStr)
+      const formattedDate = date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+      })
+      
+      // Format time
+      const formattedTime = `${timeStr} ${ampm}`
+      
+      return `${formattedDate} | ${formattedTime}`
+    }
+    
+    // Fallback to separate date and time
+    if (dateString && timeString) {
+      const date = new Date(dateString)
+      const formattedDate = date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+      })
+      return `${formattedDate} | ${timeString}`
+    }
+    
+    return "Date & Time: N/A"
+  } catch (error) {
+    console.error('Error formatting date/time:', error)
+    return "Date & Time: N/A"
+  }
+}
+
 export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingData }: BookingDetailsPopupProps) {
   const [formData, setFormData] = useState({
     fullName: "",
@@ -350,11 +392,7 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">
-                      Pickup Time: {bookingData.time} | Pickup Date: {new Date(bookingData.date).toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: '2-digit', 
-                        day: '2-digit' 
-                      })}
+                      Date & Time: {formatDateTime(bookingData.time, bookingData.date)}
                     </p>
                     <p className="text-gray-600 text-sm">{bookingData.mapDuration || "Estimated duration"}</p>
                   </div>

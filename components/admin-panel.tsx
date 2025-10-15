@@ -303,6 +303,21 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (!form.name.trim()) errors.name = "Vehicle name is required";
     if (isNaN(parseFloat(form.price)) || parseFloat(form.price) <= 0) errors.price = "Price must be a positive number";
     if (!form.feature1.trim()) errors.feature1 = "At least one feature is required";
+    
+    // Image validation
+    if (!form.imageFile && !form.image) {
+      errors.image = "Please upload a vehicle image";
+    } else if (form.imageFile) {
+      // Validate file size (max 5MB)
+      if (form.imageFile.size > 5 * 1024 * 1024) {
+        errors.image = "Image file size must be less than 5MB";
+      }
+      // Validate file type
+      if (!form.imageFile.type.startsWith('image/')) {
+        errors.image = "Please select a valid image file";
+      }
+    }
+    
     return errors;
   };
 
@@ -373,9 +388,25 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     setIsVehicleSubmitting(true);
 
     // Handle image file upload if present
-    const imagePath = vehicleForm.imageFile
-      ? `/images/${vehicleForm.imageFile.name}`
-      : vehicleForm.image || "/images/toyota-innova.jpg";
+    let imagePath = "/images/toyota-innova.jpg"; // default image
+    
+    if (vehicleForm.imageFile) {
+      // Create a more unique filename with timestamp
+      const timestamp = Date.now();
+      const fileExtension = vehicleForm.imageFile.name.split('.').pop();
+      const fileName = `${vehicleForm.name.toLowerCase().replace(/\s+/g, '-')}-${timestamp}.${fileExtension}`;
+      imagePath = `/images/vehicles/${fileName}`;
+      
+      // In a real application, you would upload the file to a server here
+      console.log('File to upload:', {
+        file: vehicleForm.imageFile,
+        path: imagePath,
+        size: vehicleForm.imageFile.size,
+        type: vehicleForm.imageFile.type
+      });
+    } else if (vehicleForm.image) {
+      imagePath = vehicleForm.image;
+    }
 
     setTimeout(() => {
       const newVehicle: VehicleData = {
@@ -1382,23 +1413,71 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Vehicle Image URL or Upload</label>
-                      <Input value={vehicleForm.image} onChange={(e) => setVehicleForm({ ...vehicleForm, image: e.target.value })} />
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setVehicleForm({ ...vehicleForm, imageFile: file });
-                            setVehicleForm({ ...vehicleForm, image: `/images/${file.name}` });
-                          }
-                        }}
-                        className="mt-2"
-                      />
-                      {vehicleForm.imageFile && (
-                        <p className="text-sm text-green-600 mt-1">Selected: {vehicleForm.imageFile.name}</p>
-                      )}
+                      <label className="block text-sm font-medium mb-2">Upload vehicle image</label>
+                      <div className="space-y-3">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              // Validate file size (max 5MB)
+                              if (file.size > 5 * 1024 * 1024) {
+                                alert('File size must be less than 5MB');
+                                return;
+                              }
+                              
+                              // Validate file type
+                              if (!file.type.startsWith('image/')) {
+                                alert('Please select an image file');
+                                return;
+                              }
+                              
+                              setVehicleForm({ 
+                                ...vehicleForm, 
+                                imageFile: file,
+                                image: `/images/${file.name}`
+                              });
+                            }
+                          }}
+                          className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 transition-colors cursor-pointer"
+                        />
+                        
+                        {vehicleForm.imageFile && (
+                          <div className="mt-3">
+                            <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-green-800">{vehicleForm.imageFile.name}</p>
+                                <p className="text-xs text-green-600">{(vehicleForm.imageFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setVehicleForm({ ...vehicleForm, imageFile: null, image: "" })}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {vehicleForm.imageFile && (
+                          <div className="mt-3">
+                            <p className="text-sm text-gray-600 mb-2">Preview:</p>
+                            <img
+                              src={URL.createObjectURL(vehicleForm.imageFile)}
+                              alt="Vehicle preview"
+                              className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      {vehicleErrors.image && <p className="text-red-500 text-sm mt-1">{vehicleErrors.image}</p>}
                     </div>
 
                     <div>

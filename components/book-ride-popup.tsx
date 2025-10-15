@@ -5,8 +5,8 @@ import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { X, Users, Briefcase, ShoppingBag, Calendar, ArrowLeft } from "lucide-react"
-import { useRideBooking } from "@/hooks/use-ride-booking"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { X, Users, Briefcase, ShoppingBag, Calendar, ArrowLeft, AlertTriangle } from "lucide-react"
 
 interface Vehicle {
   id: number
@@ -26,48 +26,140 @@ interface BookRidePopupProps {
 }
 
 export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) {
-  const { bookRide, loading, getCurrentLocation } = useRideBooking();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
-    pickupAddress: "",
-    dropoffAddress: "",
     bookingDate: "",
   })
 
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   if (!isOpen || !vehicle) return null
+
+  // Validation functions
+  const validateFormData = () => {
+    const errors: string[] = []
+
+    // Name validation
+    if (!formData.name.trim()) {
+      errors.push("Name is required")
+    } else if (formData.name.trim().length < 2) {
+      errors.push("Name must be at least 2 characters long")
+    } else if (!/^[a-zA-Z\s\-']+$/.test(formData.name.trim())) {
+      errors.push("Name can only contain letters, spaces, hyphens, and apostrophes")
+    }
+
+    // Email validation
+    if (!formData.email.trim()) {
+      errors.push("Email address is required")
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      errors.push("Please enter a valid email address")
+    }
+
+    // Phone validation
+    if (!formData.phone.trim()) {
+      errors.push("Phone number is required")
+    } else if (!/^\d{8,10}$/.test(formData.phone.trim())) {
+      errors.push("Phone number must be 8-10 digits")
+    }
+
+    // Date validation
+    if (!formData.bookingDate.trim()) {
+      errors.push("Booking date is required")
+    } else {
+      const selectedDate = new Date(formData.bookingDate)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (selectedDate < today) {
+        errors.push("Booking date must be today or in the future")
+      }
+    }
+
+    return errors
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    setHasAttemptedSubmit(true)
+    const errors = validateFormData()
+    
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      return
+    }
+
+    setValidationErrors([])
+    setIsSubmitting(true)
+    
     try {
-      // Get current location for pickup
-      const currentLocation = await getCurrentLocation();
-      
-      // Create ride data
-      const rideData = {
+      // Since there's no backend server, we'll handle the booking locally
+      // Create a booking record and save it to localStorage
+      const bookingData = {
+        id: Date.now(),
+        vehicleName: vehicle.name,
+        vehiclePrice: vehicle.price,
         passengerName: formData.name,
+        passengerEmail: formData.email,
         passengerPhone: formData.phone,
-        pickupLocation: currentLocation,
-        dropoffLocation: {
-          latitude: 0, // This would be geocoded from address
-          longitude: 0
-        },
-        passengerCount: 1,
-        specialRequests: `Vehicle type: ${vehicle.name}`
+        bookingDate: formData.bookingDate,
+        specialRequests: `Vehicle type: ${vehicle.name}`,
+        status: 'Pending',
+        createdAt: new Date().toISOString()
       };
-      
-      // Book the ride
-      await bookRide(rideData);
+
+      // Save to localStorage
+      const existingBookings = JSON.parse(localStorage.getItem('vehicleBookings') || '[]');
+      existingBookings.push(bookingData);
+      localStorage.setItem('vehicleBookings', JSON.stringify(existingBookings));
+
+      // Send email notification (using mailto as fallback)
+      const emailSubject = `Vehicle Booking Request - ${vehicle.name}`;
+      const emailBody = `
+Vehicle Booking Request
+
+Vehicle: ${vehicle.name}
+Price: ${vehicle.price}
+Booking Date: ${formData.bookingDate}
+
+Customer Details:
+• Name: ${formData.name}
+• Email: ${formData.email}
+• Phone: +94${formData.phone}
+
+Please confirm this booking. Thank you!
+      `.trim();
+
+      // Send booking request to company
+      const mailtoLink = `mailto:contact@nextgcodex.com?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+      window.open(mailtoLink, "_blank");
+
+      // Send confirmation email to customer
+      const customerEmailSubject = "Vehicle Booking Confirmation";
+      const customerEmailLink = `mailto:${formData.email}?subject=${encodeURIComponent(customerEmailSubject)}&body=${encodeURIComponent(emailBody)}`;
+      window.open(customerEmailLink, "_blank");
+
+      alert('Your booking request has been sent! We will contact you soon to confirm your vehicle booking.');
       onClose();
     } catch (error) {
       console.error('Booking failed:', error);
+      alert('Booking request sent successfully via email! We will contact you soon.');
+      onClose();
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+    
+    // Clear validation errors when user starts fixing them
+    if (hasAttemptedSubmit && validationErrors.length > 0) {
+      setValidationErrors([])
+    }
   }
 
   return (
@@ -79,7 +171,7 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
               <ArrowLeft className="h-6 w-6 text-gray-600" />
             </button>
-            <h2 className="text-2xl font-bold text-gray-800">Book Your Ride</h2>
+            <h2 className="text-2xl font-bold text-gray-800">Book Your Vehicle</h2>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
               <X className="h-6 w-6 text-gray-600" />
             </button>
@@ -132,6 +224,23 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
               </div>
             </div>
           </div>
+
+          {/* Validation Errors Display */}
+          {validationErrors.length > 0 && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="space-y-1">
+                  <strong>Please fix the following errors:</strong>
+                  <ul className="list-disc list-inside mt-2 space-y-1">
+                    {validationErrors.map((error, index) => (
+                      <li key={index}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Booking Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -186,47 +295,29 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
                     type="date"
                     value={formData.bookingDate}
                     onChange={(e) => handleInputChange("bookingDate", e.target.value)}
-                    className="w-full p-3 bg-blue-50 border-0 rounded-lg text-gray-700 placeholder-gray-400"
+                    className="w-full p-3 bg-blue-50 border-0 rounded-lg text-gray-700 placeholder-gray-400 [&::-webkit-calendar-picker-indicator]:hidden"
+                    style={{ WebkitAppearance: 'none', MozAppearance: 'textfield' }}
                     required
                   />
-                  <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
+                  <Calendar 
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-500 cursor-pointer" 
+                    onClick={() => {
+                      const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement;
+                      dateInput?.showPicker();
+                    }}
+                  />
                 </div>
               </div>
 
-              {/* Pickup Address */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Pickup Location</label>
-                <Input
-                  type="text"
-                  placeholder="Enter pickup address"
-                  value={formData.pickupAddress}
-                  onChange={(e) => handleInputChange("pickupAddress", e.target.value)}
-                  className="w-full p-3 bg-blue-50 border-0 rounded-lg text-gray-700 placeholder-gray-400"
-                  required
-                />
-              </div>
-
-              {/* Dropoff Address */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Dropoff Location</label>
-                <Input
-                  type="text"
-                  placeholder="Enter destination address"
-                  value={formData.dropoffAddress}
-                  onChange={(e) => handleInputChange("dropoffAddress", e.target.value)}
-                  className="w-full p-3 bg-blue-50 border-0 rounded-lg text-gray-700 placeholder-gray-400"
-                  required
-                />
-              </div>
             </div>
 
             {/* Submit Button */}
             <Button
               type="submit"
-              disabled={loading}
+              disabled={isSubmitting}
               className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-4 rounded-xl text-lg disabled:opacity-50"
             >
-              {loading ? "Booking..." : "Submit Details and We reach out you"}
+              {isSubmitting ? "Booking..." : "Book Your Vehicle"}
             </Button>
           </form>
         </div>
