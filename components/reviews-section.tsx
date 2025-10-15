@@ -6,7 +6,7 @@ import { useState, useEffect } from "react"
 import { ReviewFormDialog } from "./review-form-dialog"
 
 type Review = {
-  id: number
+  id: string | number
   name: string
   avatar: string
   vehicle: string
@@ -29,21 +29,68 @@ export function ReviewsSection() {
   useEffect(() => {
     const loadReviews = async () => {
       try {
-        // Load static reviews
+        // Try backend first
+        const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '') || 'http://localhost:5000'
+        const apiUrl = base.endsWith('/api') ? `${base}/reviews` : `${base}/api/reviews`
+
+        let serverReviews = []
+        try {
+          const resp = await fetch(apiUrl)
+          if (resp.ok) {
+            const json = await resp.json()
+            serverReviews = (json && json.data && json.data.reviews) ? json.data.reviews : json || []
+          } else {
+            console.warn('Failed to load reviews from API:', resp.status)
+          }
+        } catch (err: unknown) {
+          console.warn('Could not reach reviews API:', (err instanceof Error) ? err.message : String(err))
+        }
+
+        if (serverReviews.length > 0) {
+          type ServerReview = {
+            id?: string | number
+            _id?: string | number
+            name?: string
+            authorName?: string
+            avatar?: string
+            vehicle?: string
+            driver?: string
+            createdAt?: string | number
+            date?: string | number
+            rating?: number | string
+            rate?: number | string
+            review?: string
+            comment?: string
+            helpful?: number
+            tag?: string
+            raw?: Record<string, unknown>
+          }
+
+          // Normalize server reviews to our UI shape
+          const normalized: Review[] = (serverReviews as ServerReview[]).map((r) => ({
+            id: r.id || r._id || Date.now(),
+            name: r.name || r.authorName || 'Anonymous',
+            avatar: r.avatar || '/placeholder.svg',
+            vehicle: (r.vehicle ?? (r.raw && r.raw.vehicle) ?? '' ) as string,
+            driver: (r.driver ?? (r.raw && r.raw.driver) ?? '') as string,
+            date: new Date(r.createdAt || r.date || Date.now()).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
+            rating: Number(r.rating || r.rate || 0),
+            review: r.review || r.comment || '',
+            helpful: r.helpful || 0,
+            tag: r.tag || (r.vehicle && 'Individual') || 'Individual',
+            tagColor: r.tag === 'Shared' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'
+          }))
+
+          setReviews(normalized)
+          calculateStats(normalized)
+          return
+        }
+
+        // Fallback to static reviews.json when backend has none or fails
         const response = await fetch('/reviews.json')
         const staticReviews = await response.json()
-
-        // Load user-submitted reviews from localStorage
-        const storedReviews = localStorage.getItem('userReviews')
-        const userReviews = storedReviews ? JSON.parse(storedReviews) : []
-
-        // Combine and sort by date (newest first)
-        const allReviews = [...staticReviews, ...userReviews].sort((a, b) =>
-          new Date(b.date).getTime() - new Date(a.date).getTime()
-        )
-
-        setReviews(allReviews)
-        calculateStats(allReviews)
+        setReviews(staticReviews)
+        calculateStats(staticReviews)
       } catch (error) {
         console.error('Error loading reviews:', error)
       }

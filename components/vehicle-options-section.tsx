@@ -28,7 +28,7 @@ interface VehicleOptionsSectionProps {
 const DEFAULT_VEHICLES: Vehicle[] = [
   {
     id: 1,
-    name: "Toyota Innova",
+    name: "Toyota Iva",
     price: "$6/ hour",
     passengers: "5-6",
     luggage: "X 1 Big",
@@ -65,8 +65,7 @@ const DEFAULT_VEHICLES: Vehicle[] = [
 ]
 
 export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSectionProps) {
-  // use module-level default vehicles constant
-
+  // use module-level default vehicles constant as a safe fallback
   const [allVehicles, setAllVehicles] = useState<Vehicle[]>([...initialVehicles.map((vehicle: Vehicle) => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...DEFAULT_VEHICLES])
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
   const [isPopupOpen, setIsPopupOpen] = useState(false)
@@ -81,11 +80,89 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
   const isMobile = useIsMobile()
 
   useEffect(() => {
-    // briefly use loading/error setters to avoid unused variable lint errors
+    // Initialize from initialVehicles and then try to fetch from backend
+    let mounted = true
     setLoading(true)
     setError(null)
-    setAllVehicles([...initialVehicles.map((vehicle: Vehicle) => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...DEFAULT_VEHICLES])
-    setLoading(false)
+
+    const initVehicles = [...initialVehicles.map((vehicle: Vehicle) => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...DEFAULT_VEHICLES]
+    setAllVehicles(initVehicles)
+
+    // Attempt to fetch vehicles from backend API
+    ;(async () => {
+      try {
+        const resp = await fetch("http://localhost:5000/api/vehicles", { cache: "no-store" })
+        if (!mounted) return
+        if (!resp.ok) throw new Error(`Server responded ${resp.status}`)
+        const json = await resp.json()
+        // Expecting { success: true, data: { vehicles: [...] } } or an array directly
+  let vehiclesFromApi: unknown[] = []
+        if (Array.isArray(json)) {
+          vehiclesFromApi = json
+        } else if (json && json.data && Array.isArray(json.data.vehicles)) {
+          vehiclesFromApi = json.data.vehicles
+        } else if (json && Array.isArray(json.vehicles)) {
+          vehiclesFromApi = json.vehicles
+        }
+
+        if (vehiclesFromApi.length > 0) {
+          const normalized = vehiclesFromApi.map((v) => {
+            if (typeof v === "object" && v !== null) {
+              const obj = v as Record<string, unknown>
+              const rawId = obj["id"] ?? obj["_id"] ?? obj["name"]
+              const id = typeof rawId === "number" ? rawId : (typeof rawId === "string" ? rawId : String(rawId ?? ""))
+              const name = (obj["name"] ?? obj["title"]) as string | undefined
+              const price = (obj["price"] ?? obj["rate"]) as string | undefined
+              const passengers = (obj["passengers"] ?? obj["capacity"]) as string | undefined
+              const luggage = (obj["luggage"] ?? obj["boot"]) as string | undefined
+              const handCarry = (obj["handCarry"] ?? obj["hand_carry"]) as string | undefined
+              const image = (obj["image"] ?? obj["img"]) as string | undefined
+              const features = (Array.isArray(obj["features"]) ? obj["features"] : obj["tags"]) as unknown[] | undefined
+              const gradient = obj["gradient"] as string | undefined
+              const buttonColor = (obj["buttonColor"] as string) ?? "bg-gray-600 hover:bg-gray-700"
+
+              return {
+                id,
+                name: name ?? "",
+                price: price ?? "",
+                passengers: passengers ?? "",
+                luggage: luggage ?? "",
+                handCarry: handCarry ?? "",
+                image: image ?? "/placeholder.svg",
+                features: (features ?? []) as string[],
+                gradient: gradient,
+                buttonColor,
+              }
+            }
+
+            // Fallback empty vehicle if shape is unexpected
+            return {
+              id: "",
+              name: "",
+              price: "",
+              passengers: "",
+              luggage: "",
+              handCarry: "",
+              image: "/placeholder.svg",
+              features: [],
+              buttonColor: "bg-gray-600 hover:bg-gray-700",
+            }
+          })
+          setAllVehicles(normalized)
+        }
+      } catch (err: unknown) {
+        // keep defaults and surface a friendly error
+        if (err instanceof Error) console.warn("Failed to fetch vehicles:", err.message)
+        else console.warn("Failed to fetch vehicles:", err)
+        if (mounted) setError("Could not load vehicles from server; showing defaults.")
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
   }, [initialVehicles])
 
   useEffect(() => {
