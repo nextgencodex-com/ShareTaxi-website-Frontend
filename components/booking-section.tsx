@@ -205,7 +205,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       to,
       rideType,
       date,
-      time: `${pickupTime} ${pickupAmPm}`,
+      time: `${date} ${pickupTime} ${pickupAmPm}`, // Include date in time field for consistency
       passengers,
       tripType,
       destinations: tripType === 'multi-city' ? destinations : undefined,
@@ -633,7 +633,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           to,
           rideType,
           date,
-          time: `${pickupTime} ${pickupAmPm}`,
+          time: `${date} ${pickupTime} ${pickupAmPm}`, // Include date in time field for consistency
           passengers,
           tripType,
           destinations: tripType === 'multi-city' ? destinations : undefined,

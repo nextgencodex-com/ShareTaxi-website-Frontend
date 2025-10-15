@@ -11,7 +11,126 @@ import { calculateTotalPrice, getPerKmRate, getTripMultiplier, PER_SEAT_RATE_USD
 import { useCallback } from "react"
 import { AlertTriangle } from "lucide-react"
 
+// Helper functions for parsing date/time consistently
+const parseDateTimeForMessage = (timeString: string) => {
+  try {
+    if (!timeString) return { formattedDate: "N/A", formattedTime: "N/A" }
+    
+    // Split by space to get date, time, and AM/PM
+    const parts = timeString.split(' ')
+    if (parts.length >= 3) {
+      const dateStr = parts[0]
+      const timeStr = parts[1]
+      const ampm = parts[2]
+      
+      // Format date (YYYY-MM-DD to YYYY-MM-DD format for messages)
+      const date = new Date(dateStr)
+      const formattedDate = date.toISOString().split('T')[0] // YYYY-MM-DD format
+      
+      // Format time with proper time range format
+      const formattedTime = `${timeStr} ${ampm}`
+      
+      return { formattedDate, formattedTime }
+    }
+    
+    // Handle legacy format (time only)
+    return { formattedDate: "N/A", formattedTime: timeString }
+  } catch (error) {
+    console.error('Error parsing date/time for message:', error)
+    return { formattedDate: "N/A", formattedTime: "N/A" }
+  }
+}
 
+const parseDateTimeForBooking = (dateString: string, timeString: string) => {
+  try {
+    // Handle new format where time includes date
+    if (timeString && timeString.includes(' ') && timeString.split(' ').length >= 3) {
+      return parseDateTimeForMessage(timeString)
+    }
+    
+    // Handle separate date and time
+    let formattedDate = "N/A"
+    let formattedTime = "N/A"
+    
+    if (dateString) {
+      const date = new Date(dateString)
+      formattedDate = date.toISOString().split('T')[0] // YYYY-MM-DD format
+    }
+    
+    if (timeString) {
+      formattedTime = timeString
+    }
+    
+    return { formattedDate, formattedTime }
+  } catch (error) {
+    console.error('Error parsing date/time for booking:', error)
+    return { formattedDate: "N/A", formattedTime: "N/A" }
+  }
+}
+
+const formatRideTimeForPayment = (timeString: string) => {
+  try {
+    if (!timeString) return "Date & Time: N/A"
+    
+    // Split by space to get date, time, and AM/PM
+    const parts = timeString.split(' ')
+    if (parts.length >= 3) {
+      const dateStr = parts[0]
+      const timeStr = parts[1]
+      const ampm = parts[2]
+      
+      // Format date (YYYY-MM-DD to MM/DD/YYYY)
+      const date = new Date(dateStr)
+      const formattedDate = date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+      })
+      
+      // Format time with proper time range format
+      const formattedTime = `${timeStr} ${ampm}`
+      
+      return `Date: ${formattedDate} | Time: ${formattedTime}`
+    }
+    
+    // Handle legacy format (time only)
+    return `Time: ${timeString}`
+  } catch (error) {
+    console.error('Error formatting ride time for payment:', error)
+    return "Date & Time: N/A"
+  }
+}
+
+const formatBookingTimeForPayment = (timeString: string, dateString: string) => {
+  try {
+    // Handle new format where time includes date
+    if (timeString && timeString.includes(' ') && timeString.split(' ').length >= 3) {
+      return formatRideTimeForPayment(timeString)
+    }
+    
+    // Handle separate date and time
+    let formattedDate = "N/A"
+    let formattedTime = "N/A"
+    
+    if (dateString) {
+      const date = new Date(dateString)
+      formattedDate = date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+      })
+    }
+    
+    if (timeString) {
+      formattedTime = timeString
+    }
+    
+    return `Date: ${formattedDate} | Time: ${formattedTime}`
+  } catch (error) {
+    console.error('Error formatting booking time for payment:', error)
+    return "Date & Time: N/A"
+  }
+}
 
 // Send Confirmation Email
 const sendConfirmationEmail = async (bookingData: any, personalData: any, rideData: any, isJoinRideFlow: boolean, selectedSeats?: number | null, seatsCount?: number, totalPrice?: string, perPersonFare?: string) => {
@@ -380,12 +499,13 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
         }
 
         // Create email booking message for join ride
+        const { formattedDate, formattedTime } = parseDateTimeForMessage(rideData?.time || "")
         const joinRideEmailDetails = `
 Taxi Booking Request
 
 Route: ${rideData?.pickup?.location || "N/A"} → ${rideData?.destination?.location || "N/A"}
-Date: ${rideData?.time ? rideData.time.split(' ')[0] : "N/A"}
-Time: ${rideData?.time ? rideData.time.split(' ')[1] + ' ' + rideData.time.split(' ')[2] : "N/A"}
+Date: ${formattedDate}
+Time: ${formattedTime}
 Type: Shared, One Way Ride
 
 Personal Details:
@@ -454,12 +574,14 @@ Please confirm this booking. Thank you!
         priceText = formatPriceUSD(calc.total);
       }
 
+      // Parse date and time for regular booking
+      const { formattedDate, formattedTime } = parseDateTimeForBooking(bookingData?.date || "", bookingData?.time || "")
       bookingDetails = `
 Taxi Booking Request
 
 Route: ${bookingData?.from || "N/A"} → ${bookingData?.to || "N/A"}
-Date: ${bookingData?.date || "N/A"}
-Time: ${bookingData?.time || "N/A"}
+Date: ${formattedDate}
+Time: ${formattedTime}
 Type: Shared, One Way Ride
 
 Personal Details:
@@ -568,12 +690,13 @@ Please confirm this booking. Thank you!
         }
 
         // Create WhatsApp message for join ride
+        const { formattedDate, formattedTime } = parseDateTimeForMessage(rideData?.time || "")
         const joinRideDetails = `
 Taxi Booking Request
 
 Route: ${rideData?.pickup?.location || "N/A"} → ${rideData?.destination?.location || "N/A"}
-Date: ${rideData?.time ? rideData.time.split(' ')[0] : "N/A"}
-Time: ${rideData?.time ? rideData.time.split(' ')[1] + ' ' + rideData.time.split(' ')[2] : "N/A"}
+Date: ${formattedDate}
+Time: ${formattedTime}
 Type: Shared, One Way Ride
 
 Personal Details:
@@ -641,12 +764,14 @@ Please confirm this booking. Thank you!
         priceText = formatPriceUSD(calc.total);
       }
 
+      // Parse date and time for regular booking
+      const { formattedDate, formattedTime } = parseDateTimeForBooking(bookingData?.date || "", bookingData?.time || "")
       bookingDetails = `
 Taxi Booking Request
 
 Route: ${bookingData?.from || "N/A"} → ${bookingData?.to || "N/A"}
-Date: ${bookingData?.date || "N/A"}
-Time: ${bookingData?.time || "N/A"}
+Date: ${formattedDate}
+Time: ${formattedTime}
 Type: Shared, One Way Ride
 
 Personal Details:
@@ -797,7 +922,7 @@ Please confirm this booking. Thank you!
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">
-                      {isJoinRideFlow ? rideData?.time : bookingData?.time || "N/A"}
+                      {isJoinRideFlow ? formatRideTimeForPayment(rideData?.time || "") : formatBookingTimeForPayment(bookingData?.time || "", bookingData?.date || "")}
                     </p>
                     <p className="text-gray-600 text-sm">
                       {isJoinRideFlow ? rideData?.duration : "45 min"}
