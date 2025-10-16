@@ -24,14 +24,16 @@ interface Ride {
   destination: {
     location: string
     type: string
-  }
+  },
   time: string
   duration: string
   seats: {
     available: number
     total: number
-  }
+  },
   price: string
+  pickupDate?: Date | null
+  pickupDateFormatted?: string
 }
 
 interface SharedRidesSectionProps {
@@ -40,45 +42,122 @@ interface SharedRidesSectionProps {
 }
 
 export function SharedRidesSection({ initialRides = [], backendDown = false }: SharedRidesSectionProps) {
-  // Removed demo/default rides; component will render only rides passed via `initialRides`.
 
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null)
   const [oneTimePage, setOneTimePage] = useState(0)
   const [dailyPage, setDailyPage] = useState(0)
   const [rides, setRides] = useState<Ride[]>([])
+    const [loadingRides, setLoadingRides] = useState<boolean>(false)
 
   useEffect(() => {
-    // Load booked rides from localStorage
-    const loadBookedRides = () => {
+    // Load rides from backend API (do not use localStorage)
+    const fetchRides = async () => {
       try {
-        const bookedRides = localStorage.getItem('bookedRides')
-        if (bookedRides) {
-          const parsedBookedRides = JSON.parse(bookedRides).map((ride: any) => ({
-            ...ride,
-            postedDate: new Date(ride.postedDate)
-          }))
-          const allRides = [...parsedBookedRides, ...initialRides, ...defaultRides]
-          // Sort by postedDate (newest first)
-          allRides.sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime())
-          setRides(allRides)
-        } else {
-          const allRides = [...initialRides, ...defaultRides]
-          // Sort by postedDate (newest first)
-          allRides.sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime())
-          setRides(allRides)
+          setLoadingRides(true)
+  const res = await fetch('http://localhost:5000/api/shared-rides', { cache: 'no-store', headers: { 'Accept': 'application/json' } })
+        if (!res.ok) {
+          const text = await res.text()
+          console.error('Failed to fetch shared rides:', res.status, text)
+          setRides(initialRides)
+          return
         }
-      } catch (error) {
-        console.error('Error loading booked rides:', error)
-        setRides([...initialRides, ...defaultRides])
+
+        const json = await res.json()
+        // Support multiple API shapes: direct array, { rides: [...] }, or { data: { rides: [...] } }
+        const payload = json as unknown
+        const items = Array.isArray(payload)
+          ? payload as unknown[]
+          : (typeof payload === 'object' && payload !== null && Array.isArray((payload as Record<string, unknown>)['rides']))
+            ? (payload as Record<string, unknown>)['rides'] as unknown[]
+            : (typeof payload === 'object' && payload !== null && Array.isArray(((payload as Record<string, unknown>)['data'] as Record<string, unknown>)?.['rides']))
+              ? (((payload as Record<string, unknown>)['data'] as Record<string, unknown>)['rides'] as unknown[])
+              : []
+
+        const parsed: Ride[] = (items as unknown[]).map((item) => {
+          const r = item as Record<string, unknown>
+          // ensure frequency exists and has a default
+          const frequencyVal = (r.frequency as string) ?? ((r.rawPayload && (r.rawPayload as Record<string, unknown>)['frequency']) as string) ?? 'one-time'
+
+          // Ensure pickup and destination objects exist so UI won't crash when accessing `.location`
+          const pickupObj = (r.pickup && typeof r.pickup === 'object')
+            ? (r.pickup as Record<string, unknown>)
+            : { location: String(r['pickupLocation'] ?? ''), type: String(r['pickupType'] ?? 'Pickup point') }
+
+          const destinationObj = (r.destination && typeof r.destination === 'object')
+            ? (r.destination as Record<string, unknown>)
+            : { location: String(r['destinationLocation'] ?? ''), type: String(r['destinationType'] ?? 'Destination') }
+
+          const seatsObj = (r.seats && typeof r.seats === 'object')
+            ? (r.seats as Record<string, unknown>)
+            : { available: Number(r['availableSeats'] ?? 0), total: Number(r['totalSeats'] ?? 0) }
+          // convert createdAt (Firestore) or postedDate string -> Date
+          let postedDate: Date
+          if (r.createdAt !== undefined && r.createdAt !== null) {
+            const createdAt = r.createdAt
+            if (typeof createdAt === 'object' && 'seconds' in (createdAt as Record<string, unknown>)) {
+              const secs = Number((createdAt as Record<string, unknown>)['seconds'])
+              postedDate = new Date(Number(secs) * 1000)
+            } else {
+              postedDate = new Date(String(createdAt))
+            }
+          } else if (r.postedDate !== undefined && r.postedDate !== null) {
+            postedDate = new Date(String(r.postedDate))
+          } else {
+            postedDate = new Date()
+          }
+
+            // parse pickupDate prefering rawPayload.pickupDate (string) when available, else Firestore Timestamp or other fields
+            let pickupDate: Date | null = null
+            let pickupDateFormatted = ''
+            const rawPayload = r.rawPayload as Record<string, unknown> | undefined
+            const rawPdFromPayload = rawPayload ? rawPayload['pickupDate'] : undefined
+            // Try rawPayload pickupDate first (string like '2025-10-17')
+            if (rawPdFromPayload !== undefined && rawPdFromPayload !== null) {
+              const rawPdStr = String(rawPdFromPayload)
+              const d = new Date(rawPdStr)
+              if (!isNaN(d.getTime())) {
+                pickupDate = d
+                pickupDateFormatted = d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+              }
+            }
+
+            // Fallback: parse r.pickupDate if we don't yet have a valid date
+            if (!pickupDate && r.pickupDate !== undefined && r.pickupDate !== null) {
+              const pd = r.pickupDate
+              if (typeof pd === 'object' && ('seconds' in (pd as Record<string, unknown>) || '_seconds' in (pd as Record<string, unknown>))) {
+                const secs = Number((pd as Record<string, unknown>)['seconds'] ?? (pd as Record<string, unknown>)['_seconds'])
+                if (!isNaN(secs)) {
+                  pickupDate = new Date(secs * 1000)
+                  pickupDateFormatted = pickupDate.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                }
+              } else {
+                const d = new Date(String(pd))
+                if (!isNaN(d.getTime())) {
+                  pickupDate = d
+                  pickupDateFormatted = d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                }
+              }
+            }
+
+      // spread only known object values — cast to any for a shallow merge into Ride
+            return Object.assign({}, r, { postedDate, pickupDate, pickupDateFormatted, frequency: frequencyVal, pickup: pickupObj, destination: destinationObj, seats: seatsObj }) as unknown as Ride
+        })
+
+        // Sort by postedDate (newest first)
+        parsed.sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime())
+        setRides(parsed)
+      } catch (err) {
+        console.error('Error fetching shared rides:', err)
+        setRides(initialRides)
       }
     }
 
-    loadBookedRides()
+    fetchRides()
 
-    // Listen for new booked rides
+    // Re-fetch when a ride is booked elsewhere in the app
     const handleRideBooked = () => {
-      loadBookedRides()
+      fetchRides()
     }
 
     window.addEventListener('rideBooked', handleRideBooked)
@@ -129,6 +208,7 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
       console.error('Error parsing ride time:', error)
       return false
     }
+        setLoadingRides(false)
   }
 
   const oneTimeRides = useMemo(() => 
@@ -199,8 +279,16 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
   }
 
   // Helper function to parse ride time and extract date and pickup time
-  const parseRideTime = (timeString: string) => {
+  // Accept an optional pickupDate (Date) which takes precedence for the date
+  const parseRideTime = (timeString: string, pickupDate?: Date | null) => {
     try {
+      // If pickupDate provided, use it for the date and try to extract time from timeString if available
+      if (pickupDate) {
+        const formattedDate = pickupDate.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+        const pickupTime = timeString || 'N/A'
+        return { date: formattedDate, pickupTime }
+      }
+
       if (!timeString) return { date: 'N/A', pickupTime: 'N/A' }
       
       // Split by space to get date, time, and AM/PM
@@ -234,17 +322,25 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
   const renderRideCards = (rides: Ride[]) => (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
       {rides.map((ride) => {
-        const { date, pickupTime } = parseRideTime(ride.time)
+        const { date, pickupTime } = parseRideTime(ride.time, ride.pickupDate)
+        const isValidTime = (t?: string) => {
+          if (!t) return false
+          const trimmed = t.trim()
+          if (trimmed.length === 0) return false
+          if (/invalid/i.test(trimmed)) return false
+          return true
+        }
+        const displayPickupTime = isValidTime(ride.time) ? ride.time : pickupTime
         return (
         <Card key={ride.id} className="bg-white border-0 shadow-lg rounded-2xl overflow-hidden">
           <CardContent className="p-6">
             <div className="space-y-4">
               <div className="flex justify-center mb-4 space-x-2">
                 <Badge className="bg-blue-100 text-blue-600 hover:bg-blue-100 rounded-full px-3 py-1 text-sm">
-                  Date: {date}
+                  Date: {ride.pickupDateFormatted || date}
                 </Badge>
                 <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100 rounded-full px-3 py-1 text-sm">
-                  Pickup Time: {pickupTime}
+                  Pickup Time: {displayPickupTime}
                 </Badge>
               </div>
 
@@ -254,8 +350,8 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
                     <MapPin className="h-2 w-2 text-white" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">{ride.pickup.location}</p>
-                    <p className="text-gray-500 text-sm">{ride.pickup.type}</p>
+                    <p className="font-semibold text-gray-900">{ride.pickup?.location || 'Unknown'}</p>
+                    <p className="text-gray-500 text-sm">{ride.pickup?.type || 'Pickup point'}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -263,8 +359,8 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
                     <MapPin className="h-2 w-2 text-white" />
                   </div>
                   <div>
-                    <p className="font-bold text-xl text-gray-900">{ride.destination.location}</p>
-                    <p className="text-gray-500">{ride.destination.type}</p>
+                    <p className="font-bold text-xl text-gray-900">{ride.destination?.location || 'Unknown'}</p>
+                    <p className="text-gray-500">{ride.destination?.type || 'Destination'}</p>
                   </div>
                 </div>
               </div>
@@ -275,7 +371,7 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
                     <Clock className="h-3 w-3 text-blue-400" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">{pickupTime}</p>
+                    <p className="font-semibold text-gray-900">{displayPickupTime}</p>
                     <p className="text-gray-500 text-sm">Pickup Time</p>
                   </div>
                 </div>
@@ -285,7 +381,7 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">
-                      {ride.seats.available}/{ride.seats.total} seats
+                      {(ride.seats?.available ?? 0)}/{(ride.seats?.total ?? 0)} seats
                     </p>
                     <p className="text-gray-500 text-sm">Available</p>
                   </div>
@@ -382,7 +478,14 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
               </>
             ) : (
               <div className="text-center py-8">
-                <p className="text-gray-500 text-lg">No one-time rides available.</p>
+                {loadingRides ? (
+                  <>
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                    <p className="mt-4 text-gray-600">Loading one-time rides...</p>
+                  </>
+                ) : (
+                  <p className="text-gray-500 text-lg">No one-time rides available.</p>
+                )}
               </div>
             )}
           </div>

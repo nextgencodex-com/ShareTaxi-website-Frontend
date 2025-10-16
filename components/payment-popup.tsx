@@ -3,22 +3,30 @@
 import { useState } from "react"
 import emailjs from '@emailjs/browser'
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+// Avatar components not used here — omitted to avoid lint warnings
 import { X, MapPin, Clock, Users, Mail, MessageCircle, ArrowLeft } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { SharedRideConfirmationPopup } from "./shared-ride-confirmation-popup"
-import { calculateTotalPrice, getPerKmRate, getTripMultiplier, PER_SEAT_RATE_USD, formatPriceUSD, getPassengerCountCategory, calculateProgressiveSharedTotal, calculateProgressiveSeatPrice } from "@/lib/pricing"
+import { calculateTotalPrice, getPerKmRate, getTripMultiplier, PER_SEAT_RATE_USD, formatPriceUSD, calculateProgressiveSharedTotal } from "@/lib/pricing"
 import { useCallback } from "react"
 import { AlertTriangle } from "lucide-react"
 
 
 
 // Send Confirmation Email
-const sendConfirmationEmail = async (bookingData: any, personalData: any, rideData: any, isJoinRideFlow: boolean, selectedSeats?: number | null, seatsCount?: number, totalPrice?: string, perPersonFare?: string) => {
+const sendConfirmationEmail = async (bookingData?: BookingData | null, personalData?: PersonalData | null, rideData?: RideData | null, isJoinRideFlow?: boolean, selectedSeats?: number | null, seatsCount?: number, totalPrice?: string, perPersonFare?: string) => {
   try {
     // Extract pricing information
     let extractedPerPersonFare = perPersonFare || "N/A"
-    let extractedSeats = seatsCount || parseInt(String(personalData?.seatCount || "1"), 10)
+    const getSeatCount = (pd?: PersonalData | null): number => {
+      if (!pd) return 1
+  const maybeSeat = (pd as unknown as Record<string, unknown>)['seatCount']
+  if (typeof maybeSeat === 'number') return maybeSeat
+  if (typeof maybeSeat === 'string' && maybeSeat.trim() !== '' && !isNaN(Number(maybeSeat))) return parseInt(maybeSeat, 10)
+      return 1
+    }
+
+    const extractedSeats = seatsCount || getSeatCount(personalData)
     let extractedTotal = totalPrice || "N/A"
 
     // If pricing wasn't passed in, try to extract from calculatedFare
@@ -61,9 +69,21 @@ const sendConfirmationEmail = async (bookingData: any, personalData: any, rideDa
     )
     console.log('Confirmation email sent successfully:', result)
     alert('Confirmation email sent successfully!')
-  } catch (error: any) {
+  } catch (error) {
+    const extractErrorText = (e: unknown): string => {
+      if (!e) return 'Unknown error'
+      if (typeof e === 'string') return e
+      if (e instanceof Error) return e.message
+      if (typeof e === 'object' && e !== null) {
+        const r = e as Record<string, unknown>
+        const maybe = r['text'] ?? r['message']
+        if (typeof maybe === 'string') return maybe
+      }
+      return 'Unknown error'
+    }
+
     console.error('Failed to send confirmation email:', error)
-    alert(`Failed to send confirmation email: ${error?.text || 'Unknown error'}`)
+    alert(`Failed to send confirmation email: ${extractErrorText(error)}`)
   }
 }
 
@@ -130,10 +150,11 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
   
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [confirmationMessage, setConfirmationMessage] = useState("")
+  const [bookingInProgress, setBookingInProgress] = useState(false)
 
   // Validation state
   const [validationErrors, setValidationErrors] = useState<string[]>([])
-  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
+  // submit attempt flag removed (was unused)
 
   // Validation functions
   const validateBookingData = () => {
@@ -182,10 +203,20 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
     }
 
     // Seat count validation
-    const seatCount = isJoinRideFlow ? selectedSeats : parseInt(String(personalData.seatCount || "1"), 10)
+    const seatCount = isJoinRideFlow ? (selectedSeats || 1) : parseInt(String(personalData.seatCount || "1"), 10)
     console.log('Seat count validation - seatCount:', seatCount, 'selectedSeats:', selectedSeats, 'personalData.seatCount:', personalData.seatCount)
     if (!seatCount || seatCount < 1 || seatCount > 20) {
       errors.push("Seat count must be between 1 and 20")
+    }
+
+    // If this is a join-ride flow, ensure we don't allow booking more seats than available
+    if (isJoinRideFlow && rideData) {
+      const available = typeof (rideData.seats && rideData.seats.available) === 'number' ? Number(rideData.seats.available) : 0
+      if (available <= 0) {
+        errors.push('No seats are available for this ride')
+      } else if (seatCount > available) {
+        errors.push(`Only ${available} seat${available > 1 ? 's' : ''} available for this ride`) 
+      }
     }
 
     console.log('Validation completed - errors:', errors)
@@ -223,12 +254,7 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
     return errors
   }
 
-  // Assigned driver data - in real app this would come from booking data
-  const mockDriver = {
-    name: "Your Assigned Driver",
-    image: "/professional-driver-headshot.jpg",
-    vehicle: "Assigned Vehicle",
-  }
+  // Assigned driver data could be provided later by backend
 
   const addUserSharedRide = useCallback(async () => {
     if (!bookingData || !personalData || bookingData.rideType !== 'shared') return null
@@ -240,6 +266,7 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
     const newRide = {
       id: Date.now(),
       timeAgo: "Just now",
+      pickupDate: bookingData.date || "",
       postedDate: new Date(),
       frequency: "one-time",
       driver: {
@@ -262,17 +289,100 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
         total: totalSeats,
       },
       price: `$${PER_SEAT_RATE_USD}.00`,
+      // persist contact info so admin can contact the user who created the ride
+      customerEmail: personalData.email,
+      customerPhone: personalData.phone,
+      customerName: personalData.fullName,
+      // keep original booking + personal data for admin inspection
+      rawPayload: { bookingData, personalData },
     }
 
+    // POST new shared ride to backend instead of localStorage
     try {
-      const storedUserRides = localStorage.getItem('userAddedRides')
-      const existingRides = storedUserRides ? JSON.parse(storedUserRides) : []
-      const updatedRides = [...existingRides, newRide]
-      localStorage.setItem('userAddedRides', JSON.stringify(updatedRides))
-      // Dispatch custom event to notify page.tsx of the change
-      window.dispatchEvent(new CustomEvent('userRideAdded'))
+      const res = await fetch('http://localhost:5000/api/shared-rides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRide)
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('Failed to create shared ride on server:', res.status, text)
+        return null
+      }
+
+      const data = await res.json()
+      // Dispatch event to notify other components
+      try { window.dispatchEvent(new CustomEvent('userRideAdded', { detail: data })) } catch {}
+      try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: data })) } catch {}
+      return data
     } catch (error) {
       console.error('Error adding user shared ride:', error)
+      return null
+    }
+  }, [bookingData, personalData])
+
+  const addUserPersonalRide = useCallback(async () => {
+    if (!bookingData || !personalData || bookingData.rideType !== 'personal') return null
+
+    const seatCount = parseInt(String(personalData.seatCount || "1"), 10)
+    const totalSeats = 6 // Standard vehicle capacity
+    const availableSeats = Math.max(0, totalSeats - seatCount)
+
+    const newRide = {
+      id: Date.now(),
+      timeAgo: "Just now",
+      pickupDate: bookingData.date || "",
+      postedDate: new Date(),
+      frequency: "one-time",
+      driver: {
+        name: personalData.fullName || "User Driver",
+        image: "/professional-driver-headshot.jpg",
+      },
+      vehicle: "Assigned Vehicle",
+      pickup: {
+        location: bookingData.from || "",
+        type: "Pickup point",
+      },
+      destination: {
+        location: bookingData.to || "",
+        type: "Destination",
+      },
+      time: bookingData.time || "",
+      duration: bookingData.mapDuration || "45 min",
+      seats: {
+        available: availableSeats,
+        total: totalSeats,
+      },
+      price: `$${PER_SEAT_RATE_USD}.00`,
+      customerEmail: personalData.email,
+      customerPhone: personalData.phone,
+      customerName: personalData.fullName,
+      rawPayload: { bookingData, personalData },
+    }
+
+    // POST new personal ride to backend instead of localStorage
+    try {
+      const res = await fetch('http://localhost:5000/api/personal-rides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRide)
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('Failed to create shared ride on server:', res.status, text)
+        return null
+      }
+
+      const data = await res.json()
+      // Dispatch event to notify other components
+      try { window.dispatchEvent(new CustomEvent('userRideAdded', { detail: data })) } catch {}
+      try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: data })) } catch {}
+      return data
+    } catch (error) {
+      console.error('Error adding user shared ride:', error)
+      return null
     }
   }, [bookingData, personalData])
 
@@ -280,52 +390,98 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
 
   const isJoinRideFlow = !!rideData
 
-  // Function to save booked ride to localStorage
-  const saveBookedRide = () => {
-    if (!bookingData || !personalData) return
+  // Function to persist booked ride to backend (replaces localStorage)
+  const saveBookedRide = async () => {
+    if (!personalData) return null
 
-    const bookedRide = {
-      id: Date.now(),
-      timeAgo: "Just now",
-      postedDate: new Date(),
-      frequency: "one-time",
-      driver: {
-        name: personalData.fullName,
-        image: "/placeholder-user.jpg"
-      },
-      vehicle: bookingData.rideType === "shared" ? "Shared Vehicle" : "Private Vehicle",
-      pickup: {
-        location: bookingData.from || "N/A",
-        type: "Pickup point"
-      },
-      destination: {
-        location: bookingData.to || "N/A",
-        type: "Destination"
-      },
-      time: bookingData.time || "N/A",
-      duration: bookingData.mapDuration || "TBD",
-      seats: {
-        available: bookingData.rideType === "shared" ? parseInt(String(personalData.seatCount)) : 0,
-        total: bookingData.rideType === "shared" ? parseInt(String(personalData.seatCount)) : 1
-      },
-      price: bookingData.calculatedFare ? "Calculated" : "$15.00",
-      bookingId: `BK-${Date.now()}`,
-      customerEmail: personalData.email,
-      customerPhone: personalData.phone,
-      specialRequests: personalData.specialRequests || "None"
+    // Build booked ride either from bookingData (regular flow) or rideData (join flow)
+    let bookedRide: Record<string, unknown>
+
+    if (bookingData) {
+      bookedRide = {
+        id: Date.now(),
+        timeAgo: "Just now",
+        postedDate: new Date(),
+        frequency: "one-time",
+        driver: {
+          name: personalData.fullName,
+          image: "/placeholder-user.jpg"
+        },
+        vehicle: bookingData.rideType === "shared" ? "Shared Vehicle" : "Private Vehicle",
+        pickup: {
+          location: bookingData.from || "N/A",
+          type: "Pickup point"
+        },
+        destination: {
+          location: bookingData.to || "N/A",
+          type: "Destination"
+        },
+        time: bookingData.time || "N/A",
+        duration: bookingData.mapDuration || "TBD",
+        seats: {
+          available: bookingData.rideType === "shared" ? parseInt(String(personalData.seatCount)) : 0,
+          total: bookingData.rideType === "shared" ? parseInt(String(personalData.seatCount)) : 1
+        },
+        price: bookingData.calculatedFare ? "Calculated" : "$15.00",
+        bookingId: `BK-${Date.now()}`,
+        customerEmail: personalData.email,
+        customerPhone: personalData.phone,
+        specialRequests: personalData.specialRequests || "None",
+        // include both booking and personal data so admin can inspect contact info
+        rawPayload: { bookingData, personalData }
+      }
+    } else if (rideData) {
+      // join-ride flow: construct from rideData + personalData + selectedSeats
+      const seatsRequested = selectedSeats || parseInt(String(personalData.seatCount || '1'), 10)
+      bookedRide = {
+        id: Date.now(),
+        timeAgo: "Just now",
+        postedDate: new Date(),
+        frequency: "one-time",
+        driver: rideData.driver || { name: personalData.fullName, image: "/placeholder-user.jpg" },
+        vehicle: rideData.vehicle || "Shared Vehicle",
+        pickup: rideData.pickup || { location: "N/A", type: "Pickup point" },
+        destination: rideData.destination || { location: "N/A", type: "Destination" },
+        time: rideData.time || "N/A",
+        duration: rideData.duration || "TBD",
+        seats: {
+          available: Math.max(0, (rideData.seats?.available || 0) - seatsRequested),
+          total: rideData.seats?.total || seatsRequested
+        },
+        price: rideData.price || formatPriceUSD(calculateProgressiveSharedTotal(seatsRequested)),
+        bookingId: `BK-${Date.now()}`,
+        customerEmail: personalData.email,
+        customerPhone: personalData.phone,
+        specialRequests: personalData.specialRequests || "None",
+        // include personalData with join-ride payload so admin sees contact info
+        rawPayload: { rideId: rideData.id, seatsRequested, personalData }
+      }
+    } else {
+      return null
     }
 
-    // Get existing booked rides
-    const existingBookedRides = JSON.parse(localStorage.getItem('bookedRides') || '[]')
-    
-    // Add new booked ride at the beginning (newest first)
-    const updatedBookedRides = [bookedRide, ...existingBookedRides]
-    
-    // Save to localStorage
-    localStorage.setItem('bookedRides', JSON.stringify(updatedBookedRides))
-    
-    // Dispatch custom event to notify other components
-    window.dispatchEvent(new CustomEvent('rideBooked', { detail: bookedRide }))
+    try {
+      // Choose endpoint based on ride type: personal rides go to /api/personal-rides
+      const endpoint = bookingData && bookingData.rideType === 'personal' ? 'http://localhost:5000/api/personal-rides' : 'http://localhost:5000/api/shared-rides'
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bookedRide)
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('Failed to save booked ride to server:', res.status, text)
+        return null
+      }
+
+      const data = await res.json()
+      try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: data })) } catch {}
+      return data
+    } catch (err) {
+      console.error('Error saving booked ride to server:', err)
+      return null
+    }
   }
 
   const handleEmailBooking = async () => {
@@ -334,8 +490,7 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
     console.log('Email booking clicked - personalData:', personalData)
     console.log('Email booking clicked - selectedSeats:', selectedSeats)
     
-    // Set submit attempt flag
-    setHasAttemptedSubmit(true)
+  // Set submit attempt flag (tracked via validationErrors state)
 
     // Run validation
     const errors = validateBookingData()
@@ -350,11 +505,13 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
     // Clear any previous errors
     setValidationErrors([])
 
-    // Always call addUserSharedRide if this is a shared ride booking, regardless of join flow
+    // Always call addUserSharedRide if this is a shared ride booking and user is creating a new shared ride
+    // If it creates successfully, we'll avoid calling saveBookedRide() later to prevent duplicate persisted records
+    let createdSharedRide: unknown | null = null
     if (bookingData?.rideType === 'shared' && !isJoinRideFlow) {
-      const created = await addUserSharedRide()
+      createdSharedRide = await addUserSharedRide()
       // If creation failed, stop the flow so user can retry
-      if (created === null) return
+      if (createdSharedRide === null) return
     }
 
   let bookingDetails = ""
@@ -362,79 +519,98 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
     if (isJoinRideFlow) {
       // For shared rides, simulate booking success, update seats, show confirmation
       console.log('Email booking - onUpdateSeats:', onUpdateSeats, 'rideData:', rideData, 'selectedSeats:', selectedSeats)
-      if (onUpdateSeats && rideData && selectedSeats) {
-        console.log('Calling onUpdateSeats with rideData.id:', rideData.id, 'selectedSeats:', selectedSeats)
-        onUpdateSeats(rideData.id, selectedSeats)
+      if (rideData && personalData) {
+        const seatsToBook = selectedSeats || parseInt(String(personalData.seatCount || '1'), 10) || 1
 
-        // Extract pricing for shared rides
-        let extractedSeats = selectedSeats || 1;
-        let extractedTotal = "N/A";
-        let extractedPerPersonFare = "N/A";
-
-        if (bookingData?.calculatedFare) {
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = bookingData.calculatedFare;
-          const perPersonElement = tempDiv.querySelector('[style*="color:green"]');
-          const totalElement = tempDiv.querySelector('[style*="color:blue"]');
-          if (perPersonElement) extractedPerPersonFare = perPersonElement.textContent || "N/A";
-          if (totalElement) extractedTotal = totalElement.textContent || "N/A";
+        // Double-check availability client-side before sending request
+        const availableNow = typeof (rideData.seats && rideData.seats.available) === 'number' ? Number(rideData.seats.available) : 0
+        if (availableNow <= 0) {
+          setValidationErrors(['No seats are available for this ride'])
+          return
+        }
+        if (seatsToBook > availableNow) {
+          setValidationErrors([`Only ${availableNow} seat${availableNow > 1 ? 's' : ''} available for this ride`])
+          return
         }
 
-        // Create email booking message for join ride
-        const joinRideEmailDetails = `
-Taxi Booking Request
+        setBookingInProgress(true)
+        try {
+          // Call backend booking endpoint
+          const res = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}/book`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              passengerName: personalData.fullName,
+              passengerPhone: personalData.phone,
+              seatsBooked: seatsToBook
+            })
+          })
 
-Route: ${rideData?.pickup?.location || "N/A"} → ${rideData?.destination?.location || "N/A"}
-Date: ${rideData?.time ? rideData.time.split(' ')[0] : "N/A"}
-Time: ${rideData?.time ? rideData.time.split(' ')[1] + ' ' + rideData.time.split(' ')[2] : "N/A"}
-Type: Shared, One Way Ride
+          setBookingInProgress(false)
 
-Personal Details:
-• Name: ${personalData?.fullName || "N/A"}
-• Email: ${personalData?.email || "N/A"}
-• Phone: ‪+94${personalData?.phone || "N/A"}‬
-• Seats: ${selectedSeats}
+          if (!res.ok) {
+            // Try to extract error message
+            let errText = await res.text()
+            try { const json = JSON.parse(errText); errText = json.message || JSON.stringify(json) } catch {}
+            console.error('Booking API failed:', res.status, errText)
+            setValidationErrors([`Failed to book seat: ${errText}`])
+            return
+          }
 
-Special Requests: ${personalData?.specialRequests || "None"}
+          const result = await res.json()
 
-Price: $${extractedPerPersonFare} for ${selectedSeats} persons
+          // Notify parent/UI to update seats
+          if (onUpdateSeats) onUpdateSeats(rideData.id, seatsToBook)
 
-Please confirm this booking. Thank you!
-        `.trim()
-        
-        console.log('Generated email message:', joinRideEmailDetails)
+          // Dispatch event for other listeners
+          try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: result })) } catch {}
 
-        // Send email booking (using the same format as WhatsApp but via email)
-        const emailSubject = `Join Shared Ride Request - ${rideData?.pickup?.location || "Unknown"} to ${rideData?.destination?.location || "Unknown"}`
-        const emailLink = `mailto:contact@nextgcodex.com?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(joinRideEmailDetails)}`
-        console.log('Email link:', emailLink)
-        window.open(emailLink, "_blank")
+          // Prepare and open email links and confirmation as before
+          const extractedSeats = seatsToBook
+          let extractedTotal = 'N/A'
+          let extractedPerPersonFare = 'N/A'
+          if (bookingData?.calculatedFare) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = bookingData.calculatedFare;
+            const perPersonElement = tempDiv.querySelector('[style*="color:green"]');
+            const totalElement = tempDiv.querySelector('[style*="color:blue"]');
+            if (perPersonElement) extractedPerPersonFare = perPersonElement.textContent || 'N/A';
+            if (totalElement) extractedTotal = totalElement.textContent || 'N/A';
+          }
 
-        // Send confirmation email to customer
-        const customerEmailSubject = "Thanks for choosing us — Your Booking Has Been Received"
-        const customerEmailLink = `mailto:${personalData?.email}?subject=${encodeURIComponent(customerEmailSubject)}&body=${encodeURIComponent(joinRideEmailDetails)}`
-        window.open(customerEmailLink, "_blank")
+          const joinRideEmailDetails = `\nTaxi Booking Request\n\nRoute: ${rideData?.pickup?.location || 'N/A'} → ${rideData?.destination?.location || 'N/A'}\nDate: ${rideData?.time ? rideData.time.split(' ')[0] : 'N/A'}\nTime: ${rideData?.time ? rideData.time.split(' ')[1] + ' ' + rideData.time.split(' ')[2] : 'N/A'}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${personalData?.fullName || 'N/A'}\n• Email: ${personalData?.email || 'N/A'}\n• Phone: ‪+94${personalData?.phone || 'N/A'}‬\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${personalData?.specialRequests || 'None'}\n\nPrice: $${extractedPerPersonFare} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim()
 
-        // Send confirmation email after booking confirmation
-        await sendConfirmationEmail(bookingData, personalData, rideData, true, selectedSeats, extractedSeats, extractedTotal, extractedPerPersonFare)
-        
-        setConfirmationMessage("Your booking request has been sent via Email! We will contact you soon to confirm your ride.")
-        setShowConfirmation(true)
+          const emailSubject = `Join Shared Ride Request - ${rideData?.pickup?.location || 'Unknown'} to ${rideData?.destination?.location || 'Unknown'}`
+          const emailLink = `mailto:contact@nextgcodex.com?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(joinRideEmailDetails)}`
+          window.open(emailLink, '_blank')
 
-        // Save the booked ride to localStorage
-        saveBookedRide()
-        
-        // Close the form after successful booking and refresh the page
-        setTimeout(() => {
-          onClose()
-          window.location.reload()
-        }, 2000)
+          // Send confirmation email to customer
+          const customerEmailSubject = 'Thanks for choosing us — Your Booking Has Been Received'
+          const customerEmailLink = `mailto:${personalData?.email}?subject=${encodeURIComponent(customerEmailSubject)}&body=${encodeURIComponent(joinRideEmailDetails)}`
+          window.open(customerEmailLink, '_blank')
+
+          await sendConfirmationEmail(bookingData, personalData, rideData, true, seatsToBook, extractedSeats, extractedTotal, extractedPerPersonFare)
+
+          setConfirmationMessage('Your booking request has been sent via Email! We will contact you soon to confirm your ride.')
+          setShowConfirmation(true)
+
+          // Close the form after successful booking and refresh the page
+          setTimeout(() => {
+            onClose()
+            window.location.reload()
+          }, 2000)
+        } catch (error) {
+          setBookingInProgress(false)
+          console.error('Error booking shared ride:', error)
+          setValidationErrors([`Error booking seat: ${error instanceof Error ? error.message : String(error)}`])
+          return
+        }
       }
     } else {
-      const rideTypeFormatted = bookingData?.rideType ? bookingData.rideType.charAt(0).toUpperCase() + bookingData.rideType.slice(1) : "N/A"
-      const tripTypeFormatted = bookingData?.tripType ? bookingData.tripType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : "N/A"
+  // const rideTypeFormatted = bookingData?.rideType ? bookingData.rideType.charAt(0).toUpperCase() + bookingData.rideType.slice(1) : "N/A"
+  // const tripTypeFormatted = bookingData?.tripType ? bookingData.tripType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : "N/A"
 
-  const subject = `Taxi Booking Request - ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}`
+    // const subject = `Taxi Booking Request - ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}`
 
       // Extract price from calculated fare HTML - prioritize total price (blue) over per-person (green)
       let priceText = "Price not calculated"
@@ -476,9 +652,9 @@ Price: $${priceText.replace('$', '')} for ${personalData?.seatCount} persons
 Please confirm this booking. Thank you!
       `.trim()
 
-      // Send booking request to company
-      const mailtoLink = `mailto:contact@nextgcodex.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bookingDetails)}`
-      window.open(mailtoLink, "_blank")
+  // Send booking request to company
+  const mailtoLink = `mailto:contact@nextgcodex.com?subject=${encodeURIComponent(`Taxi Booking Request - ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}`)}&body=${encodeURIComponent(bookingDetails)}`
+  window.open(mailtoLink, "_blank")
 
       // Send confirmation email to customer
       const customerEmailSubject = "Thanks for choosing us — Your Booking Has Been Received"
@@ -490,7 +666,7 @@ Please confirm this booking. Thank you!
   const regularTotal = priceText;
   let regularPerPersonFare = "N/A";
 
-      // For shared rides, extract per person fare
+  // For shared rides, extract per person fare
       if (bookingData?.rideType === "shared" && bookingData?.calculatedFare) {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = bookingData.calculatedFare;
@@ -501,9 +677,11 @@ Please confirm this booking. Thank you!
       }
 
       await sendConfirmationEmail(bookingData, personalData, rideData, false, selectedSeats, regularSeats, regularTotal, regularPerPersonFare)
-      
-      // Save the booked ride to localStorage
-      saveBookedRide()
+
+      // Persist booked ride unless we already created the shared ride above
+      if (!createdSharedRide) {
+        await saveBookedRide()
+      }
       
       // Show confirmation and close form after successful booking
       setConfirmationMessage("Your booking request has been sent via email! We will contact you soon to confirm your ride.")
@@ -523,8 +701,7 @@ Please confirm this booking. Thank you!
     console.log('WhatsApp booking clicked - personalData:', personalData)
     console.log('WhatsApp booking clicked - selectedSeats:', selectedSeats)
     
-    // Set submit attempt flag
-    setHasAttemptedSubmit(true)
+  // Set submit attempt flag (tracked via validationErrors state)
 
     // Run validation
     const errors = validateBookingData()
@@ -544,84 +721,90 @@ Please confirm this booking. Thank you!
       const created = await addUserSharedRide()
       if (created === null) return
     }
+    if (bookingData?.rideType === 'personal' && !isJoinRideFlow) {
+      const created = await addUserPersonalRide()
+      if (created === null) return
+    }
 
   let bookingDetails = ""
 
     if (isJoinRideFlow) {
       // For shared rides, simulate booking success, update seats, show confirmation
       console.log('WhatsApp booking - onUpdateSeats:', onUpdateSeats, 'rideData:', rideData, 'selectedSeats:', selectedSeats)
-      if (onUpdateSeats && rideData && selectedSeats) {
-        console.log('Calling onUpdateSeats with rideData.id:', rideData.id, 'selectedSeats:', selectedSeats)
-        onUpdateSeats(rideData.id, selectedSeats)
+      if (rideData && personalData) {
+        const seatsToBook = selectedSeats || parseInt(String(personalData.seatCount || '1'), 10) || 1
 
-        // Extract pricing for shared rides
-        let whatsappSeats = selectedSeats || 1;
-        let whatsappTotal = "N/A";
-        let whatsappPerPersonFare = "N/A";
+        try {
+          // Call backend booking endpoint
+          const res = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}/book`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              passengerName: personalData.fullName,
+              passengerPhone: personalData.phone,
+              seatsBooked: seatsToBook
+            })
+          })
 
-        if (bookingData?.calculatedFare) {
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = bookingData.calculatedFare;
-          const perPersonElement = tempDiv.querySelector('[style*="color:green"]');
-          const totalElement = tempDiv.querySelector('[style*="color:blue"]');
-          if (perPersonElement) whatsappPerPersonFare = perPersonElement.textContent || "N/A";
-          if (totalElement) whatsappTotal = totalElement.textContent || "N/A";
+          if (!res.ok) {
+            let errText = await res.text()
+            try { const json = JSON.parse(errText); errText = json.message || JSON.stringify(json) } catch {}
+            console.error('Booking API failed:', res.status, errText)
+            setValidationErrors([`Failed to book seat: ${errText}`])
+            return
+          }
+
+          const result = await res.json()
+
+          // Notify parent/UI to update seats
+          if (onUpdateSeats) onUpdateSeats(rideData.id, seatsToBook)
+
+          // Dispatch event for other listeners
+          try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: result })) } catch {}
+
+          // Prepare WhatsApp message
+          const whatsappSeats = seatsToBook
+          let whatsappTotal = 'N/A'
+          let whatsappPerPersonFare = 'N/A'
+          if (bookingData?.calculatedFare) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = bookingData.calculatedFare;
+            const perPersonElement = tempDiv.querySelector('[style*="color:green"]');
+            const totalElement = tempDiv.querySelector('[style*="color:blue"]');
+            if (perPersonElement) whatsappPerPersonFare = perPersonElement.textContent || 'N/A';
+            if (totalElement) whatsappTotal = totalElement.textContent || 'N/A';
+          }
+
+          const joinRideDetails = `\nTaxi Booking Request\n\nRoute: ${rideData?.pickup?.location || 'N/A'} → ${rideData?.destination?.location || 'N/A'}\nDate: ${rideData?.time ? rideData.time.split(' ')[0] : 'N/A'}\nTime: ${rideData?.time ? rideData.time.split(' ')[1] + ' ' + rideData.time.split(' ')[2] : 'N/A'}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${personalData?.fullName || 'N/A'}\n• Email: ${personalData?.email || 'N/A'}\n• Phone: ‪+94${personalData?.phone || 'N/A'}‬\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${personalData?.specialRequests || 'None'}\n\nPrice: $${whatsappPerPersonFare} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim()
+
+          const whatsappLink = `https://wa.me/94759627589?text=${encodeURIComponent(joinRideDetails)}`
+          window.open(whatsappLink, '_blank')
+
+          // Send confirmation email to customer
+          const customerEmailSubject = 'Thanks for choosing us — Your Booking Has Been Received'
+          const customerEmailLink = `mailto:${personalData?.email}?subject=${encodeURIComponent(customerEmailSubject)}&body=${encodeURIComponent(joinRideDetails)}`
+          window.open(customerEmailLink, '_blank')
+
+          await sendConfirmationEmail(bookingData, personalData, rideData, true, seatsToBook, whatsappSeats, whatsappTotal, whatsappPerPersonFare)
+
+          setConfirmationMessage('Your booking request has been sent via WhatsApp! We will contact you soon to confirm your ride.')
+          setShowConfirmation(true)
+
+          setTimeout(() => {
+            onClose()
+            window.location.reload()
+          }, 2000)
+        } catch (error) {
+          console.error('Error booking shared ride:', error)
+          setValidationErrors([`Error booking seat: ${error instanceof Error ? error.message : String(error)}`])
+          return
         }
-
-        // Create WhatsApp message for join ride
-        const joinRideDetails = `
-Taxi Booking Request
-
-Route: ${rideData?.pickup?.location || "N/A"} → ${rideData?.destination?.location || "N/A"}
-Date: ${rideData?.time ? rideData.time.split(' ')[0] : "N/A"}
-Time: ${rideData?.time ? rideData.time.split(' ')[1] + ' ' + rideData.time.split(' ')[2] : "N/A"}
-Type: Shared, One Way Ride
-
-Personal Details:
-• Name: ${personalData?.fullName || "N/A"}
-• Email: ${personalData?.email || "N/A"}
-• Phone: ‪+94${personalData?.phone || "N/A"}‬
-• Seats: ${selectedSeats}
-
-Special Requests: ${personalData?.specialRequests || "None"}
-
-Price: $${whatsappPerPersonFare} for ${selectedSeats} persons
-
-Please confirm this booking. Thank you!
-        `.trim()
-        
-        console.log('Generated WhatsApp message:', joinRideDetails)
-
-        // Send WhatsApp message
-        const whatsappLink = `https://wa.me/94759627589?text=${encodeURIComponent(joinRideDetails)}`
-        console.log('WhatsApp link:', whatsappLink)
-        window.open(whatsappLink, "_blank")
-
-        // Send confirmation email to customer
-        const customerEmailSubject = "Thanks for choosing us — Your Booking Has Been Received"
-        const customerEmailLink = `mailto:${personalData?.email}?subject=${encodeURIComponent(customerEmailSubject)}&body=${encodeURIComponent(joinRideDetails)}`
-        window.open(customerEmailLink, "_blank")
-
-        // Send confirmation email after booking confirmation
-        await sendConfirmationEmail(bookingData, personalData, rideData, true, selectedSeats, whatsappSeats, whatsappTotal, whatsappPerPersonFare)
-        
-        setConfirmationMessage("Your booking request has been sent via WhatsApp! We will contact you soon to confirm your ride.")
-        setShowConfirmation(true)
-
-        // Save the booked ride to localStorage
-        saveBookedRide()
-        
-        // Close the form after successful booking and refresh the page
-        setTimeout(() => {
-          onClose()
-          window.location.reload()
-        }, 2000)
       }
     } else {
-      const rideTypeFormatted = bookingData?.rideType ? bookingData.rideType.charAt(0).toUpperCase() + bookingData.rideType.slice(1) : "N/A"
-      const tripTypeFormatted = bookingData?.tripType ? bookingData.tripType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : "N/A"
+  // const rideTypeFormatted = bookingData?.rideType ? bookingData.rideType.charAt(0).toUpperCase() + bookingData.rideType.slice(1) : "N/A"
+  // const tripTypeFormatted = bookingData?.tripType ? bookingData.tripType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : "N/A"
 
-      const subject = `Taxi Booking Request - ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}`
+  // const subject = `Taxi Booking Request - ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}`
 
       // Extract price from calculated fare HTML - prioritize total price (blue) over per-person (green)
       let priceText = "Price not calculated"
@@ -675,8 +858,8 @@ Please confirm this booking. Thank you!
       // Send confirmation email to customer immediately
       await sendConfirmationEmail(bookingData, personalData, rideData, false, selectedSeats)
       
-      // Save the booked ride to localStorage
-      saveBookedRide()
+  // Save the booked ride to backend
+  // await saveBookedRide()
       
       // Show confirmation and close form after successful booking
       setConfirmationMessage("Your booking request has been sent via WhatsApp! We will contact you soon to confirm your ride.")
@@ -725,7 +908,7 @@ Please confirm this booking. Thank you!
       const progressiveTotal = calculateProgressiveSharedTotal(seats);
       totalPrice = progressiveTotal;
     } else {
-      const seatCost = PER_SEAT_RATE_USD * seats;
+  // const seatCost = PER_SEAT_RATE_USD * seats;
       totalPrice = calculateTotalPrice(distance, seats, passengersNum, (bookingData?.tripType as "one-way" | "round-trip" | "multi-city") || "one-way");
     }
 
@@ -917,6 +1100,7 @@ Please confirm this booking. Thank you!
 
               <Button
                 onClick={handleEmailBooking}
+                disabled={bookingInProgress}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white h-14 text-lg font-semibold rounded-2xl flex items-center justify-center gap-3"
               >
                 <Mail className="h-5 w-5" />
@@ -925,6 +1109,7 @@ Please confirm this booking. Thank you!
 
               <Button
                 onClick={handleWhatsAppBooking}
+                disabled={bookingInProgress}
                 className="w-full bg-green-600 hover:bg-green-700 text-white h-14 text-lg font-semibold rounded-2xl flex items-center justify-center gap-3"
               >
                 <MessageCircle className="h-5 w-5" />

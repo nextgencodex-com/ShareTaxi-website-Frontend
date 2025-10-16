@@ -20,53 +20,14 @@ interface Vehicle {
   gradient?: string
   buttonColor?: string
 }
-
 interface VehicleOptionsSectionProps {
+  // kept for compatibility but ignored by this component per product decision
   initialVehicles?: Vehicle[]
 }
 
-const DEFAULT_VEHICLES: Vehicle[] = [
-  {
-    id: 1,
-    name: "Toyota Iva",
-    price: "$6/ hour",
-    passengers: "5-6",
-    luggage: "X 1 Big",
-    handCarry: "X 3 Hand",
-    image: "/toyota-innova-white-mpv-car.jpg",
-    features: ["Air Conditioning", "GPS Navigation", "USB Charging"],
-    gradient: "bg-gradient-to-br from-yellow-400 to-orange-500",
-    buttonColor: "bg-gray-600 hover:bg-gray-700",
-  },
-  {
-    id: 2,
-    name: "Toyota Alphard",
-    price: "$9/ hour",
-    passengers: "5-6",
-    luggage: "X 2 Big",
-    handCarry: "X 4 Hand",
-    image: "/toyota-alphard-luxury-van.jpg",
-    features: ["Premium Interior", "Entertainment System", "Privacy Curtain"],
-    gradient: "bg-gradient-to-br from-orange-400 to-red-500",
-    buttonColor: "bg-gray-600 hover:bg-gray-700",
-  },
-  {
-    id: 3,
-    name: "Hyundai Starex",
-    price: "$12/ hour",
-    passengers: "7-8",
-    luggage: "X 2 Big",
-    handCarry: "X 4 Hand",
-    image: "/hyundai-starex-van.jpg",
-    features: ["Extra Space", "Family Friendly", "Comfortable Seating"],
-    gradient: "bg-gradient-to-br from-slate-500 to-slate-600",
-    buttonColor: "bg-gray-600 hover:bg-gray-700",
-  },
-]
-
 export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSectionProps) {
-  // use module-level default vehicles constant as a safe fallback
-  const [allVehicles, setAllVehicles] = useState<Vehicle[]>([...initialVehicles.map((vehicle: Vehicle) => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...DEFAULT_VEHICLES])
+  // Show only backend-provided vehicles. Do not render local/default vehicles.
+  const [allVehicles, setAllVehicles] = useState<Vehicle[]>([])
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   // Loading and error states to avoid ReferenceError during rendering
@@ -85,8 +46,8 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
     setLoading(true)
     setError(null)
 
-    const initVehicles = [...initialVehicles.map((vehicle: Vehicle) => ({ ...vehicle, buttonColor: "bg-gray-600 hover:bg-gray-700" })), ...DEFAULT_VEHICLES]
-    setAllVehicles(initVehicles)
+    // Fetch vehicles from backend API. Do NOT populate UI from local defaults.
+    setAllVehicles([])
 
     // Attempt to fetch vehicles from backend API
     ;(async () => {
@@ -154,7 +115,8 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
         // keep defaults and surface a friendly error
         if (err instanceof Error) console.warn("Failed to fetch vehicles:", err.message)
         else console.warn("Failed to fetch vehicles:", err)
-        if (mounted) setError("Could not load vehicles from server; showing defaults.")
+        // We intentionally do not show local defaults. Surface an error and leave the list empty.
+        if (mounted) setError("Could not load vehicles from server.")
       } finally {
         if (mounted) setLoading(false)
       }

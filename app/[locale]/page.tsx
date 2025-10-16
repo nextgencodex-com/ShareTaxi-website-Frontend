@@ -98,7 +98,6 @@ export default function HomePage() {
           const available = typeof r.availableSeats === 'number' ? r.availableSeats : (typeof seatsObj.available === 'number' ? seatsObj.available : 0)
           const total = typeof r.totalSeats === 'number' ? r.totalSeats : (typeof seatsObj.total === 'number' ? seatsObj.total : 0)
           const priceVal = typeof r.price === 'number' ? `$${r.price.toFixed(2)}` : (typeof r.price === 'string' ? r.price : '')
-
           return {
             id,
             timeAgo: 'just now',

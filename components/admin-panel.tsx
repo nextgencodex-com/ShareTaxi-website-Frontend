@@ -144,6 +144,20 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   // ---- Dialog states ---
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<RideData | null>(null);
+  // Helper to safely extract a location string from either a string or an object like {location: string}
+  const formatLocation = (v: unknown) => {
+    if (!v && v !== 0) return 'N/A'
+    if (typeof v === 'string') return v
+    try {
+      const rec = v as Record<string, unknown>
+      if (rec && typeof rec.location === 'string') return rec.location
+      // Fallback to stringify simple objects
+      if (typeof rec === 'object') return String((rec.location as unknown) ?? JSON.stringify(rec))
+    } catch {
+      // ignore and fallback
+    }
+    return String(v)
+  }
 
   // ---- persisted lists (localStorage-backed) ----
   const [sharedRides, setSharedRides] = useState<RideData[]>([]);
@@ -168,6 +182,30 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     }
     return new Date().toISOString();
   };
+
+  // helper: format a value into a string suitable for <input type="datetime-local" /> (local timezone)
+  const formatToLocalDateTimeInput = (v: unknown) => {
+    try {
+      let d: Date;
+      if (typeof v === 'string' || v instanceof String) d = new Date(String(v));
+      else if (v instanceof Date) d = v;
+      else if (v && typeof (v as Record<string, unknown>).toDate === 'function') {
+        const asRec = v as { toDate?: () => Date };
+        d = typeof asRec.toDate === 'function' ? asRec.toDate() : new Date(String(v ?? ''));
+      } else d = new Date(String(v ?? ''));
+
+      if (isNaN(d.getTime())) return '';
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const year = d.getFullYear();
+      const month = pad(d.getMonth() + 1);
+      const day = pad(d.getDate());
+      const hours = pad(d.getHours());
+      const minutes = pad(d.getMinutes());
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
+  }
 
   // format phone (basic): accepts strings like '2222222222' and returns '222 222 2222' or with +94 if needed
   const formatPhone = (phone?: string | null) => {
@@ -200,21 +238,37 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       if (p) setPersonalRides(JSON.parse(p));
       if (vc) setVehicleCatalog(JSON.parse(vc));
 
-      const savedRate = localStorage.getItem("ratePerKm");
-      const savedLKRRate = localStorage.getItem("rateLKRPerKm");
-      const savedExchangeRate = localStorage.getItem("exchangeRate");
-
-      if (savedRate) {
-        const usdRate = parseFloat(savedRate);
-        setRatePerKm(usdRate.toString());
-        if (savedLKRRate && savedExchangeRate) {
-          setRateLKRPerKm(savedLKRRate);
-          setExchangeRate(savedExchangeRate);
-          setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM (Rs.${parseFloat(savedLKRRate).toFixed(2)})`);
-        } else {
-          setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM`);
+      // Load rates from backend if available
+      (async () => {
+        try {
+          const res = await fetch('http://localhost:5000/api/rates');
+          if (!res.ok) throw new Error(`API ${res.status}`);
+          const json = await res.json();
+          const rates = json?.data?.rates;
+          if (rates) {
+            setRatePerKm(String(rates.ratePerKm ?? ''));
+            setRateLKRPerKm(String(rates.rateLKRPerKm ?? ''));
+            setExchangeRate(String(rates.exchangeRate ?? ''));
+            setCurrentSavedRate(`Current Rate: $${Number(rates.ratePerKm).toFixed(2)} per KM (Rs.${Number(rates.rateLKRPerKm).toFixed(2)})`);
+          }
+        } catch {
+          // fall back to any stored local values if backend isn't available
+          const savedRate = localStorage.getItem("ratePerKm");
+          const savedLKRRate = localStorage.getItem("rateLKRPerKm");
+          const savedExchangeRate = localStorage.getItem("exchangeRate");
+          if (savedRate) {
+            const usdRate = parseFloat(savedRate);
+            setRatePerKm(usdRate.toString());
+            if (savedLKRRate && savedExchangeRate) {
+              setRateLKRPerKm(savedLKRRate);
+              setExchangeRate(savedExchangeRate);
+              setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM (Rs.${parseFloat(savedLKRRate).toFixed(2)})`);
+            } else {
+              setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM`);
+            }
+          }
         }
-      }
+      })();
     } catch (_e) {
       const err = _e as Error | string | null;
       console.error("Failed to load admin data:", err);
@@ -286,6 +340,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   // Fetch live shared rides from API and map to RideData; keep local storage as fallback
   const [sharedLoading, setSharedLoading] = useState<boolean>(false)
   const [sharedError, setSharedError] = useState<string | null>(null)
+  const [personalLoading, setPersonalLoading] = useState<boolean>(false)
+  const [personalError, setPersonalError] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -303,8 +359,15 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             const idVal = r.id
             const id = typeof idVal === 'number' ? idVal : Date.now() + Math.floor(Math.random() * 1000)
             const bookingId = typeof idVal === 'string' ? idVal : undefined
-            const timeRaw = r.time
-            const timeStr = typeof timeRaw === 'string' || typeof timeRaw === 'number' ? String(timeRaw) : new Date().toISOString()
+            // posted date may come as ISO string or Firestore timestamp-like object; normalize to ISO string
+            const postedRaw = r.postedDate ?? r.createdAt ?? r.time;
+            let postedDateIso: string;
+            if (typeof postedRaw === 'string') postedDateIso = postedRaw;
+            else if (postedRaw && typeof postedRaw === 'object') {
+              const p = postedRaw as Record<string, unknown>;
+              const secs = typeof p._seconds === 'number' ? p._seconds : (typeof p.seconds === 'number' ? p.seconds : undefined);
+              postedDateIso = typeof secs === 'number' ? new Date(secs * 1000).toISOString() : new Date().toISOString();
+            } else postedDateIso = new Date().toISOString();
             const seatsObj = (r.seats as Record<string, unknown>) || undefined
             const available = typeof r.availableSeats === 'number' ? r.availableSeats : (seatsObj && typeof seatsObj.available === 'number' ? (seatsObj.available as number) : 0)
             const total = typeof r.totalSeats === 'number' ? r.totalSeats : (seatsObj && typeof seatsObj.total === 'number' ? (seatsObj.total as number) : 0)
@@ -317,15 +380,18 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
               id,
               bookingId,
               timeAgo: "just now",
-              postedDate: timeStr,
+              postedDate: postedDateIso,
               frequency: typeof r.frequency === 'string' ? r.frequency : "one-time",
               status: typeof r.status === 'string' ? r.status : "Pending",
               driver: { name: typeof r.driverName === 'string' ? r.driverName : (driverObj && typeof driverObj.name === 'string' ? (driverObj.name as string) : "Unknown"), image: typeof r.driverImage === 'string' ? r.driverImage : (driverObj && typeof driverObj.image === 'string' ? (driverObj.image as string) : "/professional-driver-headshot.jpg") },
               vehicle: typeof r.vehicle === 'string' ? r.vehicle : "",
               pickup: { location: typeof r.pickupLocation === 'string' ? r.pickupLocation : (pickupObj && typeof pickupObj.location === 'string' ? (pickupObj.location as string) : ""), type: "Pickup point" },
               destination: { location: typeof r.destinationLocation === 'string' ? r.destinationLocation : (destObj && typeof destObj.location === 'string' ? (destObj.location as string) : ""), type: "Destination" },
-              time: new Date(timeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              // Prefer explicit time string from API (e.g. "12-2 AM"); otherwise derive from postedDate
+              time: typeof r.time === 'string' && String(r.time).trim() !== '' ? String(r.time) : new Date(postedDateIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               duration: typeof r.duration === 'string' ? r.duration : "",
+              // Preserve rawPayload so the View Details dialog can surface original frontend payload fields
+              rawPayload: (r.rawPayload ?? r) as Record<string, unknown>,
               seats: { available, total },
               passengers: typeof r.passengers === 'string' ? r.passengers : String(total || ""),
               handCarry: typeof r.handCarry === 'string' ? r.handCarry : "",
@@ -416,6 +482,73 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     return () => { mounted = false };
   }, []);
 
+  // Fetch personal bookings from API and map to RideData; keep local storage as fallback
+  useEffect(() => {
+    let mounted = true;
+    const fetchPersonal = async () => {
+      setPersonalLoading(true);
+      setPersonalError(null);
+      try {
+        const res = await fetch('http://localhost:5000/api/personal-rides');
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const json = await res.json();
+        const apiBookings = json?.data?.bookings as unknown;
+        if (Array.isArray(apiBookings) && mounted) {
+          const mapped: RideData[] = (apiBookings as Record<string, unknown>[]).map((raw) => {
+            const r = raw as Record<string, unknown>;
+            const idVal = r.id ?? r._id ?? r.bookingId ?? Date.now() + Math.floor(Math.random() * 1000);
+            const id = typeof idVal === 'number' ? idVal : Date.now() + Math.floor(Math.random() * 1000);
+            const bookingId = typeof r.bookingId === 'string' ? r.bookingId : (typeof r.id === 'string' ? r.id : undefined);
+            const posted = r.postedDate ?? r.createdAt ?? r.time ?? new Date().toISOString();
+            const postedDate = toISOStringSafe(posted);
+            const customerObj = (r.customer as Record<string, unknown>) || undefined;
+            const pickupObj = (r.pickup as Record<string, unknown>) || undefined;
+            const destObj = (r.destination as Record<string, unknown>) || undefined;
+            const driverObj = (r.driver as Record<string, unknown>) || undefined;
+            const seatsObj = (r.seats as Record<string, unknown>) || undefined;
+
+            const priceVal = typeof r.price === 'number' ? (r.price as number).toFixed(2) : (typeof r.price === 'string' ? r.price : undefined);
+
+            return {
+              id,
+              bookingId,
+              timeAgo: 'just now',
+              postedDate,
+              frequency: typeof r.frequency === 'string' ? r.frequency : 'one-time',
+              status: typeof r.status === 'string' ? r.status : 'Pending',
+              driver: { name: typeof r.driverName === 'string' ? r.driverName : (driverObj && typeof driverObj.name === 'string' ? (driverObj.name as string) : 'Company Driver'), image: driverObj && typeof driverObj.image === 'string' ? (driverObj.image as string) : '/professional-driver-headshot.jpg' },
+              vehicle: typeof r.vehicle === 'string' ? r.vehicle : (typeof r.vehicleName === 'string' ? r.vehicleName : ''),
+              notes: typeof r.notes === 'string' ? r.notes : undefined,
+              pickup: { location: typeof r.pickupLocation === 'string' ? r.pickupLocation : (pickupObj && typeof pickupObj.location === 'string' ? (pickupObj.location as string) : ''), type: 'Pickup point' },
+              destination: { location: typeof r.destinationLocation === 'string' ? r.destinationLocation : (destObj && typeof destObj.location === 'string' ? (destObj.location as string) : ''), type: 'Destination' },
+              time: typeof r.time === 'string' ? r.time : new Date(postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              duration: typeof r.duration === 'string' ? r.duration : '',
+              // Preserve rawPayload so the View Details dialog can surface original frontend payload fields
+              rawPayload: (r.rawPayload ?? r) as Record<string, unknown>,
+              seats: { available: typeof r.availableSeats === 'number' ? (r.availableSeats as number) : (seatsObj && typeof seatsObj.available === 'number' ? (seatsObj.available as number) : 0), total: typeof r.totalSeats === 'number' ? (r.totalSeats as number) : (seatsObj && typeof seatsObj.total === 'number' ? (seatsObj.total as number) : 0) },
+              passengers: typeof r.passengers === 'string' ? r.passengers : String((seatsObj && seatsObj.total) || ''),
+              handCarry: typeof r.handCarry === 'string' ? r.handCarry : '',
+              price: priceVal,
+              customer: { fullName: typeof customerObj?.fullName === 'string' ? (customerObj.fullName as string) : (typeof r.customerName === 'string' ? r.customerName : 'Private Customer'), email: typeof customerObj?.email === 'string' ? (customerObj.email as string) : (typeof r.customerEmail === 'string' ? r.customerEmail : 'N/A'), phone: typeof customerObj?.phone === 'string' ? (customerObj.phone as string) : (typeof r.customerPhone === 'string' ? r.customerPhone : 'N/A') },
+              type: 'personal',
+            } as RideData;
+          });
+
+          persistPersonalRides(mapped);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('Failed to load personal bookings from API:', msg);
+        if (mounted) setPersonalError(msg);
+      } finally {
+        if (mounted) setPersonalLoading(false);
+      }
+    };
+
+    fetchPersonal();
+    return () => { mounted = false };
+  }, []);
+
   /* ---------- Shared Ride / Vehicle Add handlers (reuse your original logic) ---------- */
   // For brevity we maintain simplified forms internal to this file but reuse validation spirit.
 
@@ -484,55 +617,134 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     setRideErrors(errors);
     if (Object.keys(errors).length > 0) return;
     setIsRideSubmitting(true);
-
-    setTimeout(() => {
-      const newRide: RideData = {
-        id: Date.now(),
-        bookingId: generateBookingId(),
-        timeAgo: "Just now",
-        postedDate: new Date().toISOString(),
-        frequency: rideForm.frequency,
-        driver: { name: "Admin Added", image: "/professional-driver-headshot.jpg" },
-        vehicle: "To be assigned",
-        pickup: { location: rideForm.pickupLocation.trim(), type: "Pickup point" },
-        destination: { location: rideForm.destinationLocation.trim(), type: "Destination" },
-        time: `${rideForm.rideDate} ${rideForm.pickupTime} ${rideForm.ampm}`,
-        duration: "TBD",
-        seats: { available: Number.parseInt(rideForm.availableSeats || "0"), total: Number.parseInt(rideForm.totalSeats || "0") },
-        passengers: "1",
+    (async () => {
+      // Construct payload for API
+      const payload = {
+        pickupLocation: rideForm.pickupLocation.trim(),
+        destinationLocation: rideForm.destinationLocation.trim(),
+        rideDate: rideForm.rideDate,
+        pickupTime: rideForm.pickupTime,
+        ampm: rideForm.ampm,
         luggage: rideForm.luggage,
         handCarry: rideForm.handCarry,
+        availableSeats: Number.parseInt(rideForm.availableSeats || '0'),
+        totalSeats: Number.parseInt(rideForm.totalSeats || '0'),
         price: rideForm.price,
-        customer: { fullName: "N/A", email: `user${Date.now()}@example.com`, phone: "N/A" },
-        type: "shared",
-      };
+        frequency: rideForm.frequency,
+        source: 'admin',
+      } as Record<string, unknown>;
 
-      // Persist locally
-      const updated = [newRide, ...sharedRides];
-      persistSharedRides(updated);
+      try {
+        const res = await fetch('http://localhost:5000/api/shared-rides', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
 
-      // call prop if given
-      onAddRide?.(newRide);
+        if (res.ok) {
+          const json = await res.json();
+          // Attempt to map server response into our RideData shape
+          const serverRide = json?.data?.ride as Record<string, unknown> | undefined;
+          const idVal = serverRide?.id ?? serverRide?._id ?? serverRide?.bookingId ?? Date.now();
+          const id = typeof idVal === 'number' ? idVal : Date.now();
+          const bookingId = typeof serverRide?.bookingId === 'string' ? serverRide?.bookingId : (typeof idVal === 'string' ? idVal : undefined);
 
-      // reset
-      setRideForm({
-        pickupLocation: "",
-        destinationLocation: "",
-        rideDate: "",
-        pickupTime: "",
-        ampm: "AM",
-        luggage: "0",
-        handCarry: "0",
-        availableSeats: "",
-        totalSeats: "",
-        price: "",
-        frequency: "one-time",
-      });
-      setIsRideSubmitting(false);
-      setActivePage("sharedRequests");
-      setRateStatus("✅ Shared ride added");
-      setTimeout(() => setRateStatus(""), 2500);
-    }, 600);
+          const persisted: RideData = {
+            id,
+            bookingId,
+            timeAgo: 'Just now',
+            postedDate: new Date().toISOString(),
+            frequency: rideForm.frequency,
+            driver: { name: 'Admin Added', image: '/professional-driver-headshot.jpg' },
+            vehicle: 'To be assigned',
+            pickup: { location: rideForm.pickupLocation.trim(), type: 'Pickup point' },
+            destination: { location: rideForm.destinationLocation.trim(), type: 'Destination' },
+            time: `${rideForm.rideDate} ${rideForm.pickupTime} ${rideForm.ampm}`,
+            duration: 'TBD',
+            seats: { available: Number.parseInt(String(payload.availableSeats || '0')), total: Number.parseInt(String(payload.totalSeats || '0')) },
+            passengers: '1',
+            luggage: rideForm.luggage,
+            handCarry: rideForm.handCarry,
+            price: rideForm.price,
+            customer: { fullName: 'N/A', email: `user${Date.now()}@example.com`, phone: 'N/A' },
+            type: 'shared',
+          };
+
+          // Persist the server-provided ride
+          persistSharedRides([persisted, ...sharedRides]);
+          onAddRide?.(persisted);
+        } else {
+          // On server error, fallback to local persist
+          console.warn('Server failed to create shared ride', res.status);
+          const fallback: RideData = {
+            id: Date.now(),
+            bookingId: generateBookingId(),
+            timeAgo: 'Just now',
+            postedDate: new Date().toISOString(),
+            frequency: rideForm.frequency,
+            driver: { name: 'Admin Added', image: '/professional-driver-headshot.jpg' },
+            vehicle: 'To be assigned',
+            pickup: { location: rideForm.pickupLocation.trim(), type: 'Pickup point' },
+            destination: { location: rideForm.destinationLocation.trim(), type: 'Destination' },
+            time: `${rideForm.rideDate} ${rideForm.pickupTime} ${rideForm.ampm}`,
+            duration: 'TBD',
+            seats: { available: Number.parseInt(rideForm.availableSeats || '0'), total: Number.parseInt(rideForm.totalSeats || '0') },
+            passengers: '1',
+            luggage: rideForm.luggage,
+            handCarry: rideForm.handCarry,
+            price: rideForm.price,
+            customer: { fullName: 'N/A', email: `user${Date.now()}@example.com`, phone: 'N/A' },
+            type: 'shared',
+          };
+          persistSharedRides([fallback, ...sharedRides]);
+          onAddRide?.(fallback);
+        }
+      } catch (err) {
+        console.error('Failed to POST shared ride to API:', err);
+        // Fallback to local persist
+        const fallback: RideData = {
+          id: Date.now(),
+          bookingId: generateBookingId(),
+          timeAgo: 'Just now',
+          postedDate: new Date().toISOString(),
+          frequency: rideForm.frequency,
+          driver: { name: 'Admin Added', image: '/professional-driver-headshot.jpg' },
+          vehicle: 'To be assigned',
+          pickup: { location: rideForm.pickupLocation.trim(), type: 'Pickup point' },
+          destination: { location: rideForm.destinationLocation.trim(), type: 'Destination' },
+          time: `${rideForm.rideDate} ${rideForm.pickupTime} ${rideForm.ampm}`,
+          duration: 'TBD',
+          seats: { available: Number.parseInt(rideForm.availableSeats || '0'), total: Number.parseInt(rideForm.totalSeats || '0') },
+          passengers: '1',
+          luggage: rideForm.luggage,
+          handCarry: rideForm.handCarry,
+          price: rideForm.price,
+          customer: { fullName: 'N/A', email: `user${Date.now()}@example.com`, phone: 'N/A' },
+          type: 'shared',
+        };
+        persistSharedRides([fallback, ...sharedRides]);
+        onAddRide?.(fallback);
+      } finally {
+        // reset form and UI state
+        setRideForm({
+          pickupLocation: '',
+          destinationLocation: '',
+          rideDate: '',
+          pickupTime: '',
+          ampm: 'AM',
+          luggage: '0',
+          handCarry: '0',
+          availableSeats: '',
+          totalSeats: '',
+          price: '',
+          frequency: 'one-time',
+        });
+        setIsRideSubmitting(false);
+        setActivePage('sharedRequests');
+        setRateStatus('✅ Shared ride added');
+        setTimeout(() => setRateStatus(''), 2500);
+      }
+    })();
   };
 
   /* ---------- Add Vehicle ---------- */
@@ -548,29 +760,55 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       ? `/images/${vehicleForm.imageFile.name}`
       : vehicleForm.image || "/images/toyota-innova.jpg";
 
-    setTimeout(() => {
-      const newVehicle: VehicleData = {
-        id: Date.now(),
-        name: vehicleForm.name.trim(),
-        price: vehicleForm.price,
-        passengers: vehicleForm.passengers,
-        luggage: vehicleForm.luggage,
-        handCarry: vehicleForm.handCarry,
-        image: imagePath,
-        features: [vehicleForm.feature1, vehicleForm.feature2, vehicleForm.feature3].filter((f) => f.trim()),
-        gradient: "bg-gradient-to-br from-blue-400 to-blue-600",
-        buttonColor: "bg-blue-600 hover:bg-blue-700",
-      };
-      const updated = [newVehicle, ...vehicleCatalog];
-      persistVehicleCatalog(updated);
-      onAddVehicle?.(newVehicle);
+    (async () => {
+      try {
+        const payload = {
+          name: vehicleForm.name.trim(),
+          price: vehicleForm.price,
+          passengers: vehicleForm.passengers,
+          luggage: vehicleForm.luggage,
+          handCarry: vehicleForm.handCarry,
+          image: imagePath,
+          features: [vehicleForm.feature1, vehicleForm.feature2, vehicleForm.feature3].filter((f) => f && f.trim()),
+          // visual-only styling is optional for server; include for parity
+          gradient: "bg-gradient-to-br from-blue-400 to-blue-600",
+          buttonColor: "bg-blue-600 hover:bg-blue-700",
+        } as Record<string, unknown>;
 
-  setVehicleForm({ name: "", price: "", passengers: "4", luggage: "", handCarry: "2", image: "", imageFile: null, feature1: "", feature2: "", feature3: "" });
-      setIsVehicleSubmitting(false);
-      setActivePage("vehicleBookings");
-      setRateStatus("✅ Vehicle added");
-      setTimeout(() => setRateStatus(""), 2500);
-    }, 600);
+        const res = await fetch('http://localhost:5000/api/vehicles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(`Server responded ${res.status}: ${txt}`);
+        }
+
+        const json = await res.json();
+        const serverVehicle = json?.data?.vehicle;
+
+        if (!serverVehicle) {
+          throw new Error('Invalid server response when creating vehicle');
+        }
+
+        // Update local UI state only (do not persist to localStorage)
+        setVehicleCatalog([serverVehicle as VehicleData, ...vehicleCatalog]);
+        onAddVehicle?.(serverVehicle as VehicleData);
+
+        setVehicleForm({ name: "", price: "", passengers: "4", luggage: "", handCarry: "2", image: "", imageFile: null, feature1: "", feature2: "", feature3: "" });
+        setRateStatus("✅ Vehicle added");
+        setTimeout(() => setRateStatus(""), 2500);
+        setActivePage("vehicleBookings");
+      } catch (err) {
+        console.error('Failed to create vehicle on server:', err);
+        setRateStatus(`❌ Failed to add vehicle: ${err instanceof Error ? err.message : String(err)}`);
+        setTimeout(() => setRateStatus(''), 4000);
+      } finally {
+        setIsVehicleSubmitting(false);
+      }
+    })();
   };
 
   /* ---------- Create a private vehicle booking record (simulate booking) ---------- */
@@ -656,24 +894,65 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     const usdRate = parseFloat(ratePerKm);
     const currentExchangeRate = parseFloat(exchangeRate) || 330;
     const lkrRate = parseFloat(rateLKRPerKm) || usdRate * currentExchangeRate;
-    localStorage.setItem("ratePerKm", usdRate.toString());
-    localStorage.setItem("rateLKRPerKm", lkrRate.toFixed(2));
-    localStorage.setItem("exchangeRate", currentExchangeRate.toString());
-    setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM (Rs.${lkrRate.toFixed(2)})`);
-    setRateStatus("✅ Rate saved successfully!");
-    setTimeout(() => setRateStatus(""), 3000);
+    // Persist to backend and then update local display
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/rates', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ ratePerKm: usdRate, rateLKRPerKm: lkrRate, exchangeRate: currentExchangeRate }),
+        });
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const json = await res.json();
+        const saved = json?.data?.rates;
+        if (saved) {
+          setRatePerKm(String(saved.ratePerKm ?? ''));
+          setRateLKRPerKm(String(saved.rateLKRPerKm ?? ''));
+          setExchangeRate(String(saved.exchangeRate ?? ''));
+          setCurrentSavedRate(`Current Rate: $${Number(saved.ratePerKm).toFixed(2)} per KM (Rs.${Number(saved.rateLKRPerKm).toFixed(2)})`);
+          setRateStatus('✅ Rate saved successfully!');
+          setTimeout(() => setRateStatus(''), 3000);
+          return;
+        }
+        throw new Error('Invalid response');
+      } catch (err) {
+        console.error('Failed to save rate to server, falling back to localStorage:', err);
+        localStorage.setItem("ratePerKm", usdRate.toString());
+        localStorage.setItem("rateLKRPerKm", lkrRate.toFixed(2));
+        localStorage.setItem("exchangeRate", currentExchangeRate.toString());
+        setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM (Rs.${lkrRate.toFixed(2)})`);
+        setRateStatus("✅ Rate saved locally (server unavailable)");
+        setTimeout(() => setRateStatus(""), 3000);
+      }
+    })();
   };
 
   const removeRate = () => {
-    localStorage.removeItem("ratePerKm");
-    localStorage.removeItem("rateLKRPerKm");
-    localStorage.removeItem("exchangeRate");
-    setRatePerKm("");
-    setRateLKRPerKm("");
-    setExchangeRate("");
-    setCurrentSavedRate("");
-    setRateStatus("❌ Rate removed! Users cannot calculate rates until you set a new one.");
-    setTimeout(() => setRateStatus(""), 5000);
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/rates', { method: 'DELETE' });
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        // clear local UI
+        setRatePerKm('');
+        setRateLKRPerKm('');
+        setExchangeRate('');
+        setCurrentSavedRate('');
+        setRateStatus('❌ Rate removed');
+        setTimeout(() => setRateStatus(''), 3000);
+        return;
+      } catch (err) {
+        console.error('Failed to delete rate on server, clearing local storage as fallback:', err);
+        localStorage.removeItem("ratePerKm");
+        localStorage.removeItem("rateLKRPerKm");
+        localStorage.removeItem("exchangeRate");
+        setRatePerKm("");
+        setRateLKRPerKm("");
+        setExchangeRate("");
+        setCurrentSavedRate("");
+        setRateStatus("❌ Rate removed locally (server unavailable)");
+        setTimeout(() => setRateStatus(""), 3000);
+      }
+    })();
   };
 
   /* ---------- Status update helpers ---------- */
@@ -745,8 +1024,37 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   };
 
   const updatePersonalRideStatus = (id: number, status: string) => {
+    const previous = personalRides;
     const updated = personalRides.map((ride) => ride.id === id ? { ...ride, status } : ride);
+
+    // Optimistically persist the change locally
     persistPersonalRides(updated);
+
+    // Find the ride so we can determine remote id (prefer bookingId)
+    const rideItem = personalRides.find((r) => r.id === id);
+    const remoteId = rideItem && (rideItem.bookingId || (typeof rideItem.id === 'string' ? rideItem.id : undefined));
+
+    if (!remoteId) return; // nothing to update remotely
+
+    (async () => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/personal-rides/${encodeURIComponent(remoteId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ status }),
+        });
+
+        if (!res.ok) {
+          console.warn('Remote personal ride status update failed', res.status);
+          // revert optimistic change
+          persistPersonalRides(previous);
+        }
+      } catch (err) {
+        console.error('Failed to update remote personal ride status:', err);
+        // revert optimistic change
+        persistPersonalRides(previous);
+      }
+    })();
   };
 
   const getStatusBadge = (status?: string) => {
@@ -812,23 +1120,58 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <td className="py-4 px-6 text-slate-600 font-mono text-xs">{it.bookingId}</td>
                     <td className="py-4 px-6 text-slate-700">
                       <div className="flex flex-col">
-                        <span className="font-medium">{it.postedDate ? new Date(it.postedDate).toLocaleDateString() : "N/A"}</span>
-                        <span className="text-xs text-slate-500">{it.postedDate ? new Date(it.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
+                        {/* Prefer server-provided pickupDate when available; it may be an ISO string or a Firestore Timestamp-like object */}
+                        {(() => {
+                          const rec = it as unknown as Record<string, unknown>;
+                          // Prefer rawPayload.pickupDate (string) first, then top-level pickupDate (timestamp), then postedDate
+                          const pdRaw = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.pickupDate) ?? rec.pickupDate ?? rec.postedDate;
+                          // normalize Firestore timestamp-like objects
+                          let dateObj: Date | null = null;
+                          if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
+                          else if (pdRaw && typeof pdRaw === 'object') {
+                            const pRec = pdRaw as Record<string, unknown>;
+                            const secs = typeof pRec._seconds === 'number' ? pRec._seconds : (typeof pRec.seconds === 'number' ? pRec.seconds : undefined);
+                            if (typeof secs === 'number') dateObj = new Date(secs * 1000);
+                          } else if (pdRaw instanceof Date) dateObj = pdRaw;
+                          // Fallback to postedDate if nothing else
+                          if (!dateObj && typeof rec.postedDate === 'string') dateObj = new Date(rec.postedDate as string);
+
+                          const dateStr = dateObj ? dateObj.toLocaleDateString() : 'N/A';
+                          // time: prefer explicit ride time field then fallback to pickupDate time
+                          const timeStr = (it.time && String(it.time).trim() !== '') ? String(it.time) : (dateObj ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
+                          return (
+                            <>
+                              <span className="font-medium">{dateStr}</span>
+                              <span className="text-xs text-slate-500">{timeStr}</span>
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2 min-w-0">
                         <MapPin className="h-3 w-3 text-green-500 flex-shrink-0" />
-                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{it.pickup.location}</span>
+                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.pickup)}</span>
                         <span className="text-slate-400 mx-1">→</span>
                         <MapPin className="h-3 w-3 text-red-500 flex-shrink-0" />
-                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{it.destination.location}</span>
+                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.destination)}</span>
                       </div>
                     </td>
                     <td className="py-4 px-6 hidden md:table-cell text-slate-600">
                       <div className="min-w-0">
-                        <div className="truncate font-medium">{it.customer?.email || "N/A"}</div>
-                        <div className="text-xs text-slate-500">+94{it.customer?.phone || "N/A"}</div>
+                        {(() => {
+                          const rec = it as unknown as Record<string, unknown>;
+                          const drv = it.driver as unknown as Record<string, unknown> | undefined;
+                          const driverName = drv && typeof drv.name === 'string' ? drv.name as string : (typeof rec.driverName === 'string' ? rec.driverName as string : it.customer?.email ?? 'N/A');
+                          const driverPhone = it.customer?.phone ? `+94${it.customer.phone}` : (drv && typeof drv.phone === 'string' ? `+94${drv.phone}` : 'N/A');
+                          return (
+                            <>
+                              <div className="truncate font-medium">{driverName}</div>
+                              <div className="text-xs text-slate-500">{driverPhone}</div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="py-4 px-6 hidden lg:table-cell">
@@ -988,6 +1331,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           <span className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-blue-600" />
             Personal Rides ({items.length})
+            {personalLoading && <span className="ml-3 text-xs text-slate-500">Loading…</span>}
+            {personalError && <span className="ml-3 text-xs text-red-500">API error</span>}
           </span>
         </CardTitle>
       </CardHeader>
@@ -1017,10 +1362,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-2 min-w-0">
                       <MapPin className="h-3 w-3 text-green-500 flex-shrink-0" />
-                      <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{it.pickup.location}</span>
+                      <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.pickup)}</span>
                       <span className="text-slate-400 mx-1">→</span>
                       <MapPin className="h-3 w-3 text-red-500 flex-shrink-0" />
-                      <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{it.destination.location}</span>
+                      <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.destination)}</span>
                     </div>
                   </td>
                   <td className="py-4 px-6 text-slate-700 font-medium">{it.time}</td>
@@ -1107,16 +1452,59 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
   /* ---------- Manage Dates Component ---------- */
   const ManageDateItem: React.FC<{ ride: RideData; onUpdate: (id: number, date: string) => void }> = ({ ride, onUpdate }) => {
-    const [editMode, setEditMode] = useState(false);
-    const [tempDate, setTempDate] = useState(new Date(ride.postedDate).toISOString().slice(0, 16));
+  const [editMode, setEditMode] = useState(false);
+  const [tempDate, setTempDate] = useState(() => formatToLocalDateTimeInput(ride.postedDate));
 
-    const handleSave = () => {
-      onUpdate(ride.id, tempDate);
-      setEditMode(false);
+  // Keep tempDate in sync when parent updates ride.postedDate
+  useEffect(() => {
+    setTempDate(formatToLocalDateTimeInput(ride.postedDate));
+  }, [ride.postedDate]);
+
+    const [saving, setSaving] = useState(false);
+
+    const handleSave = async () => {
+      // validate tempDate
+      if (!tempDate) return;
+      let d: Date;
+      try {
+        d = new Date(tempDate);
+        if (isNaN(d.getTime())) return;
+      } catch {
+        return;
+      }
+
+      const iso = d.toISOString();
+      setSaving(true);
+      try {
+        // Prefer bookingId for remote id if present, else use numeric id
+        const remoteId = ride.bookingId ?? ride.id;
+        const idForUrl = encodeURIComponent(String(remoteId));
+        const res = await fetch(`http://localhost:5000/api/shared-rides/${idForUrl}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ postedDate: iso }),
+        });
+
+        if (!res.ok) {
+          // Remote failed — persist locally as a fallback and log
+          console.warn('Remote update failed', res.status);
+          onUpdate(ride.id, iso);
+        } else {
+          // Remote succeeded — update local view. If server returns updated ride, we could merge it.
+          onUpdate(ride.id, iso);
+        }
+      } catch (err) {
+        console.error('Failed to update remote shared ride:', err);
+        // Fallback to local persist so admin sees the change offline
+        onUpdate(ride.id, iso);
+      } finally {
+        setSaving(false);
+        setEditMode(false);
+      }
     };
 
     const handleCancel = () => {
-      setTempDate(new Date(ride.postedDate).toISOString().slice(0, 16));
+      setTempDate(formatToLocalDateTimeInput(ride.postedDate));
       setEditMode(false);
     };
 
@@ -1124,12 +1512,12 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       <div className="border rounded-lg p-4 bg-white shadow-sm">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2">
               <MapPin className="h-4 w-4 text-green-500" />
-              <span className="font-medium text-sm truncate">{ride.pickup.location}</span>
+              <span className="font-medium text-sm truncate">{formatLocation(ride.pickup)}</span>
               <span className="text-gray-500">→</span>
               <MapPin className="h-4 w-4 text-red-500" />
-              <span className="font-medium text-sm truncate">{ride.destination.location}</span>
+              <span className="font-medium text-sm truncate">{formatLocation(ride.destination)}</span>
             </div>
             <p className="text-sm text-gray-600">
               {ride.bookingId} • {ride.driver.name} • {ride.vehicle}
@@ -1148,8 +1536,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                   className="w-48"
                 />
                 <div className="flex gap-1">
-                  <Button size="sm" onClick={handleSave} className="bg-green-500">
-                    Save
+                  <Button size="sm" onClick={handleSave} className="bg-green-500" disabled={saving}>
+                    {saving ? 'Saving...' : 'Save'}
                   </Button>
                   <Button size="sm" variant="outline" onClick={handleCancel}>
                     Cancel
@@ -1200,8 +1588,34 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     }
   };
   const handleDeletePersonal = (id: number) => {
+    const ride = personalRides.find((r) => r.id === id);
+    const previous = personalRides;
     const updated = personalRides.filter((r) => r.id !== id);
+
+    // Optimistically remove locally
     persistPersonalRides(updated);
+
+    // Determine remote id: prefer bookingId (string from API) then fallback to id
+    const remoteId = (ride && (ride.bookingId || (typeof ride.id === 'string' ? ride.id : undefined))) as string | undefined;
+    if (remoteId) {
+      (async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/api/personal-rides/${encodeURIComponent(remoteId)}`, {
+            method: 'DELETE',
+            headers: { 'Accept': 'application/json' },
+          });
+          if (!res.ok) {
+            console.warn('Remote personal booking delete failed', res.status);
+            // revert optimistic change
+            persistPersonalRides(previous);
+          }
+        } catch (err) {
+          console.error('Failed to delete remote personal booking:', err);
+          // revert optimistic change
+          persistPersonalRides(previous);
+        }
+      })();
+    }
   };
 
   /* ---------- Dialog handlers ---------- */
@@ -1441,7 +1855,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                                 {activity.bookingId} - {activity.vehicle}
                               </p>
                               <p className="text-xs text-slate-500">
-                                {activity.pickup.location} → {activity.destination.location}
+                                {formatLocation(activity.pickup)} → {formatLocation(activity.destination)}
                               </p>
                             </div>
                             <div className="text-right">
@@ -1762,7 +2176,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
               </Card>
             )}
 
-            {/* Rates */}
+           {/*  Rates */}
             {activePage === "rates" && (
               <Card>
                 <CardHeader>
@@ -1814,118 +2228,243 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
           {selectedItem && (
             <div className="space-y-6">
-              {/* Basic Info */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Booking ID</label>
-                  <p className="text-sm">{selectedItem.bookingId}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Type</label>
-                  <p className="text-sm capitalize">{selectedItem.type || "N/A"}</p>
-                </div>
-              </div>
+              {/* normalize fields supporting multiple payload shapes (admin local objects, API bookings, rawPayload) */}
+              {(() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const item: any = selectedItem as any
+                const rp = item.rawPayload || {}
+                const bookingId = item.bookingId || item.id || item._id || (rp && rp.id) || 'N/A'
+                const type = item.type || item.rideType || rp.rideType || 'N/A'
+                const driverName = (item.driver && item.driver.name) || (rp.driver && rp.driver.name) || 'N/A'
+                const vehicle = item.vehicle || rp.vehicle || 'N/A'
+                const pickupLoc = formatLocation(item.pickup ?? item.pickupLocation ?? rp.pickup ?? rp.pickupLocation)
+                const destLoc = formatLocation(item.destination ?? item.destinationLocation ?? rp.destination ?? rp.destinationLocation)
+                const time = item.time || rp.time || 'N/A'
+                const duration = item.duration || rp.duration || 'N/A'
+                const frequency = item.frequency || rp.frequency || 'N/A'
+                // Prefer counts from rawPayload (original frontend payload) when available,
+                // because item.seats may have been normalized/fallbacked to 0 earlier.
+                const seatsAvailable = (rp.seats && typeof rp.seats.available === 'number') ? rp.seats.available : ((item.seats && typeof item.seats.available === 'number') ? item.seats.available : (item.availableSeats ?? 'N/A'))
+                const seatsTotal = (rp.seats && typeof rp.seats.total === 'number') ? rp.seats.total : ((item.seats && typeof item.seats.total === 'number') ? item.seats.total : (item.totalSeats ?? 'N/A'))
+                const price = (item.price && String(item.price)) || (rp.price && String(rp.price)) || 'N/A'
+                const notes = item.notes || rp.notes || item.specialRequests || 'None'
 
-              {/* Locations */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Route</label>
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-green-600" />
-                  <span className="text-sm">{selectedItem.pickup.location}</span>
-                  <span className="text-gray-500">→</span>
-                  <MapPin className="h-4 w-4 text-red-600" />
-                  <span className="text-sm">{selectedItem.destination.location}</span>
-                </div>
-              </div>
+                // created/posted date - support Firestore timestamp shapes
+                const createdAtRaw = item.createdAt || item.postedDate || rp.postedDate || rp.createdAt || null
+                let createdAtFormatted = 'N/A'
+                if (createdAtRaw) {
+                  try {
+                    if (typeof createdAtRaw === 'object' && (createdAtRaw._seconds || createdAtRaw.seconds)) {
+                      const secs = Number(createdAtRaw._seconds ?? createdAtRaw.seconds)
+                      createdAtFormatted = new Date(secs * 1000).toLocaleString()
+                    } else {
+                      createdAtFormatted = new Date(createdAtRaw).toLocaleString()
+                    }
+                  } catch (err) {
+                    console.warn('Failed to format createdAt for admin view dialog', err)
+                    createdAtFormatted = String(createdAtRaw)
+                  }
+                }
 
-              {/* Driver Info */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Driver</label>
-                  <p className="text-sm">{selectedItem.driver.name}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Vehicle</label>
-                  <p className="text-sm">{selectedItem.vehicle}</p>
-                </div>
-              </div>
+                // passenger id and pickup date (from raw payload or item)
+                const passengerId = item.passengerId ?? rp.passengerId ?? 'N/A'
+                const pickupDateRaw = rp.pickupDate ?? item.pickupDate ?? null
+                let pickupDateFormatted = 'N/A'
+                if (pickupDateRaw) {
+                  try {
+                    if (typeof pickupDateRaw === 'string') pickupDateFormatted = new Date(pickupDateRaw).toLocaleString()
+                    else if (typeof pickupDateRaw === 'object' && (pickupDateRaw._seconds || pickupDateRaw.seconds)) {
+                      const secs = Number(pickupDateRaw._seconds ?? pickupDateRaw.seconds)
+                      pickupDateFormatted = new Date(secs * 1000).toLocaleString()
+                    } else pickupDateFormatted = String(pickupDateRaw)
+                  } catch {
+                    pickupDateFormatted = String(pickupDateRaw)
+                  }
+                }
 
-              {/* Schedule */}
-              <div className="grid md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Time</label>
-                  <p className="text-sm">{selectedItem.time}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Duration</label>
-                  <p className="text-sm">{selectedItem.duration}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Frequency</label>
-                  <p className="text-sm">{selectedItem.frequency}</p>
-                </div>
-              </div>
-
-              {/* Capacity */}
-              <div className="grid md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Seats Available</label>
-                  <p className="text-sm">{selectedItem.seats.available}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Total Seats</label>
-                  <p className="text-sm">{selectedItem.seats.total}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Passengers</label>
-                  <p className="text-sm">{selectedItem.passengers || "N/A"}</p>
-                </div>
-              </div>
-
-              {/* Additional Details */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Hand Carry</label>
-                  <p className="text-sm">{selectedItem.handCarry || "N/A"}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Price</label>
-                  <p className="text-sm">{selectedItem.price ? `$${selectedItem.price}` : "N/A"}</p>
-                </div>
-              </div>
-
-              {/* Customer Info */}
-              {selectedItem.customer && (
-                <div className="space-y-3">
-                  <h4 className="font-medium text-gray-900">Customer Information</h4>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Full Name</label>
-                      <p className="text-sm">{selectedItem.customer.fullName || "N/A"}</p>
+                return (
+                  <>
+                    {/* Basic Info */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Booking ID</label>
+                        <p className="text-sm">{bookingId}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Type</label>
+                        <p className="text-sm capitalize">{type}</p>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Email</label>
-                      <p className="text-sm">{selectedItem.customer.email || "N/A"}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Phone</label>
-                    <p className="text-sm">+94{selectedItem.customer.phone || "N/A"}</p>
-                  </div>
-                </div>
-              )}
 
-              {/* Dates */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Posted</label>
-                  <p className="text-sm">{selectedItem.postedDate ? new Date(selectedItem.postedDate).toLocaleString() : "N/A"}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Time Ago</label>
-                  <p className="text-sm">{selectedItem.timeAgo}</p>
-                </div>
-              </div>
+                    {/* Extra identifiers */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Passenger ID</label>
+                        <p className="text-sm">{passengerId || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Pickup Date</label>
+                        <p className="text-sm">{pickupDateFormatted || 'N/A'}</p>
+                      </div>
+                    </div>
+
+                    {/* Route */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">Route</label>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-green-600" />
+                        <span className="text-sm">{pickupLoc}</span>
+                        <span className="text-gray-500">→</span>
+                        <MapPin className="h-4 w-4 text-red-600" />
+                        <span className="text-sm">{destLoc}</span>
+                      </div>
+                    </div>
+
+                    {/* Driver/Vehicle */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Driver</label>
+                        <p className="text-sm">{driverName}</p>
+                        {/* show driver contact when available (search multiple potential locations) */}
+                        {(() => {
+                          const drvFromItem = item.driver || undefined
+                          const drvFromRp = rp && rp.driver ? rp.driver : undefined
+                          const driverPhone = drvFromItem?.phone || drvFromRp?.phone || item.driverPhone || rp?.personalData?.phone || item.customer?.phone || 'N/A'
+                          const driverEmail = drvFromItem?.email || drvFromRp?.email || item.driverEmail || rp?.personalData?.email || item.customer?.email || 'N/A'
+                          return (
+                            <div className="text-xs text-slate-500 mt-1">
+                              <div>📞 {driverPhone !== 'N/A' ? `${driverPhone}` : 'Phone: N/A'}</div>
+                              <div>✉️ {driverEmail !== 'N/A' ? driverEmail : 'Email: N/A'}</div>
+                            </div>
+                          )
+                        })()}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Vehicle</label>
+                        <p className="text-sm">{vehicle}</p>
+                      </div>
+                    </div>
+
+                    {/* Schedule */}
+                    <div className="grid md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Time</label>
+                        <p className="text-sm">{time}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Duration</label>
+                        <p className="text-sm">{duration}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Frequency</label>
+                        <p className="text-sm">{frequency}</p>
+                      </div>
+                    </div>
+
+                    {/* Capacity */}
+                    <div className="grid md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Seats Available</label>
+                        <p className="text-sm">{seatsAvailable}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Total Seats</label>
+                        <p className="text-sm">{seatsTotal}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Price</label>
+                        <p className="text-sm">{price && price.toString().startsWith('$') ? price : (price !== 'N/A' ? `$${price}` : 'N/A')}</p>
+                      </div>
+                    </div>
+
+                    {/* Notes / Customer (if present) */}
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Notes</label>
+                            <p className="text-sm">{notes}</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Customer</label>
+                            {(() => {
+                              // Helper: return a non-empty trimmed string or undefined
+                              const maybeStr = (val: unknown) => (typeof val === 'string' && val.trim() !== '' ? val.trim() : undefined)
+
+                              // Recursive shallow scanner to find first matching key among targets
+                              const findInObj = (obj: unknown, targets: string[], depth = 0): string | undefined => {
+                                if (!obj || depth > 4) return undefined
+                                if (typeof obj === 'string') return maybeStr(obj)
+                                if (typeof obj !== 'object') return undefined
+                                try {
+                                  for (const key of Object.keys(obj as object)) {
+                                    const lower = key.toLowerCase()
+                                    // direct match
+                                    for (const t of targets) {
+                                      if (lower === t.toLowerCase()) {
+                                        const val = (obj as Record<string, unknown>)[key]
+                                        const s = maybeStr(val)
+                                        if (s) return s
+                                      }
+                                    }
+                                  }
+                                  // search children
+                                  for (const key of Object.keys(obj as object)) {
+                                    const child = (obj as Record<string, unknown>)[key]
+                                    const res = findInObj(child, targets, depth + 1)
+                                    if (res) return res
+                                  }
+                                } catch {
+                                  return undefined
+                                }
+                                return undefined
+                              }
+
+                              // Targets for each field
+                              const nameTargets = ['fullname', 'fullName', 'name', 'customername', 'customerName']
+                              const emailTargets = ['email', 'customeremail', 'customerEmail']
+                              const phoneTargets = ['phone', 'customerphone', 'customerPhone', 'mobile']
+
+                              // Check explicit top-level fields first
+                              const explicitName = maybeStr(item?.customer?.fullName) || maybeStr(item?.customerName) || maybeStr(item?.customer?.name)
+                              const explicitEmail = maybeStr(item?.customer?.email) || maybeStr(item?.customerEmail)
+                              const explicitPhone = maybeStr(item?.customer?.phone) || maybeStr(item?.customerPhone)
+
+                              // Compose search roots: item, rp, rp.rawPayload (if present)
+                              const roots = [item, rp, rp && rp.rawPayload, rp && rp.rawPayload && rp.rawPayload.rawPayload]
+
+                              const name = explicitName || roots.map(r => findInObj(r, nameTargets)).find(Boolean) || 'N/A'
+                              const email = explicitEmail || roots.map(r => findInObj(r, emailTargets)).find(Boolean) || 'N/A'
+                              const phoneRaw = explicitPhone || roots.map(r => findInObj(r, phoneTargets)).find(Boolean) || 'N/A'
+                              const formattedPhone = phoneRaw !== 'N/A' ? (formatPhone(String(phoneRaw)) ?? String(phoneRaw)) : 'N/A'
+
+                              if (name === 'N/A' && email === 'N/A' && formattedPhone === 'N/A') {
+                                return <p className="text-sm text-gray-500">No customer data available</p>
+                              }
+
+                              return (
+                                <div>
+                                  <p className="text-sm">{name}</p>
+                                  {email !== 'N/A' && <p className="text-xs text-gray-500">{email}</p>}
+                                  {formattedPhone !== 'N/A' && <p className="text-xs text-gray-500">{formattedPhone}</p>}
+                                </div>
+                              )
+                            })()}
+                          </div>
+                        </div>
+
+                    {/* Dates */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Posted</label>
+                        <p className="text-sm">{createdAtFormatted}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Time Ago</label>
+                        <p className="text-sm">{item.timeAgo || rp.timeAgo || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
             </div>
           )}
         </DialogContent>

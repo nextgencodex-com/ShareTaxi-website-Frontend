@@ -1,19 +1,18 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Calendar as CalendarIcon, ChevronDown, Plus, X, MapPin, ChevronUp, AlertTriangle } from "lucide-react"
+import { Calendar as CalendarIcon, ChevronDown, MapPin, ChevronUp, AlertTriangle } from "lucide-react"
 import dynamic from 'next/dynamic'
 import { BookingDetailsPopup } from "./booking-details-popup"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { cn } from "@/lib/utils"
-import { format, parseISO, isAfter, startOfDay } from "date-fns"
+import { format, parseISO, startOfDay, addDays } from "date-fns"
 import { calculateSimpleFare, calculateIndividualFare, getTripMultiplier } from "@/lib/pricing"
 
 const Map = dynamic(() => import('./map'), { ssr: false })
@@ -24,7 +23,7 @@ interface Destination {
 }
 
 interface BookingSectionProps {
-  onAddSharedRide?: (bookingData: any) => void
+  onAddSharedRide?: (bookingData: unknown) => void
 }
 
 export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
@@ -33,14 +32,14 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
   const [tripType, setTripType] = useState("one-way")
   const [rideType, setRideType] = useState("shared")
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState("")
   const [pickupTime, setPickupTime] = useState("")
   const [pickupAmPm, setPickupAmPm] = useState("AM")
   const [passengers, setPassengers] = useState(1)
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
-  const [date, setDate] = useState("2025-09-20")
-  const [customTime, setCustomTime] = useState("")
+  // default pickup date: tomorrow (local date) in yyyy-MM-dd format
+  const _tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd')
+  const [date, setDate] = useState<string>(_tomorrow)
 
   const [mapDistance, setMapDistance] = useState<string | null>(null)
   const [mapDuration, setMapDuration] = useState<string | null>(null)
@@ -60,15 +59,74 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const [roundTripDistance, setRoundTripDistance] = useState("")
   const [multiCityDistance, setMultiCityDistance] = useState("")
   const [fareResults, setFareResults] = useState<{ [key: string]: string }>({})
+  // backend-provided rate (per km) — prefer this over localStorage
+  const [backendRatePerKm, setBackendRatePerKm] = useState<number | null>(null)
 
   // Validation state
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
 
   // Auto-calculate fare when relevant values change
+  // calculateFareForType is declared below; move its declaration up so effect can reference it
+  const calculateFareForType = useCallback((tripType: string, distance: number) => {
+    if (!distance || distance <= 0) {
+      setFareResults(prev => ({ ...prev, [tripType]: "⚠️ Please enter a valid distance." }))
+      return
+    }
+
+    // Prefer backend rate if available, otherwise fall back to localStorage
+    const ratePerKm = typeof backendRatePerKm === 'number' && !isNaN(backendRatePerKm)
+      ? backendRatePerKm
+      : parseFloat(localStorage.getItem("ratePerKm") || "0")
+
+    // Apply trip multiplier for return trips and other trip types
+    const tripMultiplier = getTripMultiplier(tripType as "one-way" | "round-trip" | "multi-city")
+
+    let fareDisplay = ""
+    if (rideType === "shared") {
+      const basePerPersonFare = calculateSimpleFare(distance, ratePerKm)
+      const perPersonFare = basePerPersonFare * tripMultiplier
+      fareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${ratePerKm.toFixed(2)} per km<br>👥 Per Person Fare: <span style="color:green;">$${perPersonFare.toFixed(2)}</span>`
+      if (tripMultiplier > 1) {
+        fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
+      }
+    } else {
+      const baseFullFare = calculateIndividualFare(distance, ratePerKm)
+      const fullFare = baseFullFare * tripMultiplier
+      fareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${ratePerKm.toFixed(2)} per km<br>💰 Total Fare: <span style="color:blue;">$${fullFare.toFixed(2)}</span>`
+      if (tripMultiplier > 1) {
+        fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
+      }
+    }
+
+    setFareResults(prev => ({ ...prev, [tripType]: fareDisplay }))
+  }, [rideType, backendRatePerKm])
+
+  // load rates from backend on mount
   useEffect(() => {
-    const ratePerKm = parseFloat(localStorage.getItem("ratePerKm") || "0")
-    if (!ratePerKm) return
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/rates')
+        if (!res.ok) throw new Error(`API ${res.status}`)
+        const json = await res.json()
+        const rates = json?.data?.rates
+        if (mounted && rates && typeof rates.ratePerKm === 'number') {
+          setBackendRatePerKm(rates.ratePerKm)
+        }
+      } catch {
+        // ignore - we'll use localStorage fallback
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  useEffect(() => {
+    // prefer backend rate when available, otherwise fall back to localStorage
+    const effectiveRate = typeof backendRatePerKm === 'number' && !isNaN(backendRatePerKm)
+      ? backendRatePerKm
+      : parseFloat(localStorage.getItem("ratePerKm") || "0")
+    if (!effectiveRate) return
 
     let distance = 0
     if (tripType === "round-trip" && roundTripDistance) {
@@ -84,40 +142,11 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     if (distance > 0) {
       calculateFareForType(tripType, distance)
     }
-  }, [tripType, rideType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance])
+  }, [tripType, rideType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance, calculateFareForType, backendRatePerKm])
 
-  const timeSlots = [
-    "6 - 8 am", "8 - 10 am", "10 - 12 pm", "12 - 2 pm", "2 - 4 pm",
-    "4 - 6 pm", "6 - 8 pm", "8 - 10 pm", "10 - 12 am"
-  ]
-
-  const addDestination = () => {
-    const newId = Date.now().toString()
-    setDestinations(prev => [...prev, { id: newId, location: '' }])
-  }
-
-  const removeDestination = (id: string) => {
-    if (destinations.length > 2) {
-      setDestinations(prev => prev.filter(dest => dest.id !== id))
-    }
-  }
-
-  const updateDestination = (id: string, location: string) => {
-    setDestinations(prev => prev.map(dest =>
-      dest.id === id ? { ...dest, location } : dest
-    ))
-  }
-
-  const handlePassengerChange = (change: number) => {
-    setPassengers((prev) => {
-      const newPassengers = Math.max(1, Math.min(20, prev + change));
-      // Recalculate fare when passenger count changes (for multi-city tours)
-      if (tripType === 'multi-city' && multiCityDistance) {
-        calculateFareForType('multi-city', parseFloat(multiCityDistance));
-      }
-      return newPassengers;
-    }); // Allow up to 20 passengers for large bookings
-  }
+  // helper states removed: selectedTimeSlot, customTime
+  // helper functions for dynamically adding/removing destinations and passenger change
+  // were unused in this component and removed to keep the bundle lean.
 
   const handleDistanceChange = (distance: string | null, duration: string | null) => {
     setMapDistance(distance)
@@ -127,7 +156,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   // Validation functions
   const validateBookingData = () => {
     const errors: string[] = []
-    const today = startOfDay(new Date())
+    const currentFare = fareResults[tripType]
+  // calculate today start only when needed via startOfDay below
 
     // Location validations
     if (tripType === 'multi-city') {
@@ -172,7 +202,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     }
 
     // Fare calculation validation
-    const currentFare = fareResults[tripType]
+  // currentFare intentionally not used here
     if (!currentFare || currentFare.includes("⚠️")) {
       errors.push("Please calculate the fare before proceeding")
     }
@@ -197,10 +227,11 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     setValidationErrors([])
 
     // Get the calculated fare for current trip type
-    const currentFareKey = tripType;
-    const currentFare = fareResults[tripType];
+  const currentFare = fareResults[tripType]
+  setShowBookingPopup(true)
 
-    const bookingData = {
+    // Prepare booking payload to send to backend if onAddSharedRide not provided
+    const bookingPayload = {
       from: tripType === 'multi-city' ? startingPoint : from,
       to,
       rideType,
@@ -212,9 +243,47 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       startingPoint: tripType === 'multi-city' ? startingPoint : undefined,
       mapDistance,
       mapDuration,
-      calculatedFare: currentFare, // Pass the fare calculator result
+  calculatedFare: currentFare,
     }
-    setShowBookingPopup(true)
+
+    // If a parent provided onAddSharedRide, prefer that (keeps existing behavior)
+    if (onAddSharedRide && typeof onAddSharedRide === 'function') {
+      try {
+        onAddSharedRide(bookingPayload)
+      } catch (err) {
+        console.error('onAddSharedRide handler threw an error', err)
+      }
+      return
+    }
+
+    // Default behavior: POST to backend endpoints
+  const endpoint = rideType === 'shared' ? 'http://localhost:5000/api/shared-rides' : 'http://localhost:5000/api/private-rides'
+    ;(async () => {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bookingPayload)
+        })
+
+        if (!res.ok) {
+          const text = await res.text()
+          console.error(`Failed to create booking: ${res.status} ${text}`)
+          // Optionally show a validation/error state here
+        } else {
+          const data = await res.json()
+          console.info('Booking created on server', data)
+          // Optionally dispatch an event to inform other components
+          try {
+            window.dispatchEvent(new CustomEvent('rideBooked', { detail: data }))
+          } catch {
+            // ignore in non-browser environments
+          }
+        }
+      } catch (err) {
+        console.error('Error posting booking to server', err)
+      }
+    })()
   }
 
   // Clear validation errors when user starts fixing them
@@ -228,14 +297,12 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const resetForm = () => {
     setTripType("one-way")
     setRideType("shared")
-    setSelectedTimeSlot("")
     setPickupTime("")
     setPickupAmPm("AM")
     setPassengers(1)
     setFrom("")
     setTo("")
-    setDate("2025-09-20")
-    setCustomTime("")
+  setDate(_tomorrow)
     setMapDistance(null)
     setMapDuration(null)
     setDestinations([
@@ -251,36 +318,6 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     setHasAttemptedSubmit(false)
   }
 
-  const calculateFareForType = (tripType: string, distance: number) => {
-    if (!distance || distance <= 0) {
-      setFareResults(prev => ({ ...prev, [tripType]: "⚠️ Please enter a valid distance." }))
-      return
-    }
-
-    const ratePerKm = parseFloat(localStorage.getItem("ratePerKm") || "0")
-
-    // Apply trip multiplier for return trips and other trip types
-    const tripMultiplier = getTripMultiplier(tripType as "one-way" | "round-trip" | "multi-city")
-
-    let fareDisplay = ""
-    if (rideType === "shared") {
-      const basePerPersonFare = calculateSimpleFare(distance, ratePerKm)
-      const perPersonFare = basePerPersonFare * tripMultiplier
-      fareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${ratePerKm.toFixed(2)} per km<br>👥 Per Person Fare: <span style="color:green;">$${perPersonFare.toFixed(2)}</span>`
-      if (tripMultiplier > 1) {
-        fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
-      }
-    } else {
-      const baseFullFare = calculateIndividualFare(distance, ratePerKm)
-      const fullFare = baseFullFare * tripMultiplier
-      fareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${ratePerKm.toFixed(2)} per km<br>💰 Total Fare: <span style="color:blue;">$${fullFare.toFixed(2)}</span>`
-      if (tripMultiplier > 1) {
-        fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
-      }
-    }
-
-    setFareResults(prev => ({ ...prev, [tripType]: fareDisplay }))
-  }
 
   return (
     <>
@@ -290,7 +327,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
             <h2 className="text-3xl font-bold text-balance mb-4">Book Your Taxi with Ease</h2>
             <p className="text-muted-foreground text-pretty max-w-2xl mx-auto">
               Simple booking process with real-time tracking and instant confirmation. Choose your pickup location and
-              we'll handle the rest.
+              we&apos;ll handle the rest.
             </p>
           </div>
 
@@ -443,9 +480,12 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                               <Input
                                 id="pickup-date"
                                 type="text"
+                                // Display a friendly formatted date but keep `date` state in ISO yyyy-MM-dd
                                 value={date ? format(parseISO(date), "PPP") : ""}
-                                onChange={(e) => setDate(e.target.value)}
-                                className="bg-blue-50 border-blue-200 text-gray-800 h-12"
+                                // Prevent manual typing to keep canonical ISO date format; open calendar instead
+                                onChange={() => { /* read-only - use calendar picker */ }}
+                                readOnly
+                                className="bg-blue-50 border-blue-200 text-gray-800 h-12 cursor-pointer"
                                 placeholder="Select a date"
                               />
                               <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 cursor-pointer" onClick={() => setCalendarOpen(true)} />
@@ -515,7 +555,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                             }
                             className="bg-white"
                           />
-                          <Button
+                          {/* <Button
                             type="button"
                             onClick={() => {
                               const distanceKey = tripType === "round-trip" ? roundTripDistance : oneWayDistance;
@@ -524,7 +564,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                             className="bg-yellow-500 hover:bg-yellow-600 text-black px-4"
                           >
                             Calculate
-                          </Button>
+                          </Button> */}
                         </div>
                         {(fareResults["one-way"] || fareResults["round-trip"]) && (
                           <div
