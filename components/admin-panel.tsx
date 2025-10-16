@@ -421,21 +421,17 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
   // Shared ride form state
   const [rideForm, setRideForm] = useState({
-    driverName: "",
-    driverImage: "",
-    vehicle: "",
     pickupLocation: "",
     destinationLocation: "",
-    time: "",
-    duration: "",
-    passengers: "1",
+    rideDate: "",
+    pickupTime: "",
+    ampm: "AM",
     luggage: "0",
     handCarry: "0",
     availableSeats: "",
     totalSeats: "",
     price: "",
     frequency: "one-time",
-    postedDate: new Date().toISOString().slice(0, 16), // Default to current date/time
   });
 
   const [rideErrors, setRideErrors] = useState<Record<string, string>>({});
@@ -460,12 +456,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   /* ---------- Validation (kept similar to your original) ---------- */
   const validateRideForm = (form: typeof rideForm) => {
     const errors: Record<string, string> = {};
-    if (!form.driverName.trim()) errors.driverName = "Driver name is required";
-    if (!form.vehicle.trim()) errors.vehicle = "Vehicle is required";
     if (!form.pickupLocation.trim()) errors.pickupLocation = "Pickup location is required";
     if (!form.destinationLocation.trim()) errors.destinationLocation = "Destination is required";
-    if (!form.time) errors.time = "Time is required";
-    if (!form.duration.trim()) errors.duration = "Duration is required";
+    if (!form.rideDate) errors.rideDate = "Date is required";
+    if (!form.pickupTime) errors.pickupTime = "Pickup time is required";
     const availableSeats = Number.parseInt(form.availableSeats || "0");
     const totalSeats = Number.parseInt(form.totalSeats || "0");
     if (isNaN(availableSeats) || availableSeats < 0) errors.availableSeats = "Available seats must be a positive number";
@@ -491,100 +485,54 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (Object.keys(errors).length > 0) return;
     setIsRideSubmitting(true);
 
-    // Build payload to send to server
-    const payload = {
-      driverName: rideForm.driverName.trim(),
-      driverImage: rideForm.driverImage || undefined,
-      vehicle: rideForm.vehicle.trim(),
-      pickupLocation: rideForm.pickupLocation.trim(),
-      destinationLocation: rideForm.destinationLocation.trim(),
-      time: rideForm.time,
-      duration: rideForm.duration.trim(),
-      availableSeats: rideForm.availableSeats ? Number(rideForm.availableSeats) : undefined,
-      totalSeats: rideForm.totalSeats ? Number(rideForm.totalSeats) : undefined,
-      passengers: rideForm.passengers,
-      luggage: rideForm.luggage,
-      handCarry: rideForm.handCarry,
-      price: rideForm.price,
-      frequency: rideForm.frequency,
-      postedDate: new Date(rideForm.postedDate).toISOString(),
-    } as Record<string, unknown>;
+    setTimeout(() => {
+      const newRide: RideData = {
+        id: Date.now(),
+        bookingId: generateBookingId(),
+        timeAgo: "Just now",
+        postedDate: new Date().toISOString(),
+        frequency: rideForm.frequency,
+        driver: { name: "Admin Added", image: "/professional-driver-headshot.jpg" },
+        vehicle: "To be assigned",
+        pickup: { location: rideForm.pickupLocation.trim(), type: "Pickup point" },
+        destination: { location: rideForm.destinationLocation.trim(), type: "Destination" },
+        time: `${rideForm.rideDate} ${rideForm.pickupTime} ${rideForm.ampm}`,
+        duration: "TBD",
+        seats: { available: Number.parseInt(rideForm.availableSeats || "0"), total: Number.parseInt(rideForm.totalSeats || "0") },
+        passengers: "1",
+        luggage: rideForm.luggage,
+        handCarry: rideForm.handCarry,
+        price: rideForm.price,
+        customer: { fullName: "N/A", email: `user${Date.now()}@example.com`, phone: "N/A" },
+        type: "shared",
+      };
 
-    (async () => {
-      try {
-        const res = await fetch('http://localhost:5000/api/shared-rides', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+      // Persist locally
+      const updated = [newRide, ...sharedRides];
+      persistSharedRides(updated);
 
-        if (!res.ok) {
-          const text = await res.text();
-          console.error('Failed to create shared ride:', res.status, text);
-          setRateStatus('❌ Failed to add shared ride');
-          setTimeout(() => setRateStatus(''), 3000);
-          return;
-        }
+      // call prop if given
+      onAddRide?.(newRide);
 
-        const json = await res.json();
-        const created = json?.data?.ride;
-
-        // Map server response to RideData and persist locally
-        const newRide: RideData = {
-          id: Date.now(),
-          bookingId: created?.id || created?.bookingId || generateBookingId(),
-          timeAgo: 'Just now',
-          postedDate: created?.postedDate || new Date().toISOString(),
-          frequency: created?.frequency || rideForm.frequency,
-          driver: { name: created?.driverName || rideForm.driverName.trim(), image: created?.driverImage || rideForm.driverImage || '/professional-driver-headshot.jpg' },
-          vehicle: created?.vehicle || rideForm.vehicle.trim(),
-          pickup: { location: created?.pickupLocation || rideForm.pickupLocation.trim(), type: 'Pickup point' },
-          destination: { location: created?.destinationLocation || rideForm.destinationLocation.trim(), type: 'Destination' },
-          time: created?.time || rideForm.time,
-          duration: created?.duration || rideForm.duration.trim(),
-          seats: { available: created?.availableSeats ?? (rideForm.availableSeats ? Number(rideForm.availableSeats) : 0), total: created?.totalSeats ?? (rideForm.totalSeats ? Number(rideForm.totalSeats) : 0) },
-          passengers: created?.passengers || rideForm.passengers,
-          luggage: created?.luggage || rideForm.luggage,
-          handCarry: created?.handCarry || rideForm.handCarry,
-          price: created?.price || rideForm.price,
-          customer: { fullName: created?.customer?.fullName || 'N/A', email: created?.customer?.email || `user${Date.now()}@example.com`, phone: created?.customer?.phone || 'N/A' },
-          type: 'shared',
-        } as RideData;
-
-        const updated = [newRide, ...sharedRides];
-        persistSharedRides(updated);
-        onAddRide?.(newRide);
-
-        // reset
-        setRideForm({
-          driverName: '',
-          driverImage: '',
-          vehicle: '',
-          pickupLocation: '',
-          destinationLocation: '',
-          time: '',
-          duration: '',
-          passengers: '1',
-          luggage: '0',
-          handCarry: '0',
-          availableSeats: '',
-          totalSeats: '',
-          price: '',
-          frequency: 'one-time',
-          postedDate: new Date().toISOString().slice(0, 16),
-        });
-
-        setActivePage('sharedRequests');
-        setRateStatus('✅ Shared ride added');
-        setTimeout(() => setRateStatus(''), 2500);
-      } catch (err) {
-        console.error('Error creating shared ride (network):', err);
-        setRateStatus('❌ Failed to add shared ride');
-        setTimeout(() => setRateStatus(''), 3000);
-      } finally {
-        setIsRideSubmitting(false);
-      }
-    })();
+      // reset
+      setRideForm({
+        pickupLocation: "",
+        destinationLocation: "",
+        rideDate: "",
+        pickupTime: "",
+        ampm: "AM",
+        luggage: "0",
+        handCarry: "0",
+        availableSeats: "",
+        totalSeats: "",
+        price: "",
+        frequency: "one-time",
+      });
+      setIsRideSubmitting(false);
+      setActivePage("sharedRequests");
+      setRateStatus("✅ Shared ride added");
+      setTimeout(() => setRateStatus(""), 2500);
+    }, 600);
   };
 
   /* ---------- Add Vehicle ---------- */
@@ -1567,23 +1515,6 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={(e) => { e.preventDefault(); handleRideSubmit(); }} className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Driver Name</label>
-                        <Input value={rideForm.driverName} onChange={(e) => setRideForm({ ...rideForm, driverName: e.target.value })} />
-                        {rideErrors.driverName && <p className="text-red-500 text-sm">{rideErrors.driverName}</p>}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Driver Image (URL or upload handled separately)</label>
-                        <Input value={rideForm.driverImage} onChange={(e) => setRideForm({ ...rideForm, driverImage: e.target.value })} />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Vehicle</label>
-                      <Input value={rideForm.vehicle} onChange={(e) => setRideForm({ ...rideForm, vehicle: e.target.value })} />
-                      {rideErrors.vehicle && <p className="text-red-500 text-sm">{rideErrors.vehicle}</p>}
-                    </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
                       <div>
@@ -1600,14 +1531,40 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
                     <div className="grid md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium mb-2">Time</label>
-                        <Input value={rideForm.time} onChange={(e) => setRideForm({ ...rideForm, time: e.target.value })} />
-                        {rideErrors.time && <p className="text-red-500 text-sm">{rideErrors.time}</p>}
+                        <label className="block text-sm font-medium mb-2">Date</label>
+                        <Input
+                          type="date"
+                          value={rideForm.rideDate}
+                          onChange={(e) => setRideForm({ ...rideForm, rideDate: e.target.value })}
+                        />
+                        {rideErrors.rideDate && <p className="text-red-500 text-sm">{rideErrors.rideDate}</p>}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-2">Duration</label>
-                        <Input value={rideForm.duration} onChange={(e) => setRideForm({ ...rideForm, duration: e.target.value })} />
-                        {rideErrors.duration && <p className="text-red-500 text-sm">{rideErrors.duration}</p>}
+                        <label className="block text-sm font-medium mb-2">Pickup Time</label>
+                        <div className="flex gap-2">
+                          <Select value={rideForm.pickupTime} onValueChange={(value) => setRideForm({ ...rideForm, pickupTime: value })}>
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Select time slot" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="12-2">12-2</SelectItem>
+                              <SelectItem value="2-4">2-4</SelectItem>
+                              <SelectItem value="4-6">4-6</SelectItem>
+                              <SelectItem value="6-8">6-8</SelectItem>
+                              <SelectItem value="8-10">8-10</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select value={rideForm.ampm} onValueChange={(value) => setRideForm({ ...rideForm, ampm: value })}>
+                            <SelectTrigger className="w-20">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="AM">AM</SelectItem>
+                              <SelectItem value="PM">PM</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {rideErrors.pickupTime && <p className="text-red-500 text-sm">{rideErrors.pickupTime}</p>}
                       </div>
                     </div>
 
@@ -1624,21 +1581,23 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                       </div>
                     </div>
 
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Passengers</label>
-                        <Input value={rideForm.passengers} onChange={(e) => setRideForm({ ...rideForm, passengers: e.target.value })} />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Hand Carry</label>
-                        <Input value={rideForm.handCarry} onChange={(e) => setRideForm({ ...rideForm, handCarry: e.target.value })} />
-                      </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Hand Carry</label>
+                      <Input value={rideForm.handCarry} onChange={(e) => setRideForm({ ...rideForm, handCarry: e.target.value })} />
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium mb-2">Price</label>
-                        <Input value={rideForm.price} onChange={(e) => setRideForm({ ...rideForm, price: e.target.value })} />
+                        <label className="block text-sm font-medium mb-2">Price (USD)</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                          <Input 
+                            value={rideForm.price} 
+                            onChange={(e) => setRideForm({ ...rideForm, price: e.target.value })} 
+                            className="pl-8"
+                            placeholder="0.00"
+                          />
+                        </div>
                         {rideErrors.price && <p className="text-red-500 text-sm">{rideErrors.price}</p>}
                       </div>
                       <div>
@@ -1650,21 +1609,11 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                           <SelectContent>
                             <SelectItem value="one-time">One Time</SelectItem>
                             <SelectItem value="daily">Daily</SelectItem>
-                            <SelectItem value="monthly">Monthly</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Posted Date & Time</label>
-                      <Input
-                        type="datetime-local"
-                        value={rideForm.postedDate}
-                        onChange={(e) => setRideForm({ ...rideForm, postedDate: e.target.value })}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Set when this ride was posted (defaults to now)</p>
-                    </div>
 
                     <div>
                       <Button type="button" onClick={() => handleRideSubmit()} disabled={isRideSubmitting} className="bg-yellow-500 w-full">
