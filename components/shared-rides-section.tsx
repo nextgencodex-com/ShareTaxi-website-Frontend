@@ -322,25 +322,52 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
   const renderRideCards = (rides: Ride[]) => (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
       {rides.map((ride) => {
-        const { date, pickupTime } = parseRideTime(ride.time, ride.pickupDate)
-        const isValidTime = (t?: string) => {
-          if (!t) return false
-          const trimmed = t.trim()
-          if (trimmed.length === 0) return false
-          if (/invalid/i.test(trimmed)) return false
-          return true
-        }
-        const displayPickupTime = isValidTime(ride.time) ? ride.time : pickupTime
+          // Fill Date and Pickup Time for daily rides using rawPayload if available
+          let date = ride.pickupDateFormatted || ''
+          let pickupTime = ''
+          const rawPayload = (ride as any).rawPayload || {}
+          if (ride.frequency === 'daily') {
+            if (rawPayload.rideDate) {
+              const d = new Date(rawPayload.rideDate)
+              if (!isNaN(d.getTime())) {
+                date = d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+              } else {
+                date = rawPayload.rideDate
+              }
+            }
+            if (rawPayload.pickupTime && rawPayload.ampm) {
+              pickupTime = `${rawPayload.pickupTime} ${rawPayload.ampm}`
+            } else if (rawPayload.pickupTime) {
+              pickupTime = rawPayload.pickupTime
+            }
+          }
+          // Fallbacks
+          if (!date) {
+            const { date: parsedDate } = parseRideTime(ride.time, ride.pickupDate)
+            date = parsedDate
+          }
+          if (!pickupTime) {
+            const { pickupTime: parsedPickupTime } = parseRideTime(ride.time, ride.pickupDate)
+            pickupTime = parsedPickupTime
+          }
+          const isValidTime = (t?: string) => {
+            if (!t) return false
+            const trimmed = t.trim()
+            if (trimmed.length === 0) return false
+            if (/invalid/i.test(trimmed)) return false
+            return true
+          }
+          const displayPickupTime = isValidTime(pickupTime) ? pickupTime : 'N/A'
         return (
         <Card key={ride.id} className="bg-white border-0 shadow-lg rounded-2xl overflow-hidden">
           <CardContent className="p-6">
             <div className="space-y-4">
               <div className="flex justify-center mb-4 space-x-2">
                 <Badge className="bg-blue-100 text-blue-600 hover:bg-blue-100 rounded-full px-3 py-1 text-sm">
-                  Date: {ride.pickupDateFormatted || date}
+                    Date: {date}
                 </Badge>
                 <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100 rounded-full px-3 py-1 text-sm">
-                  Pickup Time: {displayPickupTime}
+                    Pickup Time: {displayPickupTime}
                 </Badge>
               </div>
 
