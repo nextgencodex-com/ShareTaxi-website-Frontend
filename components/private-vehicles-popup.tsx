@@ -9,7 +9,7 @@ const vehicles = [
   {
     id: 1,
     name: "Toyota Innova",
-    price: "$6/ hour",
+    price: "$6/ Day",
     passengers: "5-6",
     luggage: "X 1 Big",
     handCarry: "X 3 Hand",

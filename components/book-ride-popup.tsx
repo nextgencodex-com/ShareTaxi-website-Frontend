@@ -57,7 +57,7 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
         notes: `Vehicle: ${vehicle.name}`,
       }
 
-  const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '')
+  const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001').replace(/\/+$/, '')
   const apiUrl = base.endsWith('/api') ? `${base}/private-rides` : `${base}/api/private-rides`
 
       const res = await fetch(apiUrl, {
@@ -204,7 +204,6 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
                     className="w-full p-3 bg-blue-50 border-0 rounded-lg text-gray-700 placeholder-gray-400"
                     required
                   />
-                  <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
                 </div>
               </div>
 

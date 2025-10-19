@@ -107,7 +107,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     let mounted = true
     ;(async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/rates')
+        const res = await fetch('http://localhost:5001/api/rates')
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         const rates = json?.data?.rates
@@ -257,7 +257,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     }
 
     // Default behavior: POST to backend endpoints
-  const endpoint = rideType === 'shared' ? 'http://localhost:5000/api/shared-rides' : 'http://localhost:5000/api/private-rides'
+  const endpoint = rideType === 'shared' ? 'http://localhost:5001/api/shared-rides' : 'http://localhost:5001/api/private-rides'
     ;(async () => {
       try {
         const res = await fetch(endpoint, {

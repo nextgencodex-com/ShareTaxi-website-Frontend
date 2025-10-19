@@ -299,7 +299,7 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
 
     // POST new shared ride to backend instead of localStorage
     try {
-      const res = await fetch('http://localhost:5000/api/shared-rides', {
+      const res = await fetch('http://localhost:5001/api/shared-rides', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRide)
@@ -363,7 +363,7 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
 
     // POST new personal ride to backend instead of localStorage
     try {
-      const res = await fetch('http://localhost:5000/api/personal-rides', {
+      const res = await fetch('http://localhost:5001/api/personal-rides', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRide)
@@ -462,7 +462,7 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
 
     try {
       // Choose endpoint based on ride type: personal rides go to /api/personal-rides
-      const endpoint = bookingData && bookingData.rideType === 'personal' ? 'http://localhost:5000/api/personal-rides' : 'http://localhost:5000/api/shared-rides'
+      const endpoint = bookingData && bookingData.rideType === 'personal' ? 'http://localhost:5001/api/personal-rides' : 'http://localhost:5001/api/shared-rides'
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -536,7 +536,7 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
         setBookingInProgress(true)
         try {
           // Call backend booking endpoint
-          const res = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}/book`, {
+          const res = await fetch(`http://localhost:5001/api/shared-rides/${rideData.id}/book`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -736,7 +736,7 @@ Please confirm this booking. Thank you!
 
         try {
           // Call backend booking endpoint
-          const res = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}/book`, {
+          const res = await fetch(`http://localhost:5001/api/shared-rides/${rideData.id}/book`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

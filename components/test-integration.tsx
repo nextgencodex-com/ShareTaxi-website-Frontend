@@ -125,7 +125,7 @@ export function TestIntegration() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2 text-sm">
-            <div>Backend URL: {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}</div>
+            <div>Backend URL: {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}</div>
             <div>Environment: {process.env.NODE_ENV}</div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>

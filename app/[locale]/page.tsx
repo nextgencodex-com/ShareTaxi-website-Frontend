@@ -83,7 +83,7 @@ export default function HomePage() {
     let mounted = true
     ;(async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/shared-rides')
+        const res = await fetch('http://localhost:5001/api/shared-rides')
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         const apiList = (json?.data?.rides as unknown) || []
