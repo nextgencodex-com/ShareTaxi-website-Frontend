@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { X, Users, Briefcase, ShoppingBag, Calendar, ArrowLeft } from "lucide-react"
 import { useRideBooking } from "@/hooks/use-ride-booking"
+import emailjs from "@emailjs/browser"
 
 interface Vehicle {
   id: number
@@ -50,15 +51,19 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
       const payload = {
         passengerName: formData.name,
         passengerPhone: formData.phone,
+        passengerEmail: formData.email,
+        bookingDate: formData.bookingDate,
         pickupLocation: currentLocation,
         pickupAddress: formData.pickupAddress,
         destination: { address: formData.dropoffAddress },
+        destinationAddress: formData.dropoffAddress,
+        vehicle: vehicle.name,
         passengers: 1,
         notes: `Vehicle: ${vehicle.name}`,
       }
 
-  const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '')
-  const apiUrl = base.endsWith('/api') ? `${base}/private-rides` : `${base}/api/private-rides`
+      const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '')
+      const apiUrl = base.endsWith('/api') ? `${base}/private-rides` : `${base}/api/private-rides`
 
       const res = await fetch(apiUrl, {
         method: 'POST',
@@ -70,6 +75,29 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
         const body = await res.json().catch(() => ({}))
         console.error('Private ride POST failed', res.status, body)
         throw new Error(body.message || 'Failed to create private ride')
+      }
+
+      // Send a welcome/under-review email to the customer
+      try {
+        await emailjs.send(
+          process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+          {
+            to_email: formData.email,
+            subject: '🚖 Thanks! Your personal ride request is under review',
+            name: formData.name,
+            from: payload.pickupAddress || (typeof payload.pickupLocation === 'string' ? payload.pickupLocation : ''),
+            to: formData.dropoffAddress,
+            taxi_type: 'personal',
+            date: formData.bookingDate,
+            time: '',
+            passengers: 1,
+            status_message: 'Your booking request has been received and is currently under review. We will contact you soon to confirm and share next steps.'
+          },
+          { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
+        )
+      } catch (e) {
+        console.warn('EmailJS send failed (non-blocking):', e)
       }
 
       // Success — close popup

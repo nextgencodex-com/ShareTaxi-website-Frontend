@@ -35,6 +35,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { Footer } from "@/components/footer";
+import emailjs from "@emailjs/browser";
 
 /**
  * AdminPanel
@@ -144,6 +145,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   // ---- Dialog states ---
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<RideData | null>(null);
+  const [passengersDialogOpen, setPassengersDialogOpen] = useState(false);
+  const [selectedRideForPassengers, setSelectedRideForPassengers] = useState<RideData | null>(null);
   // Helper to safely extract a location string from either a string or an object like {location: string}
   const formatLocation = (v: unknown) => {
     if (!v && v !== 0) return 'N/A'
@@ -215,6 +218,21 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (digits.length === 10) return `${digits.slice(0,3)} ${digits.slice(3,6)} ${digits.slice(6)}`;
     if (digits.length === 9) return `${digits.slice(0,2)} ${digits.slice(2,5)} ${digits.slice(5)}`;
     return digits;
+  };
+
+  // Helper: pick first meaningful (non-placeholder) string value
+  const pickNonPlaceholder = (...vals: unknown[]) => {
+    for (const v of vals) {
+      if (typeof v !== 'string') continue;
+      const t = v.trim();
+      if (!t) continue;
+      const lower = t.toLowerCase();
+      // Common placeholders to ignore
+      if (lower === 'n/a' || lower === 'na' || lower === 'not available' || lower === 'private customer') continue;
+      if (/^77x{3,}/i.test(t)) continue; // ignore masked example phone like 77XXXXXXX
+      return t;
+    }
+    return '';
   };
 
   // ---- Rate state (reused from your original) ----
@@ -376,29 +394,37 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             const pickupObj = (r.pickup as Record<string, unknown>) || undefined
             const destObj = (r.destination as Record<string, unknown>) || undefined
 
-            return {
+            // Create the RideData object with bookings preserved
+            const rideData = {
               id,
               bookingId,
               timeAgo: "just now",
               postedDate: postedDateIso,
               frequency: typeof r.frequency === 'string' ? r.frequency : "one-time",
               status: typeof r.status === 'string' ? r.status : "Pending",
-              driver: { name: typeof r.driverName === 'string' ? r.driverName : (driverObj && typeof driverObj.name === 'string' ? (driverObj.name as string) : "Unknown"), image: typeof r.driverImage === 'string' ? r.driverImage : (driverObj && typeof driverObj.image === 'string' ? (driverObj.image as string) : "/professional-driver-headshot.jpg") },
+              driver: { name: typeof r.driverName === 'string' ? r.driverName : (driverObj && typeof driverObj.name === 'string' ? (driverObj.name as string) : "Unknown"), image: typeof r.driverImage === 'string' ? r.driverImage : (driverObj && typeof driverObj.image === 'string' ? (driverObj.image as string) : "/professional-driver-headspot.jpg") },
               vehicle: typeof r.vehicle === 'string' ? r.vehicle : "",
               pickup: { location: typeof r.pickupLocation === 'string' ? r.pickupLocation : (pickupObj && typeof pickupObj.location === 'string' ? (pickupObj.location as string) : ""), type: "Pickup point" },
               destination: { location: typeof r.destinationLocation === 'string' ? r.destinationLocation : (destObj && typeof destObj.location === 'string' ? (destObj.location as string) : ""), type: "Destination" },
               // Prefer explicit time string from API (e.g. "12-2 AM"); otherwise derive from postedDate
               time: typeof r.time === 'string' && String(r.time).trim() !== '' ? String(r.time) : new Date(postedDateIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               duration: typeof r.duration === 'string' ? r.duration : "",
-              // Preserve rawPayload so the View Details dialog can surface original frontend payload fields
+              // Preserve rawPayload so the View Details dialog can surface original frontend payload fields - include bookings in rawPayload
               rawPayload: (r.rawPayload ?? r) as Record<string, unknown>,
               seats: { available, total },
               passengers: typeof r.passengers === 'string' ? r.passengers : String(total || ""),
               handCarry: typeof r.handCarry === 'string' ? r.handCarry : "",
               price: priceVal,
               customer: { fullName: "N/A", email: "N/A", phone: "N/A" },
-              type: "shared",
-            } as RideData
+              type: "shared" as const,
+            } as RideData;
+
+            // Preserve bookings array at the top level if it exists in the API response
+            if (Array.isArray(r.bookings)) {
+              (rideData as unknown as Record<string, unknown>).bookings = r.bookings;
+            }
+
+            return rideData
           })
 
           // Persist and replace shared rides
@@ -956,11 +982,98 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   };
 
   /* ---------- Status update helpers ---------- */
+  
+  // Send status change notification email to customer
+  const sendStatusChangeEmail = async (ride: RideData, newStatus: string) => {
+    try {
+      // Extract customer email/name robustly from nested rawPayload, ignoring placeholders
+      const rec = ride as unknown as Record<string, unknown>;
+      const rp = (typeof ride === 'object' && ride !== null && 'rawPayload' in (ride as unknown as Record<string, unknown>) && typeof (ride as unknown as Record<string, unknown>).rawPayload === 'object' && (ride as unknown as Record<string, unknown>).rawPayload !== null)
+        ? (ride as unknown as { rawPayload: Record<string, unknown> }).rawPayload
+        : {} as Record<string, unknown>;
+
+      // Try nested rawPayload.rawPayload.personalData
+      let nestedPD: Record<string, unknown> | undefined;
+      if ('rawPayload' in rp && typeof (rp as Record<string, unknown>).rawPayload === 'object' && (rp as Record<string, unknown>).rawPayload !== null) {
+        const nested = (rp as Record<string, unknown>).rawPayload as Record<string, unknown>;
+        if ('personalData' in nested && typeof nested.personalData === 'object' && nested.personalData !== null) {
+          nestedPD = nested.personalData as Record<string, unknown>;
+        }
+      }
+
+      // Also consider direct rawPayload.personalData
+      const pd = (typeof rp === 'object' && rp !== null && 'personalData' in rp && typeof (rp as { personalData?: unknown }).personalData === 'object' && (rp as { personalData?: unknown }).personalData !== null)
+        ? (rp as { personalData: Record<string, unknown> }).personalData
+        : {} as Record<string, unknown>;
+
+      const customerEmail = pickNonPlaceholder(
+        nestedPD && typeof nestedPD.email === 'string' ? nestedPD.email as string : undefined,
+        typeof (pd as Record<string, unknown>).email === 'string' ? (pd as Record<string, unknown>).email as string : undefined,
+        typeof rp.customerEmail === 'string' ? rp.customerEmail as string : undefined,
+        typeof rec.customerEmail === 'string' ? rec.customerEmail as string : undefined,
+        ride.customer && typeof ride.customer === 'object' && 'email' in ride.customer && typeof ride.customer.email === 'string' ? ride.customer.email : undefined
+      );
+
+      if (!customerEmail) {
+        console.warn('No valid customer email found for status notification');
+        return;
+      }
+
+      const customerName = pickNonPlaceholder(
+        nestedPD && typeof nestedPD.fullName === 'string' ? nestedPD.fullName as string : undefined,
+        typeof (pd as Record<string, unknown>).fullName === 'string' ? (pd as Record<string, unknown>).fullName as string : undefined,
+        typeof rp.customerName === 'string' ? rp.customerName as string : undefined,
+        typeof rec.customerName === 'string' ? rec.customerName as string : undefined,
+        ride.customer && typeof ride.customer === 'object' && 'fullName' in ride.customer && typeof ride.customer.fullName === 'string' ? ride.customer.fullName : undefined
+      ) || 'Valued Customer';
+
+      const statusMessages: Record<string, string> = {
+        'Confirmed': 'Great news! Your ride has been confirmed. We will contact you shortly with further details.',
+        'Cancelled': 'Your ride has been cancelled. If you have any questions, please contact us.',
+        'Completed': 'Thank you for riding with us! Your ride has been completed. We hope to serve you again soon.',
+        'In Progress': 'Your ride is now in progress. Your driver is on the way!',
+        'Pending': 'Your ride is pending confirmation. We will update you soon.'
+      };
+
+      const statusMessage = statusMessages[newStatus] || `Your ride status has been updated to: ${newStatus}`;
+
+      await emailjs.send(
+        process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
+        process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+        {
+          to_email: customerEmail,
+          subject: `🚖 Ride Status Update: ${newStatus}`,
+          name: customerName,
+          from: formatLocation(ride.pickup),
+          to: formatLocation(ride.destination),
+          taxi_type: ride.type || 'ride',
+          date: typeof ride.postedDate === 'string' ? new Date(ride.postedDate).toLocaleDateString() : '',
+          time: ride.time || '',
+          passengers: ride.passengers || ride.seats?.total || '',
+          status_message: statusMessage
+        },
+        { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
+      );
+
+      console.log(`Status change email sent to ${customerEmail} for status: ${newStatus}`);
+    } catch (error) {
+      console.error('Failed to send status change email:', error);
+      // Non-blocking: continue even if email fails
+    }
+  };
+
   const updateSharedRideStatus = (id: number, status: string) => {
     const ride = sharedRides.find((r) => r.id === id)
     const updated = sharedRides.map((ride) => ride.id === id ? { ...ride, status } : ride);
     // Persist local change optimistically
     persistSharedRides(updated);
+
+    // Send status change email to customer
+    if (ride) {
+      sendStatusChangeEmail(ride, status).catch(err => 
+        console.error('Email notification failed (non-blocking):', err)
+      );
+    }
 
     // If the ride maps to a remote API id, attempt to update the remote resource
     const remoteId = ride?.bookingId
@@ -994,11 +1107,18 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const updateVehicleBookingStatus = (id: number, status: string) => {
     // Optimistically update local state
     const previous = vehicleBookings;
+    const bookingItem = vehicleBookings.find((b) => b.id === id);
     const updated = vehicleBookings.map((booking) => booking.id === id ? { ...booking, status } : booking);
     persistVehicleBookings(updated);
 
+    // Send status change email to customer
+    if (bookingItem) {
+      sendStatusChangeEmail(bookingItem, status).catch(err => 
+        console.error('Email notification failed (non-blocking):', err)
+      );
+    }
+
     // If this booking maps to a remote private-ride id, attempt remote update
-    const bookingItem = vehicleBookings.find((b) => b.id === id);
     const remoteId = bookingItem?.bookingId;
     if (remoteId) {
       (async () => {
@@ -1025,13 +1145,20 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
   const updatePersonalRideStatus = (id: number, status: string) => {
     const previous = personalRides;
+    const rideItem = personalRides.find((r) => r.id === id);
     const updated = personalRides.map((ride) => ride.id === id ? { ...ride, status } : ride);
 
     // Optimistically persist the change locally
     persistPersonalRides(updated);
 
+    // Send status change email to customer
+    if (rideItem) {
+      sendStatusChangeEmail(rideItem, status).catch(err => 
+        console.error('Email notification failed (non-blocking):', err)
+      );
+    }
+
     // Find the ride so we can determine remote id (prefer bookingId)
-    const rideItem = personalRides.find((r) => r.id === id);
     const remoteId = rideItem && (rideItem.bookingId || (typeof rideItem.id === 'string' ? rideItem.id : undefined));
 
     if (!remoteId) return; // nothing to update remotely
@@ -1080,7 +1207,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     items: RideData[];
     onDelete?: (id: number) => void;
     onOpen?: (item: RideData) => void;
-  }> = ({ items, onDelete, onOpen }) => {
+    onViewPassengers?: (item: RideData) => void;
+  }> = ({ items, onDelete, onOpen, onViewPassengers }) => {
     return (
       <Card className="bg-white/80 backdrop-blur-sm border border-white/50 shadow-xl w-full">
           <CardHeader className="border-b border-slate-200/50">
@@ -1206,6 +1334,47 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                           <Eye className="h-3 w-3 mr-1" />
                           View
                         </Button>
+                        {(() => {
+                          // Check if this ride has bookings from multiple possible locations
+                          const rec = it as unknown as Record<string, unknown>;
+                          
+                          // Try to get bookings from:
+                          // 1. Direct property on ride object
+                          // 2. Inside rawPayload
+                          // 3. Inside rawPayload.rawPayload (nested)
+                          let bookingsArray: unknown[] = [];
+                          
+                          if (Array.isArray(rec.bookings)) {
+                            bookingsArray = rec.bookings;
+                          } else if (rec.rawPayload && typeof rec.rawPayload === 'object') {
+                            const rp = rec.rawPayload as Record<string, unknown>;
+                            if (Array.isArray(rp.bookings)) {
+                              bookingsArray = rp.bookings;
+                            } else if (rp.rawPayload && typeof rp.rawPayload === 'object') {
+                              const nestedRp = rp.rawPayload as Record<string, unknown>;
+                              if (Array.isArray(nestedRp.bookings)) {
+                                bookingsArray = nestedRp.bookings;
+                              }
+                            }
+                          }
+                          
+                          const hasBookings = bookingsArray.length > 0;
+                          
+                          // For debugging - log when we find bookings
+                          if (hasBookings) {
+                            console.log(`Ride ${it.bookingId} has ${bookingsArray.length} passenger(s)`);
+                          }
+                          
+                          if (hasBookings) {
+                            return (
+                              <Button size="sm" onClick={() => onViewPassengers?.(it)} className="bg-green-500 hover:bg-green-600 text-white">
+                                <Users className="h-3 w-3 mr-1" />
+                                Passengers ({bookingsArray.length})
+                              </Button>
+                            );
+                          }
+                          return null;
+                        })()}
                         <Button size="sm" variant="ghost" onClick={() => onDelete?.(it.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
                           <Trash2 className="h-3 w-3 mr-1" />
                           Delete
@@ -1345,64 +1514,113 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                 <th className="text-left py-4 px-6 font-semibold text-slate-700">Date & Time</th>
                 <th className="text-left py-4 px-6 font-semibold text-slate-700">Route</th>
                 <th className="text-left py-4 px-6 font-semibold text-slate-700">Time</th>
+                <th className="text-left py-4 px-6 font-semibold text-slate-700">Customer Name</th>
+                <th className="text-left py-4 px-6 font-semibold text-slate-700">Customer Email</th>
+                <th className="text-left py-4 px-6 font-semibold text-slate-700">Customer Phone</th>
                 <th className="text-left py-4 px-6 font-semibold text-slate-700">Status</th>
                 <th className="text-left py-4 px-6 font-semibold text-slate-700">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((it) => (
-                <tr key={it.id} className="border-b border-slate-100 hover:bg-blue-50/20 transition-colors">
-                  <td className="py-4 px-6 text-slate-600 font-mono text-xs">{it.bookingId}</td>
-                  <td className="py-4 px-6 text-slate-700">
-                    <div className="flex flex-col">
-                      <span className="font-medium">{it.postedDate ? new Date(it.postedDate).toLocaleDateString() : "N/A"}</span>
-                      <span className="text-xs text-slate-500">{it.postedDate ? new Date(it.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <MapPin className="h-3 w-3 text-green-500 flex-shrink-0" />
-                      <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.pickup)}</span>
-                      <span className="text-slate-400 mx-1">→</span>
-                      <MapPin className="h-3 w-3 text-red-500 flex-shrink-0" />
-                      <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.destination)}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 text-slate-700 font-medium">{it.time}</td>
-                  <td className="py-4 px-6">
-                    <Select
-                      value={it.status || "Pending"}
-                      onValueChange={(value) => updatePersonalRideStatus(it.id, value)}
-                    >
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Pending">Pending</SelectItem>
-                        <SelectItem value="Confirmed">Confirmed</SelectItem>
-                        <SelectItem value="In Progress">In Progress</SelectItem>
-                        <SelectItem value="Completed">Completed</SelectItem>
-                        <SelectItem value="Cancelled">Cancelled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex gap-2 flex-wrap">
-                      <Button size="sm" onClick={() => openViewDialog(it)} className="bg-blue-500 hover:bg-blue-600">
-                        <Eye className="h-3 w-3 mr-1" />
-                        View
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => onDelete?.(it.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Delete
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {items.map((it) => {
+                // Extract customer details from nested structures and ignore placeholders
+                // rawPayload from API
+                const rawPayload = (typeof it === 'object' && it !== null && 'rawPayload' in it && typeof (it as { rawPayload?: unknown }).rawPayload === 'object' && (it as { rawPayload?: unknown }).rawPayload !== null)
+                  ? (it as { rawPayload: Record<string, unknown> }).rawPayload
+                  : {};
+                // nested rawPayload.rawPayload.personalData
+                let nestedPersonalData: Record<string, unknown> | undefined;
+                if ('rawPayload' in rawPayload && typeof (rawPayload as Record<string, unknown>).rawPayload === 'object' && (rawPayload as Record<string, unknown>).rawPayload !== null) {
+                  const nested = (rawPayload as Record<string, unknown>).rawPayload as Record<string, unknown>;
+                  if ('personalData' in nested && typeof nested.personalData === 'object' && nested.personalData !== null) {
+                    nestedPersonalData = nested.personalData as Record<string, unknown>;
+                  }
+                }
+                const personalData = (typeof rawPayload === 'object' && rawPayload !== null && 'personalData' in rawPayload && typeof (rawPayload as { personalData?: unknown }).personalData === 'object' && (rawPayload as { personalData?: unknown }).personalData !== null)
+                  ? (rawPayload as { personalData: Record<string, unknown> }).personalData
+                  : {};
+
+                const itRec = it as unknown as Record<string, unknown>;
+
+                const customerName = pickNonPlaceholder(
+                  nestedPersonalData && typeof nestedPersonalData.fullName === 'string' ? (nestedPersonalData.fullName as string) : undefined,
+                  typeof (personalData as Record<string, unknown>).fullName === 'string' ? ((personalData as Record<string, unknown>).fullName as string) : undefined,
+                  typeof (rawPayload as Record<string, unknown>).customerName === 'string' ? ((rawPayload as Record<string, unknown>).customerName as string) : undefined,
+                  typeof itRec.customerName === 'string' ? (itRec.customerName as string) : undefined,
+                  it.customer && typeof it.customer === 'object' && 'fullName' in it.customer && typeof it.customer.fullName === 'string' ? it.customer.fullName : undefined
+                );
+                const customerEmail = pickNonPlaceholder(
+                  nestedPersonalData && typeof nestedPersonalData.email === 'string' ? (nestedPersonalData.email as string) : undefined,
+                  typeof (personalData as Record<string, unknown>).email === 'string' ? ((personalData as Record<string, unknown>).email as string) : undefined,
+                  typeof (rawPayload as Record<string, unknown>).customerEmail === 'string' ? ((rawPayload as Record<string, unknown>).customerEmail as string) : undefined,
+                  typeof itRec.customerEmail === 'string' ? (itRec.customerEmail as string) : undefined,
+                  it.customer && typeof it.customer === 'object' && 'email' in it.customer && typeof it.customer.email === 'string' ? it.customer.email : undefined
+                );
+                const customerPhone = pickNonPlaceholder(
+                  nestedPersonalData && typeof nestedPersonalData.phone === 'string' ? (nestedPersonalData.phone as string) : undefined,
+                  typeof (personalData as Record<string, unknown>).phone === 'string' ? ((personalData as Record<string, unknown>).phone as string) : undefined,
+                  typeof (rawPayload as Record<string, unknown>).customerPhone === 'string' ? ((rawPayload as Record<string, unknown>).customerPhone as string) : undefined,
+                  typeof itRec.customerPhone === 'string' ? (itRec.customerPhone as string) : undefined,
+                  it.customer && typeof it.customer === 'object' && 'phone' in it.customer && typeof it.customer.phone === 'string' ? it.customer.phone : undefined
+                );
+
+                return (
+                  <tr key={it.id} className="border-b border-slate-100 hover:bg-blue-50/20 transition-colors">
+                    <td className="py-4 px-6 text-slate-600 font-mono text-xs">{it.bookingId}</td>
+                    <td className="py-4 px-6 text-slate-700">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{it.postedDate ? new Date(it.postedDate).toLocaleDateString() : "N/A"}</span>
+                        <span className="text-xs text-slate-500">{it.postedDate ? new Date(it.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <MapPin className="h-3 w-3 text-green-500 flex-shrink-0" />
+                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.pickup)}</span>
+                        <span className="text-slate-400 mx-1">→</span>
+                        <MapPin className="h-3 w-3 text-red-500 flex-shrink-0" />
+                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.destination)}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-slate-700 font-medium">{it.time}</td>
+                    <td className="py-4 px-6">{customerName}</td>
+                    <td className="py-4 px-6">{customerEmail}</td>
+                    <td className="py-4 px-6">{customerPhone}</td>
+                    <td className="py-4 px-6">
+                      <Select
+                        value={it.status || "Pending"}
+                        onValueChange={(value) => updatePersonalRideStatus(it.id, value)}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Pending">Pending</SelectItem>
+                          <SelectItem value="Confirmed">Confirmed</SelectItem>
+                          <SelectItem value="In Progress">In Progress</SelectItem>
+                          <SelectItem value="Completed">Completed</SelectItem>
+                          <SelectItem value="Cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex gap-2 flex-wrap">
+                        <Button size="sm" onClick={() => openViewDialog(it)} className="bg-blue-500 hover:bg-blue-600">
+                          <Eye className="h-3 w-3 mr-1" />
+                          View
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => onDelete?.(it.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-12 px-6 text-center">
+                  <td colSpan={9} className="py-12 px-6 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Clock className="h-12 w-12 text-slate-300" />
                       <p className="text-slate-500">No personal rides found.</p>
@@ -1626,6 +1844,15 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const closeViewDialog = () => {
     setViewDialogOpen(false);
     setSelectedItem(null);
+  };
+
+  const openPassengersDialog = (item: RideData) => {
+    setSelectedRideForPassengers(item);
+    setPassengersDialogOpen(true);
+  };
+  const closePassengersDialog = () => {
+    setPassengersDialogOpen(false);
+    setSelectedRideForPassengers(null);
   };
 
   // Calculate dashboard statistics
@@ -1878,7 +2105,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             {/* Shared Requests */}
             {activePage === "sharedRequests" && (
               <>
-                <SharedRidesTable items={sharedRides} onDelete={handleDeleteShared} onOpen={openViewDialog} />
+                <SharedRidesTable items={sharedRides} onDelete={handleDeleteShared} onOpen={openViewDialog} onViewPassengers={openPassengersDialog} />
               </>
             )}
 
@@ -2464,6 +2691,148 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     </div>
                   </>
                 )
+              })()}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Passengers Dialog */}
+      <Dialog open={passengersDialogOpen} onOpenChange={closePassengersDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-600" />
+              Passenger Bookings - {selectedRideForPassengers?.bookingId}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedRideForPassengers && (
+            <div className="space-y-4">
+              {/* Ride Summary */}
+              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                <h3 className="font-semibold text-slate-700 mb-3">Ride Information</h3>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Route</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <MapPin className="h-3 w-3 text-green-600" />
+                      <span className="text-sm">{formatLocation(selectedRideForPassengers.pickup)}</span>
+                      <span className="text-gray-400">→</span>
+                      <MapPin className="h-3 w-3 text-red-600" />
+                      <span className="text-sm">{formatLocation(selectedRideForPassengers.destination)}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Available Seats</label>
+                    <p className="text-sm font-semibold mt-1">
+                      {selectedRideForPassengers.seats.available} / {selectedRideForPassengers.seats.total}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Price</label>
+                    <p className="text-sm font-semibold mt-1">${selectedRideForPassengers.price}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Passengers List */}
+              {(() => {
+                const rec = selectedRideForPassengers as unknown as Record<string, unknown>;
+                const bookingsArray = rec.bookings || (rec.rawPayload as Record<string, unknown>)?.bookings || [];
+                
+                if (!Array.isArray(bookingsArray) || bookingsArray.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-slate-500">
+                      <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No passenger bookings found for this ride.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-slate-700">
+                      Passengers ({bookingsArray.length})
+                    </h3>
+                    {bookingsArray.map((booking: Record<string, unknown>, index: number) => {
+                      // Format booking date
+                      const bookingDateRaw = booking.bookingDate || booking.createdAt;
+                      let bookingDateFormatted = 'N/A';
+                      if (bookingDateRaw) {
+                        try {
+                          if (typeof bookingDateRaw === 'object' && bookingDateRaw !== null) {
+                            const dateObj = bookingDateRaw as Record<string, unknown>;
+                            if ('_seconds' in dateObj || 'seconds' in dateObj) {
+                              const secs = Number(dateObj._seconds ?? dateObj.seconds);
+                              bookingDateFormatted = new Date(secs * 1000).toLocaleString();
+                            }
+                          } else if (typeof bookingDateRaw === 'string' || typeof bookingDateRaw === 'number') {
+                            bookingDateFormatted = new Date(bookingDateRaw).toLocaleString();
+                          }
+                        } catch {
+                          bookingDateFormatted = String(bookingDateRaw);
+                        }
+                      }
+
+                      const bookingStatusRaw = booking.status || 'pending';
+                      const bookingStatus = typeof bookingStatusRaw === 'string' ? bookingStatusRaw : 'pending';
+                      const statusColors = {
+                        'confirmed': 'bg-green-100 text-green-800',
+                        'pending': 'bg-yellow-100 text-yellow-800',
+                        'cancelled': 'bg-red-100 text-red-800',
+                        'completed': 'bg-blue-100 text-blue-800'
+                      };
+                      const statusClass = statusColors[bookingStatus as keyof typeof statusColors] || 'bg-gray-100 text-gray-800';
+
+                      const bookingId = typeof booking.id === 'string' || typeof booking.id === 'number' ? String(booking.id) : 'N/A';
+                      const rideId = typeof booking.rideId === 'string' ? booking.rideId : 'N/A';
+                      const passengerName = typeof booking.passengerName === 'string' ? booking.passengerName : 'N/A';
+                      const passengerPhone = typeof booking.passengerPhone === 'string' ? booking.passengerPhone : null;
+                      const seatsBooked = typeof booking.seatsBooked === 'number' ? booking.seatsBooked : 0;
+
+                      return (
+                        <div key={typeof booking.id === 'string' || typeof booking.id === 'number' ? String(booking.id) : index} className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-blue-100 rounded-full">
+                                <Users className="h-5 w-5 text-blue-600" />
+                              </div>
+                              <div>
+                                <h4 className="font-semibold text-slate-800">{passengerName}</h4>
+                                <p className="text-xs text-slate-500">Booking ID: {bookingId}</p>
+                              </div>
+                            </div>
+                            <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${statusClass}`}>
+                              {bookingStatus.charAt(0).toUpperCase() + bookingStatus.slice(1)}
+                            </span>
+                          </div>
+                          
+                          <div className="grid md:grid-cols-3 gap-3 text-sm">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600">Phone</label>
+                              <p className="font-medium">{passengerPhone ? (formatPhone(passengerPhone) || passengerPhone) : 'N/A'}</p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600">Seats Booked</label>
+                              <p className="font-semibold text-blue-600">{seatsBooked}</p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600">Booking Date</label>
+                              <p className="text-slate-600">{bookingDateFormatted}</p>
+                            </div>
+                          </div>
+                          
+                          {rideId !== 'N/A' && (
+                            <div className="mt-3 pt-3 border-t border-slate-100">
+                              <p className="text-xs text-slate-500">Ride ID: {rideId}</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
               })()}
             </div>
           )}

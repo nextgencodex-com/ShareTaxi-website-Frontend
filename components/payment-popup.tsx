@@ -14,15 +14,15 @@ import { AlertTriangle } from "lucide-react"
 
 
 // Send Confirmation Email
-const sendConfirmationEmail = async (bookingData?: BookingData | null, personalData?: PersonalData | null, rideData?: RideData | null, isJoinRideFlow?: boolean, selectedSeats?: number | null, seatsCount?: number, totalPrice?: string, perPersonFare?: string) => {
+const sendConfirmationEmail = async (bookingData?: BookingData | null, personalData?: PersonalData | null, rideData?: RideData | null, isJoinRideFlow?: boolean, selectedSeats?: number | null, seatsCount?: number, totalPrice?: string, perPersonFare?: string, subjectOverride?: string) => {
   try {
     // Extract pricing information
     let extractedPerPersonFare = perPersonFare || "N/A"
     const getSeatCount = (pd?: PersonalData | null): number => {
       if (!pd) return 1
-  const maybeSeat = (pd as unknown as Record<string, unknown>)['seatCount']
-  if (typeof maybeSeat === 'number') return maybeSeat
-  if (typeof maybeSeat === 'string' && maybeSeat.trim() !== '' && !isNaN(Number(maybeSeat))) return parseInt(maybeSeat, 10)
+      const maybeSeat = (pd as unknown as Record<string, unknown>)['seatCount']
+      if (typeof maybeSeat === 'number') return maybeSeat
+      if (typeof maybeSeat === 'string' && maybeSeat.trim() !== '' && !isNaN(Number(maybeSeat))) return parseInt(maybeSeat, 10)
       return 1
     }
 
@@ -50,7 +50,7 @@ const sendConfirmationEmail = async (bookingData?: BookingData | null, personalD
       process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
       {
         to_email: personalData?.email,
-        subject: "🚖 Booking Confirmed!",
+        subject: subjectOverride || "🚖 Pending Booking!",
         name: personalData?.fullName || "",
         from: isJoinRideFlow ? rideData?.pickup.location : bookingData?.from || "",
         to: isJoinRideFlow ? rideData?.destination.location : bookingData?.to || "",
@@ -61,7 +61,8 @@ const sendConfirmationEmail = async (bookingData?: BookingData | null, personalD
         luggage: personalData?.specialRequests || "", // Use special requests or empty for luggage
         seats: extractedSeats,
         per_person_fare: extractedPerPersonFare,
-        total_price: extractedTotal
+        total_price: extractedTotal,
+        status_message:  'Your booking request has been received and is currently under review. We will contact you soon to confirm and share next steps.'
       },
       {
         publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY!,
@@ -84,6 +85,36 @@ const sendConfirmationEmail = async (bookingData?: BookingData | null, personalD
 
     console.error('Failed to send confirmation email:', error)
     alert(`Failed to send confirmation email: ${extractErrorText(error)}`)
+  }
+}
+
+// Send Welcome/Pending email for newly created shared ride
+const sendWelcomeEmail = async (bookingData?: BookingData | null, personalData?: PersonalData | null) => {
+  try {
+    if (!personalData || !bookingData) return
+    const subject = bookingData.rideType === 'personal'
+      ? '🚖 Thanks! Your personal ride request is under review'
+      : '🚖 Thanks! Your shared ride request is under review'
+    await emailjs.send(
+      process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
+      process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+      {
+        to_email: personalData.email,
+        subject,
+        name: personalData.fullName || '',
+        from: bookingData.from || '',
+        to: bookingData.to || '',
+        taxi_type: bookingData.rideType || 'shared',
+        date: bookingData.date || '',
+        time: bookingData.time || '',
+        passengers: personalData.seatCount || '',
+        status_message: 'Your booking request has been received and is currently under review. We will contact you soon to confirm and share next steps.'
+      },
+      { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
+    )
+    console.log('Welcome (under review) email sent')
+  } catch (error) {
+    console.error('Failed to send welcome email:', error)
   }
 }
 
@@ -260,8 +291,10 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
     if (!bookingData || !personalData || bookingData.rideType !== 'shared') return null
 
     const seatCount = parseInt(String(personalData.seatCount || "1"), 10)
-    const totalSeats = 6 // Standard vehicle capacity
-    const availableSeats = Math.max(0, totalSeats - seatCount)
+    // For a newly created shared ride, the user's entered seatCount defines
+    // the total capacity of the ride. Initially, all seats are available.
+    const totalSeats = seatCount
+    const availableSeats = totalSeats
 
     const newRide = {
       id: Date.now(),
@@ -312,6 +345,8 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
       }
 
       const data = await res.json()
+      // Send welcome/under-review email automatically
+      try { await sendWelcomeEmail(bookingData, personalData) } catch {}
       // Dispatch event to notify other components
       try { window.dispatchEvent(new CustomEvent('userRideAdded', { detail: data })) } catch {}
       try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: data })) } catch {}
@@ -371,17 +406,19 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
 
       if (!res.ok) {
         const text = await res.text()
-        console.error('Failed to create shared ride on server:', res.status, text)
+        console.error('Failed to create personal ride on server:', res.status, text)
         return null
       }
 
       const data = await res.json()
+      // Send welcome/under-review email automatically (same as shared)
+      try { await sendWelcomeEmail(bookingData, personalData) } catch {}
       // Dispatch event to notify other components
       try { window.dispatchEvent(new CustomEvent('userRideAdded', { detail: data })) } catch {}
       try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: data })) } catch {}
       return data
     } catch (error) {
-      console.error('Error adding user shared ride:', error)
+      console.error('Error adding user personal ride:', error)
       return null
     }
   }, [bookingData, personalData])
@@ -505,13 +542,16 @@ export function PaymentDetailsPopup({ isOpen, onClose, onBack, bookingData, pers
     // Clear any previous errors
     setValidationErrors([])
 
-    // Always call addUserSharedRide if this is a shared ride booking and user is creating a new shared ride
-    // If it creates successfully, we'll avoid calling saveBookedRide() later to prevent duplicate persisted records
-    let createdSharedRide: unknown | null = null
-    if (bookingData?.rideType === 'shared' && !isJoinRideFlow) {
-      createdSharedRide = await addUserSharedRide()
-      // If creation failed, stop the flow so user can retry
-      if (createdSharedRide === null) return
+    // Always create the ride record first for shared/personal when not a join flow
+    // If creation succeeds, we avoid calling saveBookedRide() later to prevent duplicates
+    let createdRide: unknown | null = null
+    if (!isJoinRideFlow && bookingData?.rideType === 'shared') {
+      createdRide = await addUserSharedRide()
+      if (createdRide === null) return
+    }
+    if (!isJoinRideFlow && bookingData?.rideType === 'personal') {
+      createdRide = await addUserPersonalRide()
+      if (createdRide === null) return
     }
 
   let bookingDetails = ""
@@ -678,8 +718,8 @@ Please confirm this booking. Thank you!
 
       await sendConfirmationEmail(bookingData, personalData, rideData, false, selectedSeats, regularSeats, regularTotal, regularPerPersonFare)
 
-      // Persist booked ride unless we already created the shared ride above
-      if (!createdSharedRide) {
+      // Persist booked ride unless we already created the ride above
+      if (!createdRide) {
         await saveBookedRide()
       }
       
