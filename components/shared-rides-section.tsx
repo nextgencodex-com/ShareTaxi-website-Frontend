@@ -363,10 +363,12 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
           <CardContent className="p-6">
             <div className="space-y-4">
               <div className="flex justify-center mb-4 space-x-2">
-                <Badge className="bg-blue-100 text-blue-600 hover:bg-blue-100 rounded-full px-3 py-1 text-sm">
-                    Date: {date}
-                </Badge>
-                <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100 rounded-full px-3 py-1 text-sm">
+                {ride.frequency !== 'daily' && (
+                  <Badge className="bg-blue-100 text-blue-600 hover:bg-blue-100 rounded-full px-3 py-1 text-sm">
+                      Date: {date}
+                  </Badge>
+                )}
+                <Badge className={`bg-gray-100 text-gray-600 hover:bg-gray-100 rounded-full px-3 py-1 text-sm ${ride.frequency === 'daily' ? 'mx-auto' : ''}`}>
                     Pickup Time: {displayPickupTime}
                 </Badge>
               </div>

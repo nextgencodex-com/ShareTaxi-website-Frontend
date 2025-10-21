@@ -183,11 +183,11 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
       // For shared rides, adjust based on actual seat count vs. standard 4 passengers
       const perPersonFare = (distance * rate) / 4;
       const totalPrice = perPersonFare * seats;
-      newFareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${rate.toFixed(2)} per km<br>👥 Per Person Fare: <span style="color:green;">$${perPersonFare.toFixed(2)}</span><br>📍 Seats: ${seats}<br>💰 Total Price: <span style="color:blue; font-weight: bold;">$${totalPrice.toFixed(2)}</span>`
+      newFareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${seats}<br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalPrice.toFixed(2)}</span>`
     } else {
       // For personal rides, calculate total based on seats selected
       const totalFare = distance * rate * seats;
-      newFareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${rate.toFixed(2)} per km<br>💰 Total Fare: <span style="color:blue;">$${totalFare.toFixed(2)}</span><br>📍 Seats: ${seats}`
+      newFareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${seats}<br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
     }
 
     // Update the current booking data with new calculated fare
@@ -220,14 +220,12 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
       errors.push("Email address is too long")
     }
 
-    // Phone validation (Sri Lankan format after +94)
+    // Phone validation - support international numbers
     const phone = formData.phone.trim()
     if (!phone) {
       errors.push("Phone number is required")
-    } else if (!/^\d{8,10}$/.test(phone)) {
-      errors.push("Phone number must be 8-10 digits (Sri Lankan format)")
-    } else if (!/^7[0-9]{7}|^9[0-9]{7}|^6[0-9]{7}|^11[0-9]{6}|^[0-9]{9,10}$/.test(phone)) {
-      errors.push("Please enter a valid Sri Lankan phone number")
+    } else if (!/^(\+\d{7,15}|\d{8,15})$/.test(phone)) {
+      errors.push("Please enter a valid phone number (international format: +1234567890 or 1234567890)")
     }
 
 
@@ -381,10 +379,10 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">
-                      {formData.seatCount} seats
+                      {formData.seatCount} {formData.seatCount === 1 ? "Seat" : "Seats"} {bookingData.rideType === "shared" ? "Requested" : "Available"}
                     </p>
                     <p className="text-gray-600 text-sm">
-                      {bookingData.rideType === "shared" ? "Requested" : "Available"}
+                      {bookingData.rideType === "shared" ? "Shared ride" : "Personal ride"}
                     </p>
                   </div>
                 </div>
@@ -401,6 +399,20 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
                       className="text-sm font-medium"
                       dangerouslySetInnerHTML={{ __html: currentBookingData.calculatedFare }}
                     />
+                    {/* Extract and display Total Price separately */}
+                    {(() => {
+                      const totalMatch = currentBookingData.calculatedFare.match(/Total Price.*?\$([0-9.]+)/);
+                      if (totalMatch) {
+                        return (
+                          <div className="mt-2 pt-2 border-t border-blue-200">
+                            <div className="text-lg font-bold text-blue-600">
+                              Total Price: ${totalMatch[1]}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 ) : (
                   <div className="text-gray-500 italic">
@@ -448,18 +460,15 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">Phone Number</label>
-                <div className="flex gap-2">
-                  <Input value="+94" readOnly className="bg-blue-50 border-0 h-12 w-20" />
-                  <Input
-                    value={formData.phone}
-                    onChange={(e) => {
-                      handleInputChange("phone", e.target.value)
-                      clearValidationErrors()
-                    }}
-                    className={`bg-blue-50 border-0 h-12 flex-1 ${fieldErrors.phone ? 'border-red-300' : ''}`}
-                    placeholder="769278958"
-                  />
-                </div>
+                <Input
+                  value={formData.phone}
+                  onChange={(e) => {
+                    handleInputChange("phone", e.target.value)
+                    clearValidationErrors()
+                  }}
+                  className={`bg-blue-50 border-0 h-12 ${fieldErrors.phone ? 'border-red-300' : ''}`}
+                  placeholder="Enter full international number (e.g., +94769278958)"
+                />
                 {fieldErrors.phone && (
                   <p className="text-red-600 text-sm mt-1">{fieldErrors.phone}</p>
                 )}
@@ -486,30 +495,7 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
                   <p className="text-red-600 text-sm mt-1">{fieldErrors.specialRequests}</p>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Seats count</label>
-                <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
-                  <button
-                    type="button"
-                    onClick={() => handleSeatCountChange(-1)}
-                    disabled={formData.seatCount <= 1}
-                    className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
-                  >
-                    −
-                  </button>
-                  <span className="flex-1 text-center font-semibold text-gray-900">
-                    {formData.seatCount}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleSeatCountChange(1)}
-                    disabled={formData.seatCount >= 20}
-                    className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
+              
             </div>
 
             {bookingData.rideType === "shared" && (

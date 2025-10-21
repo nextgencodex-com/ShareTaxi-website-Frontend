@@ -89,6 +89,9 @@ const sendConfirmationEmail = async (
         taxi_type: isJoinRideFlow ? "shared" : (bookingData?.rideType || ""),
         date: isJoinRideFlow 
           ? (() => {
+              // For daily rides, don't include date
+              if (rideData?.frequency === 'daily') return "";
+              
               if (!rideData?.time) return "";
               const timeString = rideData.time.trim();
               if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
@@ -108,6 +111,16 @@ const sendConfirmationEmail = async (
           ? (() => {
               if (!rideData?.time) return "";
               const timeString = rideData.time.trim();
+              
+              // For daily rides, extract just the time part
+              if (rideData?.frequency === 'daily') {
+                const timeMatch = timeString.match(/(\d{1,2}-\d{1,2}\s*(AM|PM))/i);
+                if (timeMatch) {
+                  return timeMatch[0];
+                }
+                return timeString;
+              }
+              
               if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
                 const timeParts = timeString.split(" ");
                 if (timeParts.length >= 3) {
@@ -233,6 +246,7 @@ interface RideData {
   };
   price: string;
   distanceKm?: number;
+  frequency?: string;
 }
 
 interface PaymentDetailsPopupProps {
@@ -273,6 +287,21 @@ export function PaymentDetailsPopup({
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   // submit attempt flag removed (was unused)
 
+  // Function to parse time for display
+  const parseTimeForDisplay = (time: string, frequency?: string) => {
+    if (frequency === 'daily') {
+      // For daily rides, extract just the time part (e.g., "4-6 PM" from "4-6 PM")
+      const timeMatch = time.match(/(\d{1,2}-\d{1,2}\s*(AM|PM))/i)
+      if (timeMatch) {
+        return timeMatch[0]
+      }
+      // Fallback: if no match, return the original time
+      return time
+    }
+    // For one-time rides, return the full time string
+    return time
+  }
+
   // Validation functions
   const validateBookingData = () => {
     console.log("Validating booking data - personalData:", personalData);
@@ -308,11 +337,15 @@ export function PaymentDetailsPopup({
       errors.push("Email address is too long");
     }
 
-    // Phone validation
+    // Phone validation - support international numbers
     if (!personalData.phone?.trim()) {
       errors.push("Phone number is required");
-    } else if (!/^\d{8,10}$/.test(personalData.phone.trim())) {
-      errors.push("Phone number must be 8-10 digits");
+    } else {
+      const phone = personalData.phone.trim();
+      // Allow international format: + followed by 7-15 digits, or just 8-15 digits
+      if (!/^(\+\d{7,15}|\d{8,15})$/.test(phone)) {
+        errors.push("Please enter a valid phone number (international format: +1234567890 or 1234567890)");
+      }
     }
 
     // Special Requests validation (optional, but reasonable length)
@@ -879,7 +912,7 @@ export function PaymentDetailsPopup({
             }
             const joinRideEmailDetails = `\nTaxi Booking Request\n\nRoute: ${
               rideData?.pickup?.location || "N/A"
-            } → ${rideData?.destination?.location || "N/A"}\nDate: ${emailDisplayDate}\nTime: ${emailDisplayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
+            } → ${rideData?.destination?.location || "N/A"}${rideData?.frequency === 'daily' ? '' : `\nDate: ${emailDisplayDate}`}\nTime: ${emailDisplayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
               personalData?.fullName || "N/A"
             }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ‪+94${
               personalData?.phone || "N/A"
@@ -1013,7 +1046,7 @@ Type: ${rideTypeText}, ${mapTripType(bookingData?.tripType)}
 Personal Details:
 • Name: ${personalData?.fullName || "N/A"}
 • Email: ${personalData?.email || "N/A"}
-• Phone: ‪+94${personalData?.phone || "N/A"}‬
+• Phone: ‪${personalData?.phone || "N/A"}‬
 • Seats: ${personalData?.seatCount || "N/A"}
 
 Special Requests: ${personalData?.specialRequests || "None"}
@@ -1244,9 +1277,9 @@ Please confirm this booking. Thank you!
 
           const joinRideDetails = `\nTaxi Booking Request\n\nRoute: ${
             rideData?.pickup?.location || "N/A"
-          } → ${rideData?.destination?.location || "N/A"}\nDate: ${displayDate}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
+          } → ${rideData?.destination?.location || "N/A"}${rideData?.frequency === 'daily' ? '' : `\nDate: ${displayDate}`}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
             personalData?.fullName || "N/A"
-          }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ‪+94${
+          }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ‪${
             personalData?.phone || "N/A"
           }‬\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${
             personalData?.specialRequests || "None"
@@ -1335,7 +1368,7 @@ Type: Shared, One Way Ride
 Personal Details:
 • Name: ${personalData?.fullName || "N/A"}
 • Email: ${personalData?.email || "N/A"}
-• Phone: ‪+94${personalData?.phone || "N/A"}‬
+• Phone: ‪${personalData?.phone || "N/A"}‬
 • Seats: ${personalData?.seatCount || "N/A"}
 
 Special Requests: ${personalData?.specialRequests || "None"}
@@ -1529,7 +1562,7 @@ Please confirm this booking. Thank you!
                   <div>
                     <p className="font-semibold text-gray-900">
                       {isJoinRideFlow
-                        ? rideData?.time
+                        ? parseTimeForDisplay(rideData?.time || "N/A", rideData?.frequency)
                         : bookingData?.time || "N/A"}
                     </p>
                     <p className="text-gray-600 text-sm">
@@ -1626,7 +1659,7 @@ Please confirm this booking. Thank you!
                 <div>
                   <p className="text-gray-600">Phone</p>
                   <p className="font-semibold text-gray-900">
-                    +94{personalData?.phone || "N/A"}
+                    {personalData?.phone || "N/A"}
                   </p>
                 </div>
                 <div>

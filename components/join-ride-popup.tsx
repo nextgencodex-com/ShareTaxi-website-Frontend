@@ -31,6 +31,7 @@ interface RideData {
     total: number
   }
   price: string
+  frequency?: string
 }
 
 interface JoinRidePopupProps {
@@ -49,6 +50,21 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
     seatCount: 1,
   })
   const [showPaymentPopup, setShowPaymentPopup] = useState(false)
+
+  // Function to parse time for display
+  const parseTimeForDisplay = (time: string, frequency?: string) => {
+    if (frequency === 'daily') {
+      // For daily rides, extract just the time part (e.g., "4-6 PM" from "4-6 PM")
+      const timeMatch = time.match(/(\d{1,2}-\d{1,2}\s*(AM|PM))/i)
+      if (timeMatch) {
+        return timeMatch[0]
+      }
+      // Fallback: if no match, return the original time
+      return time
+    }
+    // For one-time rides, return the full time string
+    return time
+  }
 
   // Reset form data and payment popup state when popup opens
   useEffect(() => {
@@ -139,7 +155,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
                     <Clock className="h-3 w-3 text-blue-400" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">{rideData.time}</p>
+                    <p className="font-semibold text-gray-900">{parseTimeForDisplay(rideData.time, rideData.frequency)}</p>
                     <p className="text-gray-600 text-sm">{rideData.duration}</p>
                   </div>
                 </div>
@@ -169,7 +185,31 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
 
               <hr className="border-gray-200 my-4" />
 
-              <div className="flex items-center justify-end">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-semibold text-gray-900">Seats:</label>
+                  <div className="flex items-center gap-2 bg-blue-50 rounded-lg p-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSeatCountChange(-1)}
+                      disabled={formData.seatCount <= 1}
+                      className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold text-sm"
+                    >
+                      -
+                    </button>
+                    <span className="text-center font-semibold text-gray-900 min-w-[2rem]">
+                      {formData.seatCount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleSeatCountChange(1)}
+                      disabled={formData.seatCount >= rideData.seats.available}
+                      className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold text-sm"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
                 <div className="text-right">
                   <p className="text-2xl font-bold text-gray-900">
                     {formatPriceUSD(calculateProgressiveSharedTotal(formData.seatCount))}
@@ -205,22 +245,19 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">Phone Number</label>
-                <div className="flex gap-2">
-                  <Input value="+94" readOnly className="bg-blue-50 border-0 h-12 w-20" />
-                  <Input
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange("phone", e.target.value)}
-                    className="bg-blue-50 border-0 h-12 flex-1"
-                    placeholder=""
-                  />
-                </div>
+                <Input
+                  value={formData.phone}
+                  onChange={(e) => handleInputChange("phone", e.target.value)}
+                  className="bg-blue-50 border-0 h-12"
+                  placeholder="Enter full international number (e.g., +94769278958)"
+                />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">Special Requests or Notes</label>
                 <Textarea
@@ -229,30 +266,6 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
                   className="bg-blue-50 border-0 min-h-[100px] resize-none"
                   placeholder="Enter your special request"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Seats count</label>
-                <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
-                  <button
-                    type="button"
-                    onClick={() => handleSeatCountChange(-1)}
-                    disabled={formData.seatCount <= 1}
-                    className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
-                  >
-                    -
-                  </button>
-                  <span className="flex-1 text-center font-semibold text-gray-900">
-                    {formData.seatCount}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleSeatCountChange(1)}
-                    disabled={formData.seatCount >= rideData.seats.available}
-                    className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
-                  >
-                    +
-                  </button>
-                </div>
               </div>
             </div>
 
