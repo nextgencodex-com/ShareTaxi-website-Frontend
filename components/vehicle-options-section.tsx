@@ -52,7 +52,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
     // Attempt to fetch vehicles from backend API
     ;(async () => {
       try {
-        const resp = await fetch("http://localhost:5000/api/vehicles", { cache: "no-store" })
+        const resp = await fetch("https://taxi-backend-x5w6.onrender.com/api/vehicles", { cache: "no-store" })
         if (!mounted) return
         if (!resp.ok) throw new Error(`Server responded ${resp.status}`)
         const json = await resp.json()
@@ -244,7 +244,8 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
                   <div key={vehicle.id} className={`${shuffledGradients[index]} rounded-3xl p-6 text-white shadow-xl`}>
                     <div className="text-center mb-6">
                       <h3 className="text-2xl font-bold mb-2">{vehicle.name}</h3>
-                      <p className="text-lg opacity-90">$ {vehicle.price} per day</p>
+                      <p className="text-lg opacity-90">{vehicle.price}$ per day</p>
+
                     </div>
 
                     <div className="flex justify-center items-center gap-8 mb-6">

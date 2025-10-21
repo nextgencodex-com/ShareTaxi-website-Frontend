@@ -107,7 +107,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     let mounted = true
     ;(async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/rates')
+        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/rates')
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         const rates = json?.data?.rates
@@ -257,7 +257,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     }
 
     // Default behavior: POST to backend endpoints
-  const endpoint = rideType === 'shared' ? 'http://localhost:5000/api/shared-rides' : 'http://localhost:5000/api/private-rides'
+  const endpoint = rideType === 'shared' ? 'https://taxi-backend-x5w6.onrender.com/api/shared-rides' : 'https://taxi-backend-x5w6.onrender.com/api/private-rides'
     ;(async () => {
       try {
         const res = await fetch(endpoint, {
@@ -544,7 +544,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           <span className="text-lg">📍</span> Fare Calculator
                         </h4>
                         <div className="flex gap-2">
-                          <Input
+                          {/*<Input
                             type="number"
                             placeholder={"Distance (km) e.g. 40"}
                             value={tripType === "round-trip" ? roundTripDistance : oneWayDistance}

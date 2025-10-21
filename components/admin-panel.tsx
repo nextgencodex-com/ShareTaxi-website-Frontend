@@ -259,7 +259,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       // Load rates from backend if available
       (async () => {
         try {
-          const res = await fetch('http://localhost:5000/api/rates');
+          const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/rates');
           if (!res.ok) throw new Error(`API ${res.status}`);
           const json = await res.json();
           const rates = json?.data?.rates;
@@ -367,7 +367,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       setSharedLoading(true)
       setSharedError(null)
       try {
-        const res = await fetch("http://localhost:5000/api/shared-rides")
+        const res = await fetch("https://taxi-backend-x5w6.onrender.com/api/shared-rides")
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         const apiRides = json?.data?.rides as unknown
@@ -451,7 +451,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       setVehicleBookingsLoading(true);
       setVehicleBookingsError(null);
       try {
-        const res = await fetch('http://localhost:5000/api/private-rides');
+        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/private-rides');
         if (!res.ok) throw new Error(`API ${res.status}`);
         const json = await res.json();
         const apiRides = json?.data?.rides as unknown;
@@ -515,7 +515,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       setPersonalLoading(true);
       setPersonalError(null);
       try {
-        const res = await fetch('http://localhost:5000/api/personal-rides');
+        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/personal-rides');
         if (!res.ok) throw new Error(`API ${res.status}`);
         const json = await res.json();
         const apiBookings = json?.data?.bookings as unknown;
@@ -661,7 +661,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       } as Record<string, unknown>;
 
       try {
-        const res = await fetch('http://localhost:5000/api/shared-rides', {
+        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/shared-rides', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(payload),
@@ -801,7 +801,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           buttonColor: "bg-blue-600 hover:bg-blue-700",
         } as Record<string, unknown>;
 
-        const res = await fetch('http://localhost:5000/api/vehicles', {
+        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/vehicles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(payload),
@@ -923,7 +923,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     // Persist to backend and then update local display
     (async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/rates', {
+        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/rates', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ ratePerKm: usdRate, rateLKRPerKm: lkrRate, exchangeRate: currentExchangeRate }),
@@ -956,7 +956,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const removeRate = () => {
     (async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/rates', { method: 'DELETE' });
+        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/rates', { method: 'DELETE' });
         if (!res.ok) throw new Error(`API ${res.status}`);
         // clear local UI
         setRatePerKm('');
@@ -1088,7 +1088,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             pickupLocation: ride?.pickup?.location,
             destinationLocation: ride?.destination?.location,
           }
-          const res = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/shared-rides/${encodeURIComponent(remoteId)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify(body),
@@ -1123,7 +1123,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`http://localhost:5000/api/private-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/private-rides/${encodeURIComponent(remoteId)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({ status }),
@@ -1165,7 +1165,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
     (async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/personal-rides/${encodeURIComponent(remoteId)}`, {
+        const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/personal-rides/${encodeURIComponent(remoteId)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({ status }),
@@ -1647,7 +1647,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/shared-rides/${encodeURIComponent(remoteId)}`, {
             method: 'DELETE',
           })
           if (!res.ok) {
@@ -1697,7 +1697,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         // Prefer bookingId for remote id if present, else use numeric id
         const remoteId = ride.bookingId ?? ride.id;
         const idForUrl = encodeURIComponent(String(remoteId));
-        const res = await fetch(`http://localhost:5000/api/shared-rides/${idForUrl}`, {
+        const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/shared-rides/${idForUrl}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ postedDate: iso }),
@@ -1791,7 +1791,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`http://localhost:5000/api/private-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/private-rides/${encodeURIComponent(remoteId)}`, {
             method: 'DELETE',
             headers: { 'Accept': 'application/json' },
           });
@@ -1818,7 +1818,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`http://localhost:5000/api/personal-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/personal-rides/${encodeURIComponent(remoteId)}`, {
             method: 'DELETE',
             headers: { 'Accept': 'application/json' },
           });
@@ -2281,7 +2281,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Price</label>
+                      <label className="block text-sm font-medium mb-2">Price($)</label>
                       <Input value={vehicleForm.price} onChange={(e) => setVehicleForm({ ...vehicleForm, price: e.target.value })} />
                       {vehicleErrors.price && <p className="text-red-500 text-sm">{vehicleErrors.price}</p>}
                     </div>

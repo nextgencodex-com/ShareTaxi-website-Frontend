@@ -67,7 +67,7 @@ export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogPr
         user: user ? { id: user.id || user.uid, phone: user.phone, email: user.email } : undefined,
       }
 
-      const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '')
+      const base = (process.env.NEXT_PUBLIC_API_URL || 'https://taxi-backend-x5w6.onrender.com').replace(/\/+$/, '')
       const apiUrl = base.endsWith('/api') ? `${base}/reviews` : `${base}/api/reviews`
 
       const res = await fetch(apiUrl, {
