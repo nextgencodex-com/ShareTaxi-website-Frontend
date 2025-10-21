@@ -62,7 +62,7 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
         notes: `Vehicle: ${vehicle.name}`,
       }
 
-  const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001').replace(/\/+$/, '')
+  const base = (process.env.NEXT_PUBLIC_API_URL || 'https://taxi-backend-x5w6.onrender.com').replace(/\/+$/, '')
   const apiUrl = base.endsWith('/api') ? `${base}/private-rides` : `${base}/api/private-rides`
 
       const res = await fetch(apiUrl, {

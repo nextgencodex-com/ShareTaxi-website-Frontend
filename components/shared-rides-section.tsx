@@ -55,7 +55,7 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
     const fetchRides = async () => {
       try {
           setLoadingRides(true)
-  const res = await fetch('http://localhost:5001/api/shared-rides', { cache: 'no-store', headers: { 'Accept': 'application/json' } })
+  const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/shared-rides', { cache: 'no-store', headers: { 'Accept': 'application/json' } })
         if (!res.ok) {
           const text = await res.text()
           console.error('Failed to fetch shared rides:', res.status, text)

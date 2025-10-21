@@ -155,7 +155,7 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
     const fetchRides = async () => {
       try {
         console.log('Fetching shared rides from API...')
-          const res = await fetch('http://localhost:5001/api/shared-rides', { 
+          const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/shared-rides', { 
             cache: 'no-store', headers: { 'Accept': 'application/json' } })
         if (!res.ok) return
         const json = await res.json()

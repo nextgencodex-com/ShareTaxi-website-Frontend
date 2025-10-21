@@ -55,7 +55,7 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Hotline</p>
-                  <p className="text-sm">+94 11 234 5678</p>
+                  <p className="text-sm">+94 77 401 8001 </p>
                 </div>
               </div>
               <div className="flex items-start gap-3 text-gray-300 hover:text-white transition-colors duration-200 cursor-pointer group">
@@ -64,7 +64,7 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium">WhatsApp</p>
-                  <p className="text-sm">+94 75 962 7589</p>
+                  <p className="text-sm">+94 78 7018 001</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 text-gray-300 hover:text-white transition-colors duration-200 cursor-pointer group">
@@ -73,7 +73,7 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Email</p>
-                  <p className="text-sm">info@ridesharelanka.com</p>
+                  <p className="text-sm">Info@sharetaxisrilanka.com</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 text-gray-300 hover:text-white transition-colors duration-200 cursor-pointer group">
@@ -82,7 +82,7 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Location</p>
-                  <p className="text-sm">123 Galle Road, Colombo 03, Sri Lanka</p>
+                  <p className="text-sm">Kandy, Sri Lanka</p>
                 </div>
               </div>
             </div>
