@@ -79,6 +79,27 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
 
       // Send a welcome/under-review email to the customer
       try {
+        // Format booking details for email
+        const pickupLocation = payload.pickupAddress || (typeof payload.pickupLocation === 'string' ? payload.pickupLocation : 'N/A');
+        
+        const bookingDetails = `
+Route: ${pickupLocation} → ${formData.dropoffAddress}
+Date: ${formData.bookingDate}
+Vehicle: ${vehicle.name}
+Type: Personal, One Way Ride
+
+Personal Details:
+• Name: ${formData.name}
+• Email: ${formData.email}
+• Phone: +94${formData.phone}
+• Passengers: 1
+
+Vehicle Features:
+${vehicle.features.map(f => `• ${f}`).join('\n')}
+
+Price: ${vehicle.price}
+        `.trim();
+
         await emailjs.send(
           process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
           process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
@@ -86,12 +107,13 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
             to_email: formData.email,
             subject: '🚖 Thanks! Your personal ride request is under review',
             name: formData.name,
-            from: payload.pickupAddress || (typeof payload.pickupLocation === 'string' ? payload.pickupLocation : ''),
+            from: pickupLocation,
             to: formData.dropoffAddress,
             taxi_type: 'personal',
             date: formData.bookingDate,
             time: '',
             passengers: 1,
+            booking_details: bookingDetails,
             status_message: 'Your booking request has been received and is currently under review. We will contact you soon to confirm and share next steps.'
           },
           { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
