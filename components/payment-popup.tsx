@@ -36,7 +36,8 @@ const sendConfirmationEmail = async (
   seatsCount?: number,
   totalPrice?: string,
   perPersonFare?: string,
-  subjectOverride?: string
+  subjectOverride?: string,
+  paymentMethod?: string
 ) => {
   try {
     // Extract pricing information
@@ -133,6 +134,7 @@ Personal Details:
 • Email: ${personalData?.email || "N/A"}
 • Phone: +94${personalData?.phone || "N/A"}
 • Seats: ${extractedSeats}
+• Payment Method: ${paymentMethod || "N/A"}
 
 Special Requests: ${personalData?.specialRequests || "None"}
 
@@ -520,7 +522,7 @@ export function PaymentDetailsPopup({
     return `${PER_SEAT_RATE_USD}.00`;
   };
 
-  const addUserSharedRide = useCallback(async () => {
+  const addUserSharedRide = useCallback(async (paymentMethod?: string) => {
     if (!bookingData || !personalData || bookingData.rideType !== "shared")
       return null;
 
@@ -560,6 +562,7 @@ export function PaymentDetailsPopup({
       customerEmail: personalData.email,
       customerPhone: personalData.phone,
       customerName: personalData.fullName,
+      paymentMethod: paymentMethod || "Email", // Store the selected payment method
       // keep original booking + personal data for admin inspection
       rawPayload: { bookingData, personalData },
     };
@@ -606,7 +609,7 @@ export function PaymentDetailsPopup({
     }
   }, [bookingData, personalData]);
 
-  const addUserPersonalRide = useCallback(async () => {
+  const addUserPersonalRide = useCallback(async (paymentMethod?: string) => {
     if (!bookingData || !personalData || bookingData.rideType !== "personal")
       return null;
 
@@ -643,6 +646,7 @@ export function PaymentDetailsPopup({
       customerEmail: personalData.email,
       customerPhone: personalData.phone,
       customerName: personalData.fullName,
+      paymentMethod: paymentMethod || "Email", // Store the selected payment method
       rawPayload: { bookingData, personalData },
     };
 
@@ -841,11 +845,11 @@ export function PaymentDetailsPopup({
     // If creation succeeds, we avoid calling saveBookedRide() later to prevent duplicates
     let createdRide: unknown | null = null;
     if (!isJoinRideFlow && bookingData?.rideType === "shared") {
-      createdRide = await addUserSharedRide();
+      createdRide = await addUserSharedRide("Email");
       if (createdRide === null) return;
     }
     if (!isJoinRideFlow && bookingData?.rideType === "personal") {
-      createdRide = await addUserPersonalRide();
+      createdRide = await addUserPersonalRide("Email");
       if (createdRide === null) return;
     }
 
@@ -1032,7 +1036,9 @@ export function PaymentDetailsPopup({
               seatsToBook,
               extractedSeats,
               extractedTotal,
-              extractedPerPersonFare
+              extractedPerPersonFare,
+              undefined,
+              "Email"
             );
           }
 
@@ -1161,7 +1167,9 @@ export function PaymentDetailsPopup({
         selectedSeats,
         regularSeats,
         regularTotal,
-        regularPerPersonFare
+        regularPerPersonFare,
+        undefined,
+        "Email"
       );
 
       // Persist booked ride unless we already created the ride above
@@ -1199,11 +1207,11 @@ export function PaymentDetailsPopup({
     setValidationErrors([]);
   
     if (bookingData?.rideType === "shared" && !isJoinRideFlow) {
-      const created = await addUserSharedRide();
+      const created = await addUserSharedRide("WhatsApp");
       if (created === null) return;
     }
     if (bookingData?.rideType === "personal" && !isJoinRideFlow) {
-      const created = await addUserPersonalRide();
+      const created = await addUserPersonalRide("WhatsApp");
       if (created === null) return;
     }
   
@@ -1314,7 +1322,9 @@ export function PaymentDetailsPopup({
             seatsToBook,
             seatsToBook,
             whatsappTotal,
-            whatsappPerPersonFare
+            whatsappPerPersonFare,
+            undefined,
+            "WhatsApp"
           );
 
          setConfirmationMessage(
@@ -1403,7 +1413,12 @@ export function PaymentDetailsPopup({
         personalData,
         rideData,
         false,
-        selectedSeats
+        selectedSeats,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "WhatsApp"
       );
   
       setConfirmationMessage(
