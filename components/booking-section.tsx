@@ -86,21 +86,24 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     if (rideType === "shared") {
       const basePerPersonFare = calculateSimpleFare(distance, ratePerKm)
       const perPersonFare = basePerPersonFare * tripMultiplier
-      fareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${ratePerKm.toFixed(2)} per km<br>👥 Per Person Fare: <span style="color:green;">$${perPersonFare.toFixed(2)}</span>`
+      const totalFare = perPersonFare * passengers
+      fareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${passengers}<br>💰 Per Person: <span style="color:green; font-size: 16px; font-weight: bold;">$${perPersonFare.toFixed(2)}</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
       if (tripMultiplier > 1) {
         fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
       }
     } else {
       const baseFullFare = calculateIndividualFare(distance, ratePerKm)
       const fullFare = baseFullFare * tripMultiplier
-      fareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${ratePerKm.toFixed(2)} per km<br>💰 Total Fare: <span style="color:blue;">$${fullFare.toFixed(2)}</span>`
+      const totalFare = fullFare * passengers
+      const perPersonFare = totalFare / passengers
+      fareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${passengers}<br>💰 Per Person: <span style="color:green; font-size: 16px; font-weight: bold;">$${perPersonFare.toFixed(2)}</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
       if (tripMultiplier > 1) {
         fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
       }
     }
 
     setFareResults(prev => ({ ...prev, [tripType]: fareDisplay }))
-  }, [rideType, backendRatePerKm])
+  }, [rideType, backendRatePerKm, passengers])
 
   // load rates from backend on mount
   useEffect(() => {
@@ -142,7 +145,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     if (distance > 0) {
       calculateFareForType(tripType, distance)
     }
-  }, [tripType, rideType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance, calculateFareForType, backendRatePerKm])
+  }, [tripType, rideType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance, calculateFareForType, backendRatePerKm, passengers])
 
   // helper states removed: selectedTimeSlot, customTime
   // helper functions for dynamically adding/removing destinations and passenger change
@@ -455,7 +458,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                             Shared
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        {/* Personal ride option commented out */}
+                        {/* <div className="flex items-center space-x-2">
                           <input
                             type="radio"
                             id="personal"
@@ -468,7 +472,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           <Label htmlFor="personal" className="text-gray-700 font-medium">
                             Personal
                           </Label>
-                        </div>
+                        </div> */}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="pickup-date" className="text-gray-700 font-medium">
@@ -535,6 +539,30 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                             </select>
                             <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
                           </div>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-gray-700 font-medium">Seats Count</Label>
+                        <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
+                          <button
+                            type="button"
+                            onClick={() => setPassengers(Math.max(1, passengers - 1))}
+                            disabled={passengers <= 1}
+                            className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
+                          >
+                            -
+                          </button>
+                          <span className="flex-1 text-center font-semibold text-gray-900">
+                            {passengers}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setPassengers(Math.min(20, passengers + 1))}
+                            disabled={passengers >= 20}
+                            className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
+                          >
+                            +
+                          </button>
                         </div>
                       </div>
 
