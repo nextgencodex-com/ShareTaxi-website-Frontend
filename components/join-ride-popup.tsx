@@ -178,9 +178,9 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">
-                      {rideData.seats.available}/{rideData.seats.total} seats
+                      {rideData.seats.available}/{rideData.seats.total} Persons
                     </p>
-                    <p className="text-gray-600 text-sm">Available</p>
+                    <p className="text-gray-600 text-sm">Seats Available</p>
                   </div>
                 </div>
               </div>
@@ -189,7 +189,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <label className="text-sm font-semibold text-gray-900">Seats:</label>
+                  <label className="text-sm font-semibold text-gray-900">Persons:</label>
                   <div className="flex items-center gap-2 bg-blue-50 rounded-lg p-2">
                     <button
                       type="button"
