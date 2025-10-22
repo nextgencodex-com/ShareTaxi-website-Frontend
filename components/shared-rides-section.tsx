@@ -410,7 +410,7 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">
-                      {(ride.seats?.available ?? 0)}/{(ride.seats?.total ?? 0)} seats
+                      {(ride.seats?.available ?? 0)}/{(ride.seats?.total ?? 0)} Persons
                     </p>
                     <p className="text-gray-500 text-sm">Available</p>
                   </div>
