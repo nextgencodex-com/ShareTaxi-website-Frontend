@@ -88,6 +88,21 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
             </div>
           </div>
 
+          {/* Payment Methods Section */}
+          <div className="mt-8 pt-8 border-t border-gray-600/50">
+            <div className="text-center">
+              <p className="text-gray-400 text-sm mb-4">Accepted Payment Methods & Certifications</p>
+              <div className="flex justify-center">
+                <img 
+                  src="/images/icons.png" 
+                  alt="Payment Methods and Certifications" 
+                  className="h-15 object-contain max-w-full"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Copyright Section */}
           <div className="border-t border-gray-600/50 mt-12 pt-8">
             <div className="flex flex-col md:flex-row items-center justify-center gap-4 text-center">
               <p className="text-gray-400 text-sm">
