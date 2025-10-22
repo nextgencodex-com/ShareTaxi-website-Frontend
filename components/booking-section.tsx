@@ -87,7 +87,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       const basePerPersonFare = calculateSimpleFare(distance, ratePerKm)
       const perPersonFare = basePerPersonFare * tripMultiplier
       const totalFare = perPersonFare * passengers
-      fareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${passengers}<br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
+      fareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${passengers}<br>💰 Per Person: <span style="color:green; font-size: 16px; font-weight: bold;">$${perPersonFare.toFixed(2)}</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
       if (tripMultiplier > 1) {
         fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
       }
@@ -95,7 +95,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       const baseFullFare = calculateIndividualFare(distance, ratePerKm)
       const fullFare = baseFullFare * tripMultiplier
       const totalFare = fullFare * passengers
-      fareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${passengers}<br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
+      const perPersonFare = totalFare / passengers
+      fareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${passengers}<br>💰 Per Person: <span style="color:green; font-size: 16px; font-weight: bold;">$${perPersonFare.toFixed(2)}</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
       if (tripMultiplier > 1) {
         fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
       }

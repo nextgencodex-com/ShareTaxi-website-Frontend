@@ -1,276 +1,186 @@
-"use client"
+"use client";
 
-import { useState, useMemo, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { X, MapPin, Clock, Users, ArrowLeft, AlertTriangle } from "lucide-react"
-import { PaymentDetailsPopup } from "./payment-popup"
-import { calculateTotalPrice, getPerKmRate, getTripMultiplier, PER_SEAT_RATE_USD, formatPriceUSD, getPassengerCountCategory } from "@/lib/pricing"
-
-// Import vehicle data
-const vehicles = [
-  {
-    id: 1,
-    name: "Toyota Innova",
-    price: "$6/ hour",
-    passengers: "5-6",
-    luggage: "X 1 Big",
-    handCarry: "X 3 Hand",
-    image: "/toyota-innova-white-mpv-car.jpg",
-    features: ["Air Conditioning", "GPS Navigation", "USB Charging"],
-  },
-  {
-    id: 2,
-    name: "Toyota Alphard",
-    price: "$9/ hour",
-    passengers: "5-6",
-    luggage: "X 2 Big",
-    handCarry: "X 4 Hand",
-    image: "/toyota-alphard-luxury-van.jpg",
-    features: ["Premium Interior", "Entertainment System", "Privacy Curtain"],
-  },
-  {
-    id: 3,
-    name: "Hyundai Starex",
-    price: "$12/ hour",
-    passengers: "7-8",
-    luggage: "X 2 Big",
-    handCarry: "X 4 Hand",
-    image: "/hyundai-starex-van.jpg",
-    features: ["Extra Space", "Family Friendly", "Comfortable Seating"],
-  },
-]
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { X, MapPin, Clock, Users, ArrowLeft, AlertTriangle } from "lucide-react";
+import { PaymentDetailsPopup } from "./payment-popup";
 
 interface Destination {
-  id: string
-  location: string
+  id: string;
+  location: string;
 }
 
 interface BookingData {
-  from: string
-  to: string
-  rideType: string
-  date: string
-  time: string
-  passengers: number | string
-  tripType: string
-  destinations?: Destination[]
-  startingPoint?: string
-  mapDistance?: string | null
-  mapDuration?: string | null
-  calculatedFare?: string
+  from: string;
+  to: string;
+  rideType: string;
+  date: string;
+  time: string;
+  passengers: number | string;
+  tripType: string;
+  destinations?: Destination[];
+  startingPoint?: string;
+  mapDistance?: string | null;
+  mapDuration?: string | null;
+  calculatedFare?: string;
 }
 
 interface BookingDetailsPopupProps {
-  isOpen: boolean
-  onClose: () => void
-  onAddSharedRide?: (bookingData: any) => void
-  bookingData: BookingData | null
+  isOpen: boolean;
+  onClose: () => void;
+  onAddSharedRide?: (bookingData: any) => void;
+  bookingData: BookingData | null;
 }
 
-export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingData }: BookingDetailsPopupProps) {
+export function BookingDetailsPopup({
+  isOpen,
+  onClose,
+  onAddSharedRide,
+  bookingData,
+}: BookingDetailsPopupProps) {
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
     phone: "",
     specialRequests: "",
-    seatCount: 2,
-  })
+    seatCount: bookingData?.passengers ? Number(bookingData.passengers) : 1,
+    paymentMethod: "",
+  });
 
-  const [showPaymentPopup, setShowPaymentPopup] = useState(false)
-  const [currentBookingData, setCurrentBookingData] = useState<BookingData | null>(bookingData)
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [showPaymentPopup, setShowPaymentPopup] = useState(false);
+  const [currentBookingData, setCurrentBookingData] = useState<BookingData | null>(bookingData);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
 
-  // Keep internal booking data in sync with prop updates so calculated fare shows correctly
+  // ✅ keep seatCount synced when parent updates passengers
   useEffect(() => {
-    setCurrentBookingData(bookingData)
-    setIsInitialLoad(true) // Reset for each new booking
-  }, [bookingData])
+    if (bookingData?.passengers) {
+      const count = Number(bookingData.passengers);
+      setFormData((prev) => ({ ...prev, seatCount: count }));
+      recalculateFareWithNewSeats(count);
+    }
+  }, [bookingData?.passengers]);
 
-  // Recalculate fare with seats on initial load
+  useEffect(() => {
+    setCurrentBookingData(bookingData);
+    setIsInitialLoad(true);
+  }, [bookingData]);
+
   useEffect(() => {
     if (isOpen && currentBookingData && isInitialLoad) {
-      recalculateFareWithNewSeats(formData.seatCount)
-      setIsInitialLoad(false)
+      recalculateFareWithNewSeats(formData.seatCount);
+      setIsInitialLoad(false);
     }
-  }, [currentBookingData, isOpen, isInitialLoad])
+  }, [currentBookingData, isOpen, isInitialLoad]);
 
-  // Validation state
-  const [validationErrors, setValidationErrors] = useState<string[]>([])
-  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
-  const [fieldErrors, setFieldErrors] = useState<{[key: string]: string}>({})
-
-  if (!isOpen || !bookingData) return null
+  if (!isOpen || !bookingData) return null;
 
   const validateField = (field: string, value: string) => {
-    let error = ""
-    const trimmedValue = value.trim()
+    let error = "";
+    const trimmedValue = value.trim();
 
     switch (field) {
       case "fullName":
-        if (!trimmedValue) {
-          error = "Full name is required"
-        } else if (trimmedValue.length < 2) {
-          error = "Full name must be at least 2 characters long"
-        } else if (trimmedValue.length > 100) {
-          error = "Full name cannot exceed 100 characters"
-        } else if (!/^[a-zA-Z\s\-']+$/.test(trimmedValue)) {
-          error = "Full name can only contain letters, spaces, hyphens, and apostrophes"
-        }
-        break
+        if (!trimmedValue) error = "Full name is required";
+        else if (trimmedValue.length < 2) error = "Full name must be at least 2 characters long";
+        else if (trimmedValue.length > 100) error = "Full name cannot exceed 100 characters";
+        else if (!/^[a-zA-Z\s\-']+$/.test(trimmedValue))
+          error = "Full name can only contain letters, spaces, hyphens, and apostrophes";
+        break;
       case "email":
-        if (!trimmedValue) {
-          error = "Email address is required"
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedValue)) {
-          error = "Please enter a valid email address"
-        } else if (trimmedValue.length > 254) {
-          error = "Email address is too long"
-        }
-        break
+        if (!trimmedValue) error = "Email address is required";
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedValue))
+          error = "Please enter a valid email address";
+        break;
       case "phone":
-        if (!trimmedValue) {
-          error = "Phone number is required"
-        } else if (!/^\d{8,10}$/.test(trimmedValue)) {
-          error = "Phone number must be 8-10 digits"
-        } else if (!/^7[0-9]{7}|^9[0-9]{7}|^6[0-9]{7}|^11[0-9]{6}|^[0-9]{9,10}$/.test(trimmedValue)) {
-          error = "Please enter a valid Sri Lankan phone number"
-        }
-        break
+        if (!trimmedValue) error = "Phone number is required";
+        else if (!/^(\+\d{7,15}|\d{8,15})$/.test(trimmedValue))
+          error = "Please enter a valid phone number (e.g., +94769278958)";
+        break;
+      case "paymentMethod":
+        if (!trimmedValue) error = "Payment method is required";
+        break;
       case "specialRequests":
-        if (value.length > 500) {
-          error = "Special requests cannot exceed 500 characters"
-        }
-        break
+        if (value.length > 500) error = "Special requests cannot exceed 500 characters";
+        break;
     }
 
-    setFieldErrors(prev => ({ ...prev, [field]: error }))
-    return error
-  }
+    setFieldErrors((prev) => ({ ...prev, [field]: error }));
+    return error;
+  };
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-    validateField(field, value)
-  }
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    validateField(field, value);
+  };
 
   const handleSeatCountChange = (change: number) => {
-    const newSeatCount = Math.max(1, Math.min(20, formData.seatCount + change))
-    setFormData((prev) => ({
-      ...prev,
-      seatCount: newSeatCount
-    }))
-
-    // Recalculate fare when seat count changes
-    recalculateFareWithNewSeats(newSeatCount)
-  }
+    const newSeatCount = Math.max(1, Math.min(20, formData.seatCount + change));
+    setFormData((prev) => ({ ...prev, seatCount: newSeatCount }));
+    recalculateFareWithNewSeats(newSeatCount);
+  };
 
   const recalculateFareWithNewSeats = (seats: number) => {
-    if (!currentBookingData?.calculatedFare) return
+    if (!currentBookingData?.calculatedFare) return;
+    const rateMatch = currentBookingData.calculatedFare.match(/Rate:\s*\$([0-9.]+)/);
+    const distanceMatch = currentBookingData.calculatedFare.match(/Distance:\s*([0-9.]+)/);
+    if (!rateMatch || !distanceMatch) return;
+    const rate = parseFloat(rateMatch[1]);
+    const distance = parseFloat(distanceMatch[1]);
+    let newFareDisplay = "";
 
-    // Extract original rate and distance from current calculated fare
-    const rateMatch = currentBookingData.calculatedFare.match(/Rate:\s*\$([0-9.]+)/)
-    const distanceMatch = currentBookingData.calculatedFare.match(/Distance:\s*([0-9.]+)/)
-
-    if (!rateMatch || !distanceMatch) return
-
-    const rate = parseFloat(rateMatch[1])
-    const distance = parseFloat(distanceMatch[1])
-
-    let newFareDisplay = ""
     if (currentBookingData.rideType === "shared") {
-      // For shared rides, adjust based on actual seat count vs. standard 4 passengers
       const perPersonFare = (distance * rate) / 4;
       const totalPrice = perPersonFare * seats;
-      newFareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${seats}<br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalPrice.toFixed(2)}</span>`
+      newFareDisplay = `🚗 Distance: ${distance} km<br>👥 Persons: ${seats}<br><span style="color:blue; font-size:18px; font-weight:bold;">Total Price: $${totalPrice.toFixed(
+        2
+      )}</span>`;
     } else {
-      // For personal rides, calculate total based on seats selected
       const totalFare = distance * rate * seats;
-      newFareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${seats}<br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
+      newFareDisplay = `🚗 Distance: ${distance} km<br>👥 Persons: ${seats}<br><span style="color:blue; font-size:18px; font-weight:bold;">Total Price: $${totalFare.toFixed(
+        2
+      )}</span>`;
     }
 
-    // Update the current booking data with new calculated fare
-    setCurrentBookingData(prev => prev ? { ...prev, calculatedFare: newFareDisplay } : null)
-  }
+    setCurrentBookingData((prev) => (prev ? { ...prev, calculatedFare: newFareDisplay } : null));
+  };
 
-  // Validation functions
   const validateFormData = () => {
-    const errors: string[] = []
-
-    // Full Name validation
-    const fullName = formData.fullName.trim()
-    if (!fullName) {
-      errors.push("Full name is required")
-    } else if (fullName.length < 2) {
-      errors.push("Full name must be at least 2 characters long")
-    } else if (fullName.length > 100) {
-      errors.push("Full name cannot exceed 100 characters")
-    } else if (!/^[a-zA-Z\s\-']+$/.test(fullName)) {
-      errors.push("Full name can only contain letters, spaces, hyphens, and apostrophes")
-    }
-
-    // Email validation
-    const email = formData.email.trim()
-    if (!email) {
-      errors.push("Email address is required")
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.push("Please enter a valid email address")
-    } else if (email.length > 254) {
-      errors.push("Email address is too long")
-    }
-
-    // Phone validation - support international numbers
-    const phone = formData.phone.trim()
-    if (!phone) {
-      errors.push("Phone number is required")
-    } else if (!/^(\+\d{7,15}|\d{8,15})$/.test(phone)) {
-      errors.push("Please enter a valid phone number (international format: +1234567890 or 1234567890)")
-    }
-
-
-    // Special Requests validation (optional, but reasonable length)
-    if (formData.specialRequests.length > 500) {
-      errors.push("Special requests cannot exceed 500 characters")
-    }
-
-    // Seat count validation
-    if (formData.seatCount < 1 || formData.seatCount > 20) {
-      errors.push("Seat count must be between 1 and 20")
-    }
-
-    return errors
-  }
+    const errors: string[] = [];
+    if (!formData.fullName.trim()) errors.push("Full name is required");
+    if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
+      errors.push("Valid email is required");
+    if (!formData.phone.trim() || !/^(\+\d{7,15}|\d{8,15})$/.test(formData.phone))
+      errors.push("Valid phone number required");
+    if (!formData.paymentMethod.trim()) errors.push("Payment method is required");
+    if (formData.seatCount < 1 || formData.seatCount > 20)
+      errors.push("Person count must be between 1 and 20");
+    if (formData.specialRequests.length > 500) errors.push("Special requests too long");
+    return errors;
+  };
 
   const handleContinueToPayment = () => {
-    setHasAttemptedSubmit(true)
-    const errors = validateFormData()
-
+    setHasAttemptedSubmit(true);
+    const errors = validateFormData();
     if (errors.length > 0) {
-      setValidationErrors(errors)
-      return
+      setValidationErrors(errors);
+      return;
     }
+    setValidationErrors([]);
+    if (bookingData.rideType === "shared") onAddSharedRide?.(bookingData);
+    setShowPaymentPopup(true);
+  };
 
-    setValidationErrors([])
-
-    if (bookingData.rideType === "shared") {
-      onAddSharedRide?.(bookingData)
-      console.log('[v0] Calling onAddSharedRide with data')
-    }
-    setShowPaymentPopup(true)
-  }
-
-  // Clear validation errors when user starts fixing them
   const clearValidationErrors = () => {
-    if (hasAttemptedSubmit) {
-      setValidationErrors([])
-    }
-  }
+    if (hasAttemptedSubmit) setValidationErrors([]);
+  };
 
-  const handleClosePaymentPopup = () => {
-    setShowPaymentPopup(false)
-    // Don't close the booking details popup, just go back to it
-  }
+  const handleClosePaymentPopup = () => setShowPaymentPopup(false);
 
   return (
     <>
@@ -293,43 +203,24 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
             </button>
           </div>
 
-          <div className="px-6 py-4">
-            <div className="flex items-center gap-4">
-              <div className="bg-yellow-500 text-white px-6 py-2 rounded-full font-semibold">Personal Details</div>
-              <div className="flex-1 h-1 bg-gray-300 rounded"></div>
-              <div className="bg-yellow-200 text-gray-600 px-6 py-2 rounded-full font-semibold">Payment</div>
-            </div>
-          </div>
-
-          {/* Validation Errors Display */}
+          {/* Errors */}
           {validationErrors.length > 0 && (
-            <Alert variant="destructive" className="mb-6">
+            <Alert variant="destructive" className="m-6">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                <div className="space-y-1">
-                  <strong>Please fix the following errors:</strong>
-                  <ul className="list-disc list-inside mt-2 space-y-1">
-                    {validationErrors.map((error, index) => (
-                      <li key={index}>{error}</li>
-                    ))}
-                  </ul>
-                </div>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  {validationErrors.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
               </AlertDescription>
             </Alert>
           )}
 
           <div className="p-6 space-y-6">
+            {/* Ride Summary */}
             <div className="bg-yellow-50 rounded-2xl p-6">
               <h3 className="text-xl font-bold text-gray-900 mb-4">Ride Summary</h3>
-
-              <div className="mb-6 text-center">
-                <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-800 px-4 py-2 rounded-full font-semibold text-lg">
-                  {bookingData.rideType === "shared" ? "Shared" : "Personal"} {" "}
-                  {bookingData.tripType === "one-way" ? "One Way" :
-                   bookingData.tripType === "round-trip" ? "Return Trip" :
-                   "Multi-City"} Trip
-                </div>
-              </div>
 
               <div className="grid grid-cols-2 gap-6">
                 <div className="flex items-center gap-3">
@@ -348,13 +239,12 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">
-                      Pickup Time: {bookingData.time} | Pickup Date: {new Date(bookingData.date).toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: '2-digit', 
-                        day: '2-digit' 
-                      })}
+                      Pickup Time: {bookingData.time} | Date:{" "}
+                      {new Date(bookingData.date).toLocaleDateString("en-US")}
                     </p>
-                    <p className="text-gray-600 text-sm">{bookingData.mapDuration || "Estimated duration"}</p>
+                    <p className="text-gray-600 text-sm">
+                      {bookingData.mapDuration || "Estimated duration"}
+                    </p>
                   </div>
                 </div>
 
@@ -365,9 +255,11 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
                   <div>
                     <p className="font-semibold text-gray-900">
                       {bookingData.tripType === "multi-city" && bookingData.destinations
-                        ? bookingData.destinations.filter(d => d.location.trim()).map(d => d.location).join(", ")
-                        : bookingData.to
-                      }
+                        ? bookingData.destinations
+                            .filter((d) => d.location.trim())
+                            .map((d) => d.location)
+                            .join(", ")
+                        : bookingData.to}
                     </p>
                     <p className="text-gray-600 text-sm">Destination</p>
                   </div>
@@ -379,7 +271,9 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">
-                      {formData.seatCount} {formData.seatCount === 1 ? "Seat" : "Seats"} {bookingData.rideType === "shared" ? "Requested" : "Available"}
+                      {formData.seatCount}{" "}
+                      {formData.seatCount === 1 ? "Person" : "Persons"} Requested{" "}
+                      {bookingData.rideType === "shared" ? "Shared ride" : "Personal ride"}
                     </p>
                     <p className="text-gray-600 text-sm">
                       {bookingData.rideType === "shared" ? "Shared ride" : "Personal ride"}
@@ -390,139 +284,91 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
 
               <hr className="border-gray-200 my-4" />
 
-              {/* Calculated Price Display */}
-              <div className="space-y-2 text-sm">
-                <h4 className="font-semibold text-gray-900">Calculated Price</h4>
-                {currentBookingData?.calculatedFare ? (
-                  <div className="bg-blue-50 p-3 rounded-lg border">
-                    <div
-                      className="text-sm font-medium"
-                      dangerouslySetInnerHTML={{ __html: currentBookingData.calculatedFare }}
-                    />
-                    {/* Extract and display Total Price separately */}
-                    {(() => {
-                      const totalMatch = currentBookingData.calculatedFare.match(/Total Price.*?\$([0-9.]+)/);
-                      if (totalMatch) {
-                        return (
-                          <div className="mt-2 pt-2 border-t border-blue-200">
-                            <div className="text-lg font-bold text-blue-600">
-                              Total Price: ${totalMatch[1]}
-                            </div>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                ) : (
-                  <div className="text-gray-500 italic">
-                    Fare not available. Please return to the booking section and ensure a distance is set for your trip type.
-                  </div>
-                )}
-              </div>
+              {currentBookingData?.calculatedFare ? (
+                <div className="bg-blue-50 p-3 rounded-lg border">
+                  <div
+                    className="text-sm font-medium"
+                    dangerouslySetInnerHTML={{
+                      __html: currentBookingData.calculatedFare,
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="text-gray-500 italic">Fare not available.</div>
+              )}
             </div>
 
-            {/* Form Fields */}
+            {/* Personal Details Form */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Full Name</label>
+                <label className="text-sm font-semibold text-gray-900 mb-2 block">
+                  Full Name
+                </label>
                 <Input
                   value={formData.fullName}
-                  onChange={(e) => {
-                    handleInputChange("fullName", e.target.value)
-                    clearValidationErrors()
-                  }}
-                  className={`bg-blue-50 border-0 h-12 ${fieldErrors.fullName ? 'border-red-300' : ''}`}
+                  onChange={(e) => handleInputChange("fullName", e.target.value)}
                   placeholder="Enter your full name"
+                  className="bg-blue-50 border-0 h-12"
                 />
-                {fieldErrors.fullName && (
-                  <p className="text-red-600 text-sm mt-1">{fieldErrors.fullName}</p>
-                )}
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Email Address</label>
+                <label className="text-sm font-semibold text-gray-900 mb-2 block">
+                  Email Address
+                </label>
                 <Input
                   type="email"
                   value={formData.email}
-                  onChange={(e) => {
-                    handleInputChange("email", e.target.value)
-                    clearValidationErrors()
-                  }}
-                  className={`bg-blue-50 border-0 h-12 ${fieldErrors.email ? 'border-red-300' : ''}`}
+                  onChange={(e) => handleInputChange("email", e.target.value)}
                   placeholder="Enter your email"
+                  className="bg-blue-50 border-0 h-12"
                 />
-                {fieldErrors.email && (
-                  <p className="text-red-600 text-sm mt-1">{fieldErrors.email}</p>
-                )}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Phone Number</label>
+                <label className="text-sm font-semibold text-gray-900 mb-2 block">
+                  Phone Number
+                </label>
                 <Input
                   value={formData.phone}
-                  onChange={(e) => {
-                    handleInputChange("phone", e.target.value)
-                    clearValidationErrors()
-                  }}
-                  className={`bg-blue-50 border-0 h-12 ${fieldErrors.phone ? 'border-red-300' : ''}`}
-                  placeholder="Enter full international number (e.g., +94769278958)"
+                  onChange={(e) => handleInputChange("phone", e.target.value)}
+                  placeholder="Enter phone (e.g., +9476xxxxxxx)"
+                  className="bg-blue-50 border-0 h-12"
                 />
-                {fieldErrors.phone && (
-                  <p className="text-red-600 text-sm mt-1">{fieldErrors.phone}</p>
-                )}
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Special Requests or Notes
-                  {formData.specialRequests.length > 0 && (
-                    <span className={`text-xs ml-2 ${formData.specialRequests.length > 500 ? 'text-red-600' : 'text-gray-500'}`}>
-                      {formData.specialRequests.length}/500
-                    </span>
-                  )}
+                <label className="text-sm font-semibold text-gray-900 mb-2 block">
+                  Payment Method
                 </label>
-                <Textarea
-                  value={formData.specialRequests}
-                  onChange={(e) => handleInputChange("specialRequests", e.target.value)}
-                  className="bg-blue-50 border-0 min-h-[100px] resize-none"
-                  placeholder="Enter your special request"
-                />
-                {fieldErrors.specialRequests && (
-                  <p className="text-red-600 text-sm mt-1">{fieldErrors.specialRequests}</p>
-                )}
+                <select
+                  value={formData.paymentMethod}
+                  onChange={(e) => handleInputChange("paymentMethod", e.target.value)}
+                  className="w-full bg-blue-50 border-0 h-12 rounded-md px-3"
+                >
+                  <option value="">Select payment method</option>
+                  <option value="Visa Card">Visa Card</option>
+                  <option value="QR Payment">QR Payment</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Via Payment Gateway">Via Payment Gateway</option>
+                  <option value="Cash">Cash</option>
+                </select>
               </div>
-              
             </div>
 
-            {bookingData.rideType === "shared" && (
-              <div className="border-2 border-red-200 rounded-2xl p-6 bg-red-50/30">
-                <h4 className="font-bold text-gray-900 mb-3">Shared Ride Guidelines</h4>
-                <ul className="space-y-2 text-gray-700">
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
-                    <span>Be ready at the pickup point 5 minutes before departure time</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
-                    <span>Respect other passengers and maintain a friendly atmosphere</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
-                    <span>Keep personal belongings secure and within your designated space</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
-                    <span>Follow the driver's instructions for safety and comfort</span>
-                  </li>
-                </ul>
-              </div>
-            )}
+            <div>
+              <label className="text-sm font-semibold text-gray-900 mb-2 block">
+                Special Requests or Notes
+              </label>
+              <Textarea
+                value={formData.specialRequests}
+                onChange={(e) => handleInputChange("specialRequests", e.target.value)}
+                className="bg-blue-50 border-0 min-h-[100px] resize-none"
+                placeholder="Enter your special request"
+              />
+            </div>
 
-            {/* Continue Button */}
             <Button
               onClick={handleContinueToPayment}
               className="w-full bg-orange-500 hover:bg-orange-600 text-white h-14 text-lg font-semibold rounded-2xl"
@@ -541,5 +387,5 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
         personalData={formData}
       />
     </>
-  )
+  );
 }

@@ -48,6 +48,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
     phone: "",
     specialRequests: "",
     seatCount: 1,
+    paymentMethod: "",
   })
   const [showPaymentPopup, setShowPaymentPopup] = useState(false)
 
@@ -75,6 +76,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
         phone: "",
         specialRequests: "",
         seatCount: 1,
+        paymentMethod: "",
       })
       setShowPaymentPopup(false)
     }
@@ -245,7 +247,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">Phone Number</label>
                 <Input
@@ -254,6 +256,23 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
                   className="bg-blue-50 border-0 h-12"
                   placeholder="Enter full international number (e.g., +94769278958)"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Payment Method</label>
+                <select
+                  value={formData.paymentMethod}
+                  onChange={(e) => handleInputChange("paymentMethod", e.target.value)}
+                  className="w-full bg-blue-50 border-0 h-12 rounded-md px-3"
+                >
+                  <option value="">Select payment method</option>
+                  <option value="Visa Card">Visa Card</option>
+                  <option value="QRpayment">QR Payment</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Via Payment Gateway">Via Payment Gateway</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
             </div>
 
@@ -318,6 +337,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
           phone: formData.phone,
           specialRequests: formData.specialRequests,
           seatCount: formData.seatCount.toString(),
+          paymentMethod: formData.paymentMethod,
         }}
         onUpdateSeats={onUpdateSeats}
       />

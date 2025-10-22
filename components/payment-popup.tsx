@@ -1036,25 +1036,28 @@ export function PaymentDetailsPopup({
       };
 
       bookingDetails = `
-Taxi Booking Request
-
-Route: ${bookingData?.from || "N/A"} → ${bookingData?.to || "N/A"}
-Date: ${bookingData?.date || "N/A"}
-Time: ${bookingData?.time || "N/A"}
-Type: ${rideTypeText}, ${mapTripType(bookingData?.tripType)}
-
-Personal Details:
-• Name: ${personalData?.fullName || "N/A"}
-• Email: ${personalData?.email || "N/A"}
-• Phone: ‪${personalData?.phone || "N/A"}‬
-• Seats: ${personalData?.seatCount || "N/A"}
-
-Special Requests: ${personalData?.specialRequests || "None"}
-
-Price: $${priceText.replace("$", "")} for ${personalData?.seatCount} persons
-
-Please confirm this booking. Thank you!
+      Taxi Booking Request
+      
+      Route: ${bookingData?.from || "N/A"} → ${bookingData?.to || "N/A"}
+      Date: ${bookingData?.date || "N/A"}
+      Time: ${bookingData?.time || "N/A"}
+      Type: ${rideTypeText}, ${mapTripType(bookingData?.tripType)}
+      
+      Personal Details:
+      • Name: ${personalData?.fullName || "N/A"}
+      • Email: ${personalData?.email || "N/A"}
+      • Phone: ${personalData?.phone || "N/A"}
+      • Persons: ${personalData?.seatCount || "N/A"}
+      • Payment Method: ${personalData?.paymentMethod || "N/A"}
+      
+      Special Requests: ${personalData?.specialRequests || "None"}
+      
+      Price: $${priceText.replace("$", "")} for ${personalData?.seatCount} ${personalData?.seatCount > 1 ? "persons" : "person"}
+      
+      Please confirm this booking. Thank you!
       `.trim();
+      
+
 
       // Send booking request to company
       const mailtoLink = `mailto:contact@nextgcodex.com?subject=${encodeURIComponent(
@@ -1363,26 +1366,36 @@ Taxi Booking Request
 Route: ${bookingData?.from || "N/A"} → ${bookingData?.to || "N/A"}
 Date: ${bookingData?.date || "N/A"}
 Time: ${bookingData?.time || "N/A"}
-Type: Shared, One Way Ride
+Type: ${bookingData?.rideType === "shared" ? "Shared Ride" : "Personal Ride"}, One Way Ride
 
 Personal Details:
 • Name: ${personalData?.fullName || "N/A"}
 • Email: ${personalData?.email || "N/A"}
-• Phone: ‪${personalData?.phone || "N/A"}‬
+• Phone: ${personalData?.phone || "N/A"}
 • Seats: ${personalData?.seatCount || "N/A"}
+• Payment Method: ${personalData?.paymentMethod || "N/A"}
 
 Special Requests: ${personalData?.specialRequests || "None"}
 
-Price: $${priceText.replace("$", "")} for ${personalData?.seatCount} persons
+Price: $${priceText.replace("$", "")} for ${personalData?.seatCount} ${
+  Number(personalData?.seatCount) === 1 ? "person" : "persons"
+}
 
 Please confirm this booking. Thank you!
-      `.trim();
+`.trim();
 
-      // Send WhatsApp message
-      const whatsappLink = `https://wa.me/94759627589?text=${encodeURIComponent(
-        bookingDetails
-      )}`;
-      window.open(whatsappLink, "_blank");
+// ✅ Ensure message is cleanly encoded and open WhatsApp reliably
+const phoneNumber = "94759627589"; // No '+' or '00' here — keep as string!
+const formattedMessage = encodeURIComponent(bookingDetails)
+  .replace(/%0A/g, "%0D%0A"); // fix newlines for all browsers
+
+// ✅ Use the correct WhatsApp API endpoint
+const whatsappLink = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${formattedMessage}`;
+
+// ✅ Open safely when user clicks (prevents popup blocking)
+if (typeof window !== "undefined") {
+  window.open(whatsappLink, "_blank", "noopener,noreferrer");
+}
 
       // Send confirmation email to customer
       const customerEmailSubject =
