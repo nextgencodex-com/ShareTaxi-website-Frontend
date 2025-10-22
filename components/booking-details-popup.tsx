@@ -197,7 +197,7 @@ export function BookingDetailsPopup({
             <h2 className="text-2xl font-bold text-gray-900">Personal Details</h2>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center hover:bg-gray-100"
+              className="w-8 h-8 rounded-full border-2 border-gray-   300 flex items-center justify-center hover:bg-gray-100"
             >
               <X className="h-4 w-4 text-gray-600" />
             </button>

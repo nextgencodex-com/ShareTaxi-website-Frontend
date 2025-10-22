@@ -212,9 +212,9 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
   }
 
   const oneTimeRides = useMemo(() => 
-    rides.filter((ride) => ride.frequency === "one-time" && !isRideExpired(ride)), [rides])
+    rides.filter((ride) => ride.frequency === "one-time" && !isRideExpired(ride) && (ride.seats?.available ?? 0) > 0), [rides])
   const dailyRides = useMemo(() => 
-    rides.filter((ride) => ride.frequency === "daily" && !isRideExpired(ride)), [rides])
+    rides.filter((ride) => ride.frequency === "daily" && !isRideExpired(ride) && (ride.seats?.available ?? 0) > 0), [rides])
 
   const ridesPerPage = 3
   const oneTimeTotalPages = Math.ceil(oneTimeRides.length / ridesPerPage)
@@ -424,7 +424,7 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
                   <p className="text-xl font-bold text-gray-900">
                     {ride.price && !ride.price.startsWith('$') ? `$${ride.price}` : ride.price}
                   </p>
-                  <p className="text-gray-500 text-sm">per seat</p>
+                  <p className="text-gray-500 text-sm">per person</p>
                 </div>
                 <Button
                   onClick={() => handleJoinRide(ride)}

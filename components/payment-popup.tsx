@@ -37,7 +37,7 @@ const sendConfirmationEmail = async (
   totalPrice?: string,
   perPersonFare?: string,
   subjectOverride?: string,
-  paymentMethod?: string
+  bookingMethod?: string
 ) => {
   try {
     // Extract pricing information
@@ -132,9 +132,10 @@ Type: ${rideType}, ${tripType}
 Personal Details:
 • Name: ${personalData?.fullName || "N/A"}
 • Email: ${personalData?.email || "N/A"}
-• Phone: +94${personalData?.phone || "N/A"}
+• Phone: ${personalData?.phone?.startsWith('+') ? personalData.phone : '+94' + (personalData?.phone || "N/A")}
 • Seats: ${extractedSeats}
-• Payment Method: ${paymentMethod || "N/A"}
+• Payment Method: ${personalData?.paymentMethod || "N/A"}
+• Booking Method: ${bookingMethod || "N/A"}
 
 Special Requests: ${personalData?.specialRequests || "None"}
 
@@ -290,6 +291,7 @@ interface PersonalData {
   emergencyContact?: string;
   specialRequests: string;
   seatCount: number | string;
+  paymentMethod?: string;
 }
 
 interface RideData {
@@ -522,7 +524,7 @@ export function PaymentDetailsPopup({
     return `${PER_SEAT_RATE_USD}.00`;
   };
 
-  const addUserSharedRide = useCallback(async (paymentMethod?: string) => {
+  const addUserSharedRide = useCallback(async (bookingMethod?: string) => {
     if (!bookingData || !personalData || bookingData.rideType !== "shared")
       return null;
 
@@ -562,7 +564,8 @@ export function PaymentDetailsPopup({
       customerEmail: personalData.email,
       customerPhone: personalData.phone,
       customerName: personalData.fullName,
-      paymentMethod: paymentMethod || "Email", // Store the selected payment method
+      paymentMethod: personalData.paymentMethod || "N/A", // Store the selected payment method from form
+      bookingMethod: bookingMethod || "Email", // Store how the booking was submitted (Email/WhatsApp)
       // keep original booking + personal data for admin inspection
       rawPayload: { bookingData, personalData },
     };
@@ -609,7 +612,7 @@ export function PaymentDetailsPopup({
     }
   }, [bookingData, personalData]);
 
-  const addUserPersonalRide = useCallback(async (paymentMethod?: string) => {
+  const addUserPersonalRide = useCallback(async (bookingMethod?: string) => {
     if (!bookingData || !personalData || bookingData.rideType !== "personal")
       return null;
 
@@ -646,7 +649,8 @@ export function PaymentDetailsPopup({
       customerEmail: personalData.email,
       customerPhone: personalData.phone,
       customerName: personalData.fullName,
-      paymentMethod: paymentMethod || "Email", // Store the selected payment method
+      paymentMethod: personalData.paymentMethod || "N/A", // Store the selected payment method from form
+      bookingMethod: bookingMethod || "Email", // Store how the booking was submitted (Email/WhatsApp)
       rawPayload: { bookingData, personalData },
     };
 
@@ -1005,9 +1009,9 @@ export function PaymentDetailsPopup({
               rideData?.pickup?.location || "N/A"
             } → ${rideData?.destination?.location || "N/A"}${rideData?.frequency === 'daily' ? '' : `\nDate: ${emailDisplayDate}`}\nTime: ${emailDisplayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
               personalData?.fullName || "N/A"
-            }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ‪+94${
-              personalData?.phone || "N/A"
-            }‬\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${
+            }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ${
+              personalData?.phone?.startsWith('+') ? personalData.phone : '+94' + (personalData?.phone || "N/A")
+            }\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${
               personalData?.specialRequests || "None"
             }\n\nPrice: $${extractedPerPersonFare} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim();
             const emailSubject = `Join Shared Ride Request - ${
@@ -1110,7 +1114,7 @@ export function PaymentDetailsPopup({
       Personal Details:
       • Name: ${personalData?.fullName || "N/A"}
       • Email: ${personalData?.email || "N/A"}
-      • Phone: ${personalData?.phone || "N/A"}
+      • Phone: ${personalData?.phone?.startsWith('+') ? personalData.phone : '+94' + (personalData?.phone || "N/A")}
       • Persons: ${personalData?.seatCount || "N/A"}
       • Payment Method: ${personalData?.paymentMethod || "N/A"}
       
@@ -1281,7 +1285,7 @@ export function PaymentDetailsPopup({
   Personal Details:
   • Name: ${personalData?.fullName || "N/A"}
   • Email: ${personalData?.email || "N/A"}
-  • Phone: ${personalData?.phone || "N/A"}
+  • Phone: ${personalData?.phone?.startsWith('+') ? personalData.phone : '+94' + (personalData?.phone || "N/A")}
   • Seats: ${seatsToBook}
   • Payment Method: ${personalData?.paymentMethod || "N/A"}
   
@@ -1377,7 +1381,7 @@ export function PaymentDetailsPopup({
   Personal Details:
   • Name: ${personalData?.fullName || "N/A"}
   • Email: ${personalData?.email || "N/A"}
-  • Phone: ${personalData?.phone || "N/A"}
+  • Phone: ${personalData?.phone?.startsWith('+') ? personalData.phone : '+94' + (personalData?.phone || "N/A")}
   • Seats: ${personalData?.seatCount || "N/A"}
   • Payment Method: ${personalData?.paymentMethod || "N/A"}
   
@@ -1674,7 +1678,11 @@ export function PaymentDetailsPopup({
                 <div>
                   <p className="text-gray-600">Phone</p>
                   <p className="font-semibold text-gray-900">
-                    {personalData?.phone || "N/A"}
+                    {personalData?.phone?.startsWith('+') 
+                      ? personalData.phone 
+                      : personalData?.phone 
+                        ? `+94${personalData.phone}` 
+                        : "N/A"}
                   </p>
                 </div>
                 <div>

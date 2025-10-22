@@ -1043,6 +1043,84 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
       const statusMessage = statusMessages[newStatus] || `Your ride status has been updated to: ${newStatus}`;
 
+      // Extract payment method
+      let paymentMethod = 'N/A';
+      if (rp) {
+        if (typeof rp.paymentMethod === 'string' && rp.paymentMethod) {
+          paymentMethod = rp.paymentMethod;
+        } else if (rp.personalData && typeof rp.personalData === 'object') {
+          const pd = rp.personalData as Record<string, unknown>;
+          if (typeof pd.paymentMethod === 'string' && pd.paymentMethod) {
+            paymentMethod = pd.paymentMethod;
+          }
+        } else if (rp.bookingData && typeof rp.bookingData === 'object') {
+          const bd = rp.bookingData as Record<string, unknown>;
+          if (bd.personalData && typeof bd.personalData === 'object') {
+            const pd = bd.personalData as Record<string, unknown>;
+            if (typeof pd.paymentMethod === 'string' && pd.paymentMethod) {
+              paymentMethod = pd.paymentMethod;
+            }
+          }
+        }
+      }
+
+      // Extract phone number
+      const customerPhone = pickNonPlaceholder(
+        nestedPD && typeof nestedPD.phone === 'string' ? nestedPD.phone as string : undefined,
+        typeof (pd as Record<string, unknown>).phone === 'string' ? (pd as Record<string, unknown>).phone as string : undefined,
+        typeof rp.customerPhone === 'string' ? rp.customerPhone as string : undefined,
+        typeof rec.customerPhone === 'string' ? rec.customerPhone as string : undefined,
+        ride.customer && typeof ride.customer === 'object' && 'phone' in ride.customer && typeof ride.customer.phone === 'string' ? ride.customer.phone : undefined
+      ) || 'N/A';
+
+      // Format date
+      let bookingDate = 'N/A';
+      if (typeof ride.postedDate === 'string') {
+        bookingDate = new Date(ride.postedDate).toLocaleString();
+      } else if (ride.postedDate && typeof ride.postedDate === 'object' && !(ride.postedDate instanceof Date)) {
+        const pdObj = ride.postedDate as unknown as Record<string, unknown>;
+        const secs = typeof pdObj._seconds === 'number' ? pdObj._seconds : (typeof pdObj.seconds === 'number' ? pdObj.seconds : undefined);
+        if (typeof secs === 'number') {
+          bookingDate = new Date(secs * 1000).toLocaleString();
+        }
+      } else if (ride.postedDate instanceof Date) {
+        bookingDate = ride.postedDate.toLocaleString();
+      }
+
+      // Create consolidated booking details string
+      const bookingDetails = `
+📋 BOOKING DETAILS
+━━━━━━━━━━━━━━━━━━━━
+
+🆔 Booking ID: ${ride.bookingId || 'N/A'}
+📅 Date & Time: ${bookingDate}
+⏰ Pickup Time: ${ride.time || 'TBD'}
+� Frequency: ${ride.frequency || 'one-time'}
+
+📍 ROUTE INFORMATION
+From: ${formatLocation(ride.pickup)}
+To: ${formatLocation(ride.destination)}
+⏱️ Duration: ${ride.duration || 'TBD'}
+
+🚗 VEHICLE & DRIVER
+Vehicle: ${ride.vehicle || 'TBD'}
+Driver: ${ride.driver?.name || 'TBD'}
+
+👥 PASSENGERS & LUGGAGE
+Passengers: ${ride.passengers || ride.seats?.total || 'N/A'}
+Seats Available: ${ride.seats?.available || 'N/A'}/${ride.seats?.total || 'N/A'}
+Luggage: ${ride.luggage || '0'} pieces
+Hand Carry: ${ride.handCarry || '0'} pieces
+
+💰 PAYMENT INFORMATION
+Price: ${ride.price ? `$${ride.price}` : 'TBD'}
+Payment Method: ${paymentMethod}
+
+📞 CONTACT
+Phone: ${customerPhone}
+Type: ${ride.type || 'ride'}
+      `.trim();
+
       await emailjs.send(
         process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
         process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
@@ -1050,13 +1128,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           to_email: customerEmail,
           subject: `🚖 Ride Status Update: ${newStatus}`,
           name: customerName,
-          from: formatLocation(ride.pickup),
-          to: formatLocation(ride.destination),
-          taxi_type: ride.type || 'ride',
-          date: typeof ride.postedDate === 'string' ? new Date(ride.postedDate).toLocaleDateString() : '',
-          time: ride.time || '',
-          passengers: ride.passengers || ride.seats?.total || '',
-          status_message: statusMessage
+          status_message: statusMessage,
+          booking_details: bookingDetails
         },
         { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
       );
@@ -1244,6 +1317,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                   <th className="text-left py-4 px-6 font-semibold text-slate-700">Route</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-700">Customer</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-700 hidden lg:table-cell">Seats</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 hidden xl:table-cell">Payment Method</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-700">Status</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-700">Actions</th>
                 </tr>
@@ -1313,6 +1387,54 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         <span className="badge bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-medium">
                           {it.seats.available}/{it.seats.total}
                         </span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 hidden xl:table-cell">
+                      <div className="text-slate-700">
+                        {(() => {
+                          const rec = it as unknown as Record<string, unknown>;
+                          const rawPayload = rec.rawPayload as Record<string, unknown> | undefined;
+                          
+                          // Check multiple possible locations for payment method
+                          let paymentMethod = 'N/A';
+                          
+                          if (rawPayload) {
+                            // Check 1: Direct payment method in rawPayload
+                            if (typeof rawPayload.paymentMethod === 'string' && rawPayload.paymentMethod) {
+                              paymentMethod = rawPayload.paymentMethod;
+                            }
+                            
+                            // Check 2: Payment method inside rawPayload.personalData
+                            if (paymentMethod === 'N/A' && rawPayload.personalData && typeof rawPayload.personalData === 'object') {
+                              const personalData = rawPayload.personalData as Record<string, unknown>;
+                              if (typeof personalData.paymentMethod === 'string' && personalData.paymentMethod) {
+                                paymentMethod = personalData.paymentMethod;
+                              }
+                            }
+                            
+                            // Check 3: Payment method inside rawPayload.bookingData.personalData
+                            if (paymentMethod === 'N/A' && rawPayload.bookingData && typeof rawPayload.bookingData === 'object') {
+                              const bookingData = rawPayload.bookingData as Record<string, unknown>;
+                              if (bookingData.personalData && typeof bookingData.personalData === 'object') {
+                                const personalData = bookingData.personalData as Record<string, unknown>;
+                                if (typeof personalData.paymentMethod === 'string' && personalData.paymentMethod) {
+                                  paymentMethod = personalData.paymentMethod;
+                                }
+                              }
+                            }
+                          }
+                          
+                          // Fallback to direct property
+                          if (paymentMethod === 'N/A' && typeof rec.paymentMethod === 'string' && rec.paymentMethod) {
+                            paymentMethod = rec.paymentMethod;
+                          }
+                          
+                          return (
+                            <span className="inline-block px-2 py-1 bg-purple-50 text-purple-700 rounded text-xs font-medium">
+                              {paymentMethod}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="py-4 px-6">
@@ -1391,7 +1513,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                 ))}
                 {items.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-12 px-6 text-center">
+                    <td colSpan={8} className="py-12 px-6 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <Users className="h-12 w-12 text-slate-300" />
                         <p className="text-slate-500">No shared ride requests found.</p>

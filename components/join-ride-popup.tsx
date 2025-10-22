@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { X, MapPin, Clock, Users, ArrowLeft } from "lucide-react"
 import { PaymentDetailsPopup } from "./payment-popup"
-import { calculateProgressiveSharedTotal, calculateProgressiveSeatPrice, formatPriceUSD } from "@/lib/pricing"
+import { formatPriceUSD } from "@/lib/pricing"
 
 interface RideData {
   id: number
@@ -214,11 +214,16 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
                 </div>
                 <div className="text-right">
                   <p className="text-2xl font-bold text-gray-900">
-                    {formatPriceUSD(calculateProgressiveSharedTotal(formData.seatCount))}
+                    {(() => {
+                      // Extract numeric price from rideData.price (e.g., "$25.00" -> 25)
+                      const pricePerPerson = parseFloat(rideData.price.replace(/[^0-9.]/g, '')) || 0;
+                      const totalPrice = pricePerPerson * formData.seatCount;
+                      return formatPriceUSD(totalPrice);
+                    })()}
                   </p>
                   <p className="text-gray-600">for {formData.seatCount} person{formData.seatCount > 1 ? 's' : ''}</p>
                   <div className="text-xs text-gray-500 mt-1">
-                    Per person: {formatPriceUSD(calculateProgressiveSharedTotal(formData.seatCount) / formData.seatCount)}
+                    Per person: {rideData.price}
                   </div>
                 </div>
               </div>
