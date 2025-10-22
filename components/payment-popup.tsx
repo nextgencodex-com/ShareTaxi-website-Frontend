@@ -73,6 +73,72 @@ const sendConfirmationEmail = async (
       }
     }
 
+    // Format booking details for email
+    const from = isJoinRideFlow 
+      ? rideData?.pickup.location || "N/A"
+      : bookingData?.from || "N/A";
+    const to = isJoinRideFlow 
+      ? rideData?.destination.location || "N/A"
+      : bookingData?.to || "N/A";
+    
+    const date = isJoinRideFlow 
+      ? (() => {
+          if (!rideData?.time) return "N/A";
+          const timeString = rideData.time.trim();
+          if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
+            const timeParts = timeString.split(" ");
+            if (timeParts.length >= 3) {
+              const timeIndex = timeParts.findIndex(part => 
+                part.includes(":") || part.includes("AM") || part.includes("PM") || 
+                part.includes("am") || part.includes("pm")
+              );
+              return timeIndex > 0 ? timeParts.slice(0, timeIndex).join(" ") : timeParts.slice(0, 3).join(" ");
+            }
+          }
+          return new Date().toLocaleDateString();
+        })()
+      : (bookingData?.date || "N/A");
+    
+    const time = isJoinRideFlow 
+      ? (() => {
+          if (!rideData?.time) return "N/A";
+          const timeString = rideData.time.trim();
+          if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
+            const timeParts = timeString.split(" ");
+            if (timeParts.length >= 3) {
+              const timeIndex = timeParts.findIndex(part => 
+                part.includes(":") || part.includes("AM") || part.includes("PM") || 
+                part.includes("am") || part.includes("pm")
+              );
+              return timeIndex > 0 ? timeParts.slice(timeIndex).join(" ") : timeParts.slice(3).join(" ");
+            }
+          }
+          return timeString;
+        })()
+      : (bookingData?.time || "N/A");
+
+    const rideType = isJoinRideFlow ? "Shared" : (bookingData?.rideType === "personal" ? "Personal" : "Shared");
+    const tripType = bookingData?.tripType 
+      ? bookingData.tripType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())
+      : "One Way Ride";
+
+    const bookingDetails = `
+Route: ${from} → ${to}
+Date: ${date}
+Time: ${time}
+Type: ${rideType}, ${tripType}
+
+Personal Details:
+• Name: ${personalData?.fullName || "N/A"}
+• Email: ${personalData?.email || "N/A"}
+• Phone: +94${personalData?.phone || "N/A"}
+• Seats: ${extractedSeats}
+
+Special Requests: ${personalData?.specialRequests || "None"}
+
+Price: ${extractedTotal} for ${extractedSeats} persons
+    `.trim();
+
     const result = await emailjs.send(
       process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
       process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
@@ -126,6 +192,7 @@ const sendConfirmationEmail = async (
         seats: extractedSeats,
         per_person_fare: extractedPerPersonFare,
         total_price: extractedTotal,
+        booking_details: bookingDetails,
         status_message:
           "Your booking request has been received and is currently under review. We will contact you soon to confirm and share next steps.",
       },
@@ -400,6 +467,26 @@ export function PaymentDetailsPopup({
 
   // Assigned driver data could be provided later by backend
 
+  // Helper function to extract numeric price from calculatedFare HTML
+  const extractNumericPrice = (calculatedFareHtml?: string): string => {
+    if (!calculatedFareHtml) return `${PER_SEAT_RATE_USD}.00`;
+    
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = calculatedFareHtml;
+    
+    // Extract the per-person fare (green text) - this is what we want for PER_SEAT_RATE_USD
+    const perPersonElement = tempDiv.querySelector('[style*="color:green"]');
+    if (perPersonElement) {
+      const priceText = perPersonElement.textContent || "";
+      // Remove $ and any extra whitespace, keep only the numeric value
+      const numericPrice = priceText.replace(/[$\s]/g, "");
+      return numericPrice || `${PER_SEAT_RATE_USD}.00`;
+    }
+    
+    // If no per-person fare found, return default
+    return `${PER_SEAT_RATE_USD}.00`;
+  };
+
   const addUserSharedRide = useCallback(async () => {
     if (!bookingData || !personalData || bookingData.rideType !== "shared")
       return null;
@@ -435,7 +522,7 @@ export function PaymentDetailsPopup({
         available: availableSeats,
         total: totalSeats,
       },
-      price: `$${PER_SEAT_RATE_USD}.00`,
+      price: extractNumericPrice(bookingData.calculatedFare),
       // persist contact info so admin can contact the user who created the ride
       customerEmail: personalData.email,
       customerPhone: personalData.phone,
@@ -519,7 +606,7 @@ export function PaymentDetailsPopup({
         available: availableSeats,
         total: totalSeats,
       },
-      price: `$${PER_SEAT_RATE_USD}.00`,
+      price: extractNumericPrice(bookingData.calculatedFare),
       customerEmail: personalData.email,
       customerPhone: personalData.phone,
       customerName: personalData.fullName,
@@ -916,37 +1003,8 @@ export function PaymentDetailsPopup({
             );
           }
 
-          const emailSubject = `Join Shared Ride Request - ${
-            rideData?.pickup?.location || "Unknown"
-          } to ${rideData?.destination?.location || "Unknown"}`;
-          const emailLink = `mailto:contact@nextgcodex.com?subject=${encodeURIComponent(
-            emailSubject
-          )}&body=${encodeURIComponent(joinRideEmailDetails)}`;
-          window.open(emailLink, "_blank");
-
-          // Send confirmation email to customer
-          const customerEmailSubject =
-            "Thanks for choosing us — Your Booking Has Been Received";
-          const customerEmailLink = `mailto:${
-            personalData?.email
-          }?subject=${encodeURIComponent(
-            customerEmailSubject
-          )}&body=${encodeURIComponent(joinRideEmailDetails)}`;
-          window.open(customerEmailLink, "_blank");
-
-          await sendConfirmationEmail(
-            bookingData,
-            personalData,
-            rideData,
-            true,
-            seatsToBook,
-            extractedSeats,
-            extractedTotal,
-            extractedPerPersonFare
-          );
-
           setConfirmationMessage(
-            "Your booking request has been sent via Email! We will contact you soon to confirm your ride."
+            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"} Seats: ${seatsToBook} Thank you!`
           );
           setShowConfirmation(true);
 
@@ -1077,8 +1135,8 @@ Please confirm this booking. Thank you!
 
       // Show confirmation and close form after successful booking
       setConfirmationMessage(
-        "Your booking request has been sent via email! We will contact you soon to confirm your ride."
-      );
+            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"}  Thank you!`
+          );
       setShowConfirmation(true);
 
       // Close the form after successful booking and refresh the page
@@ -1278,8 +1336,8 @@ Please confirm this booking. Thank you!
             whatsappPerPersonFare
           );
 
-          setConfirmationMessage(
-            "Your booking request has been sent via WhatsApp! We will contact you soon to confirm your ride."
+         setConfirmationMessage(
+            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"} Seats: ${seatsToBook} Thank you!`
           );
           setShowConfirmation(true);
 
@@ -1375,8 +1433,8 @@ Please confirm this booking. Thank you!
 
       // Show confirmation and close form after successful booking
       setConfirmationMessage(
-        "Your booking request has been sent via WhatsApp! We will contact you soon to confirm your ride."
-      );
+            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"}  Thank you!`
+          );
       setShowConfirmation(true);
 
       // Close the form after successful booking and refresh the page
