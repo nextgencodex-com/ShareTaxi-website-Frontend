@@ -50,7 +50,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
     seatCount: 1,
     paymentMethod: "",
   })
-  const [showPaymentPopup, setShowPaymentPopup] = useState(false)
+  const [showPaymentPopup, setShowPaymentPopup] = useState<{ open: boolean; rideDate?: string }>({ open: false })
 
   // Function to parse time for display
   const parseTimeForDisplay = (time: string, frequency?: string) => {
@@ -78,7 +78,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
         seatCount: 1,
         paymentMethod: "",
       })
-      setShowPaymentPopup(false)
+      setShowPaymentPopup({ open: false })
     }
   }, [isOpen])
 
@@ -96,13 +96,12 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
   }
 
   const handleContinueToPayment = () => {
-    console.log('Continue to payment clicked - formData:', formData)
-    console.log('Continue to payment clicked - rideData:', rideData)
-    setShowPaymentPopup(true)
+    // Pass the ride's time as rideDate into the payment popup state
+    setShowPaymentPopup({ open: true, rideDate: rideData.time })
   }
 
   const handleClosePaymentPopup = () => {
-    setShowPaymentPopup(false)
+    setShowPaymentPopup({ open: false })
   }
 
   return (
@@ -331,7 +330,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
 
       {/* Payment Popup */}
       <PaymentDetailsPopup
-        isOpen={showPaymentPopup}
+        isOpen={showPaymentPopup.open}
         onClose={onClose}
         onBack={handleClosePaymentPopup}
         rideData={rideData}

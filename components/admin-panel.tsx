@@ -259,7 +259,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       // Load rates from backend if available
       (async () => {
         try {
-          const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/rates');
+          const res = await fetch('http://localhost:5000/api/rates');
           if (!res.ok) throw new Error(`API ${res.status}`);
           const json = await res.json();
           const rates = json?.data?.rates;
@@ -367,7 +367,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       setSharedLoading(true)
       setSharedError(null)
       try {
-        const res = await fetch("https://taxi-backend-x5w6.onrender.com/api/shared-rides")
+        const res = await fetch("http://localhost:5000/api/shared-rides")
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         const apiRides = json?.data?.rides as unknown
@@ -376,7 +376,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             const r = raw as Record<string, unknown>
             const idVal = r.id
             const id = typeof idVal === 'number' ? idVal : Date.now() + Math.floor(Math.random() * 1000)
-            const bookingId = typeof idVal === 'string' ? idVal : undefined
+            // Prefer explicit bookingId or readableId from the API (SMST-...), fall back to doc id if available
+            const bookingId = typeof r.bookingId === 'string' ? r.bookingId : (typeof r.readableId === 'string' ? r.readableId : (typeof idVal === 'string' ? idVal : undefined))
             // posted date may come as ISO string or Firestore timestamp-like object; normalize to ISO string
             const postedRaw = r.postedDate ?? r.createdAt ?? r.time;
             let postedDateIso: string;
@@ -451,7 +452,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       setVehicleBookingsLoading(true);
       setVehicleBookingsError(null);
       try {
-        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/private-rides');
+        const res = await fetch('http://localhost:5000/api/private-rides');
         if (!res.ok) throw new Error(`API ${res.status}`);
         const json = await res.json();
         const apiRides = json?.data?.rides as unknown;
@@ -515,7 +516,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       setPersonalLoading(true);
       setPersonalError(null);
       try {
-        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/personal-rides');
+        const res = await fetch('http://localhost:5000/api/personal-rides');
         if (!res.ok) throw new Error(`API ${res.status}`);
         const json = await res.json();
         const apiBookings = json?.data?.bookings as unknown;
@@ -617,8 +618,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     const errors: Record<string, string> = {};
     if (!form.pickupLocation.trim()) errors.pickupLocation = "Pickup location is required";
     if (!form.destinationLocation.trim()) errors.destinationLocation = "Destination is required";
-    // Only require date for one-time rides, not daily rides
-    if (form.frequency !== "daily" && !form.rideDate) errors.rideDate = "Date is required";
+    if (!form.rideDate) errors.rideDate = "Date is required";
     if (!form.pickupTime) errors.pickupTime = "Pickup time is required";
     const availableSeats = Number.parseInt(form.availableSeats || "0");
     const totalSeats = Number.parseInt(form.totalSeats || "0");
@@ -645,69 +645,34 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (Object.keys(errors).length > 0) return;
     setIsRideSubmitting(true);
     (async () => {
-      // Build new ride payload similar to addUserSharedRide in payment-popup
-      const seatsAvailable = Number.parseInt(rideForm.availableSeats || '0');
-      const seatsTotal = Number.parseInt(rideForm.totalSeats || '0');
-      // Construct a user-friendly time string
-      const timeString = rideForm.pickupTime
-        ? `${rideForm.pickupTime} ${rideForm.ampm}`.trim()
-        : '';
-
-      const newRide: Record<string, unknown> = {
-        id: Date.now(),
-        timeAgo: 'Just now',
-        pickupDate: rideForm.frequency !== 'daily' ? (rideForm.rideDate || '') : '',
-        postedDate: new Date(),
-        frequency: rideForm.frequency,
-        driver: {
-          name: 'Admin Added',
-          image: '/professional-driver-headshot.jpg',
-        },
-        vehicle: 'Assigned Vehicle',
-        pickup: { location: rideForm.pickupLocation.trim(), type: 'Pickup point' },
-        destination: { location: rideForm.destinationLocation.trim(), type: 'Destination' },
-        time: timeString,
-        duration: 'TBD',
-        seats: { available: seatsAvailable, total: seatsTotal },
+      // Construct payload for API
+      const payload = {
+        pickupLocation: rideForm.pickupLocation.trim(),
+        destinationLocation: rideForm.destinationLocation.trim(),
+        rideDate: rideForm.rideDate,
+        pickupTime: rideForm.pickupTime,
+        ampm: rideForm.ampm,
+        luggage: rideForm.luggage,
+        handCarry: rideForm.handCarry,
+        availableSeats: Number.parseInt(rideForm.availableSeats || '0'),
+        totalSeats: Number.parseInt(rideForm.totalSeats || '0'),
         price: rideForm.price,
-        // Mark that this was created by admin and keep original form as rawPayload for inspection
-        bookingMethod: 'Admin',
-        customerEmail: 'N/A',
-        customerPhone: 'N/A',
-        customerName: 'N/A',
-        paymentMethod: 'N/A',
-        rawPayload: {
-          source: 'admin',
-          pickupLocation: rideForm.pickupLocation,
-          destinationLocation: rideForm.destinationLocation,
-          rideDate: rideForm.rideDate,
-          pickupTime: rideForm.pickupTime,
-          ampm: rideForm.ampm,
-          luggage: rideForm.luggage,
-          handCarry: rideForm.handCarry,
-          availableSeats: seatsAvailable,
-          totalSeats: seatsTotal,
-          price: rideForm.price,
-          frequency: rideForm.frequency,
-        },
-      };
-
-      // Debug: Log the payload being sent
-      console.log('Submitting admin-created shared ride:', newRide);
+        frequency: rideForm.frequency,
+        source: 'admin',
+      } as Record<string, unknown>;
 
       try {
-        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/shared-rides', {
+        const res = await fetch('http://localhost:5000/api/shared-rides', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify(newRide),
+          body: JSON.stringify(payload),
         });
 
         if (res.ok) {
           const json = await res.json();
-          console.log('Server response:', json);
-          // Map to our RideData for local state display
-          const serverRide = (json?.data?.ride ?? json?.data ?? json) as Record<string, unknown> | undefined;
-          const idVal = serverRide?.id ?? serverRide?._id ?? serverRide?.bookingId ?? newRide.id;
+          // Attempt to map server response into our RideData shape
+          const serverRide = json?.data?.ride as Record<string, unknown> | undefined;
+          const idVal = serverRide?.id ?? serverRide?._id ?? serverRide?.bookingId ?? Date.now();
           const id = typeof idVal === 'number' ? idVal : Date.now();
           const bookingId = typeof serverRide?.bookingId === 'string' ? serverRide?.bookingId : (typeof idVal === 'string' ? idVal : undefined);
 
@@ -716,14 +681,14 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             bookingId,
             timeAgo: 'Just now',
             postedDate: new Date().toISOString(),
-            frequency: String(newRide.frequency || rideForm.frequency),
+            frequency: rideForm.frequency,
             driver: { name: 'Admin Added', image: '/professional-driver-headshot.jpg' },
-            vehicle: 'Assigned Vehicle',
+            vehicle: 'To be assigned',
             pickup: { location: rideForm.pickupLocation.trim(), type: 'Pickup point' },
             destination: { location: rideForm.destinationLocation.trim(), type: 'Destination' },
-            time: timeString,
+            time: `${rideForm.rideDate} ${rideForm.pickupTime} ${rideForm.ampm}`,
             duration: 'TBD',
-            seats: { available: seatsAvailable, total: seatsTotal },
+            seats: { available: Number.parseInt(String(payload.availableSeats || '0')), total: Number.parseInt(String(payload.totalSeats || '0')) },
             passengers: '1',
             luggage: rideForm.luggage,
             handCarry: rideForm.handCarry,
@@ -732,6 +697,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             type: 'shared',
           };
 
+          // Persist the server-provided ride
           persistSharedRides([persisted, ...sharedRides]);
           onAddRide?.(persisted);
         } else {
@@ -744,12 +710,12 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             postedDate: new Date().toISOString(),
             frequency: rideForm.frequency,
             driver: { name: 'Admin Added', image: '/professional-driver-headshot.jpg' },
-            vehicle: 'Assigned Vehicle',
+            vehicle: 'To be assigned',
             pickup: { location: rideForm.pickupLocation.trim(), type: 'Pickup point' },
             destination: { location: rideForm.destinationLocation.trim(), type: 'Destination' },
-            time: timeString,
+            time: `${rideForm.rideDate} ${rideForm.pickupTime} ${rideForm.ampm}`,
             duration: 'TBD',
-            seats: { available: seatsAvailable, total: seatsTotal },
+            seats: { available: Number.parseInt(rideForm.availableSeats || '0'), total: Number.parseInt(rideForm.totalSeats || '0') },
             passengers: '1',
             luggage: rideForm.luggage,
             handCarry: rideForm.handCarry,
@@ -770,12 +736,12 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           postedDate: new Date().toISOString(),
           frequency: rideForm.frequency,
           driver: { name: 'Admin Added', image: '/professional-driver-headshot.jpg' },
-          vehicle: 'Assigned Vehicle',
+          vehicle: 'To be assigned',
           pickup: { location: rideForm.pickupLocation.trim(), type: 'Pickup point' },
           destination: { location: rideForm.destinationLocation.trim(), type: 'Destination' },
-          time: timeString,
+          time: `${rideForm.rideDate} ${rideForm.pickupTime} ${rideForm.ampm}`,
           duration: 'TBD',
-          seats: { available: seatsAvailable, total: seatsTotal },
+          seats: { available: Number.parseInt(rideForm.availableSeats || '0'), total: Number.parseInt(rideForm.totalSeats || '0') },
           passengers: '1',
           luggage: rideForm.luggage,
           handCarry: rideForm.handCarry,
@@ -836,7 +802,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           buttonColor: "bg-blue-600 hover:bg-blue-700",
         } as Record<string, unknown>;
 
-        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/vehicles', {
+        const res = await fetch('http://localhost:5000/api/vehicles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(payload),
@@ -958,7 +924,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     // Persist to backend and then update local display
     (async () => {
       try {
-        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/rates', {
+        const res = await fetch('http://localhost:5000/api/rates', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ ratePerKm: usdRate, rateLKRPerKm: lkrRate, exchangeRate: currentExchangeRate }),
@@ -991,7 +957,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const removeRate = () => {
     (async () => {
       try {
-        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/rates', { method: 'DELETE' });
+        const res = await fetch('http://localhost:5000/api/rates', { method: 'DELETE' });
         if (!res.ok) throw new Error(`API ${res.status}`);
         // clear local UI
         setRatePerKm('');
@@ -1072,96 +1038,105 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
       const statusMessage = statusMessages[newStatus] || `Your ride status has been updated to: ${newStatus}`;
 
-      // Extract payment method
-      let paymentMethod = 'N/A';
-      if (rp) {
-        if (typeof rp.paymentMethod === 'string' && rp.paymentMethod) {
-          paymentMethod = rp.paymentMethod;
-        } else if (rp.personalData && typeof rp.personalData === 'object') {
-          const pd = rp.personalData as Record<string, unknown>;
-          if (typeof pd.paymentMethod === 'string' && pd.paymentMethod) {
-            paymentMethod = pd.paymentMethod;
-          }
-        } else if (rp.bookingData && typeof rp.bookingData === 'object') {
-          const bd = rp.bookingData as Record<string, unknown>;
-          if (bd.personalData && typeof bd.personalData === 'object') {
-            const pd = bd.personalData as Record<string, unknown>;
-            if (typeof pd.paymentMethod === 'string' && pd.paymentMethod) {
-              paymentMethod = pd.paymentMethod;
-            }
+      // Build a readable booking details block to include in the email
+      try {
+        const rec = ride as unknown as Record<string, unknown>;
+        const pickupStr = formatLocation(ride.pickup);
+        const destStr = formatLocation(ride.destination);
+
+        // determine date/time
+        let dateObj: Date | null = null;
+        const pdRaw = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.pickupDate) ?? rec.pickupDate ?? rec.postedDate;
+        if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
+        else if (pdRaw && typeof pdRaw === 'object') {
+          const pRec = pdRaw as Record<string, unknown>;
+          const secs = typeof pRec._seconds === 'number' ? pRec._seconds : (typeof pRec.seconds === 'number' ? pRec.seconds : undefined);
+          if (typeof secs === 'number') dateObj = new Date(secs * 1000);
+        } else if (pdRaw instanceof Date) dateObj = pdRaw;
+        if (!dateObj && typeof rec.postedDate === 'string') dateObj = new Date(rec.postedDate as string);
+
+        const dateStr = dateObj ? dateObj.toLocaleDateString() : (typeof rec.postedDate === 'string' ? new Date(rec.postedDate as string).toLocaleDateString() : 'N/A');
+        const timeStr = (ride.time && String(ride.time).trim() !== '') ? String(ride.time) : (dateObj ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD');
+
+        const taxiType = ride.type || 'ride';
+
+        // personal details: prefer nested rawPayload.personalData then top-level customer
+        let personal: Record<string, unknown> = {};
+        if (rec.rawPayload && typeof rec.rawPayload === 'object') {
+          const rp = rec.rawPayload as Record<string, unknown>;
+          if (rp.rawPayload && typeof rp.rawPayload === 'object' && (rp.rawPayload as Record<string, unknown>).personalData) {
+            personal = (rp.rawPayload as Record<string, unknown>).personalData as Record<string, unknown>;
+          } else if (rp.personalData && typeof rp.personalData === 'object') {
+            personal = rp.personalData as Record<string, unknown>;
           }
         }
-      }
-
-      // Extract phone number
-      const customerPhone = pickNonPlaceholder(
-        nestedPD && typeof nestedPD.phone === 'string' ? nestedPD.phone as string : undefined,
-        typeof (pd as Record<string, unknown>).phone === 'string' ? (pd as Record<string, unknown>).phone as string : undefined,
-        typeof rp.customerPhone === 'string' ? rp.customerPhone as string : undefined,
-        typeof rec.customerPhone === 'string' ? rec.customerPhone as string : undefined,
-        ride.customer && typeof ride.customer === 'object' && 'phone' in ride.customer && typeof ride.customer.phone === 'string' ? ride.customer.phone : undefined
-      ) || 'N/A';
-
-      // Format date
-      let bookingDate = 'N/A';
-      if (typeof ride.postedDate === 'string') {
-        bookingDate = new Date(ride.postedDate).toLocaleString();
-      } else if (ride.postedDate && typeof ride.postedDate === 'object' && !(ride.postedDate instanceof Date)) {
-        const pdObj = ride.postedDate as unknown as Record<string, unknown>;
-        const secs = typeof pdObj._seconds === 'number' ? pdObj._seconds : (typeof pdObj.seconds === 'number' ? pdObj.seconds : undefined);
-        if (typeof secs === 'number') {
-          bookingDate = new Date(secs * 1000).toLocaleString();
+        if (!personal || Object.keys(personal).length === 0) {
+          if (ride.customer && typeof ride.customer === 'object') personal = ride.customer as Record<string, unknown>;
         }
-      } else if (ride.postedDate instanceof Date) {
-        bookingDate = ride.postedDate.toLocaleString();
+
+        const personalName = (personal && typeof personal.fullName === 'string') ? personal.fullName : (ride.customer?.fullName ?? 'N/A');
+        const personalPhone = (personal && typeof personal.phone === 'string') ? personal.phone : (ride.customer?.phone ?? 'N/A');
+        const personalEmail = (personal && typeof personal.email === 'string') ? personal.email : (ride.customer?.email ?? 'N/A');
+
+        // special requests and price
+        const specialRequests = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.specialRequests) ?? (rec.specialRequests) ?? (rec.notes) ?? '';
+        const price = (rec.price ?? ride.price ?? '') as string | number;
+
+        const bookingIdStr = (rec.bookingId && typeof rec.bookingId === 'string') ? rec.bookingId as string : ((rec.readableId && typeof rec.readableId === 'string') ? rec.readableId as string : (typeof rec.id === 'string' ? rec.id : (ride.bookingId ?? 'N/A')));
+
+        const bookingDetails = [
+          `Booking ID: ${bookingIdStr}`,
+          `Route: ${pickupStr} → ${destStr}`,
+          `Date: ${dateStr}`,
+          `Time: ${timeStr}`,
+          `Type: ${taxiType}`,
+          `Passenger: ${personalName}`,
+          `Contact: ${personalPhone}${personalEmail ? ` / ${personalEmail}` : ''}`,
+          specialRequests ? `Special requests: ${String(specialRequests)}` : null,
+          price ? `Price: ${String(price)}` : null,
+        ].filter(Boolean).join('\n');
+
+        // Append booking details to the status message so template variable 'status_message' contains both
+        const fullStatusMessage = `${statusMessage}\n\nBooking details:\n${bookingDetails}`;
+
+        await emailjs.send(
+          process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+          {
+            to_email: customerEmail,
+            subject: `🚖 Ride Status Update: ${newStatus}`,
+            name: customerName,
+            from: pickupStr,
+            to: destStr,
+            taxi_type: taxiType,
+            date: dateStr,
+            time: timeStr,
+            passengers: ride.passengers || ride.seats?.total || '',
+            status_message: fullStatusMessage,
+          },
+          { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
+        );
+      } catch (innerErr) {
+        // If building booking details fails for any reason, fall back to sending the basic status message
+        console.warn('Failed to build booking details for status email, sending basic message instead.', innerErr);
+        await emailjs.send(
+          process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+          {
+            to_email: customerEmail,
+            subject: `🚖 Ride Status Update: ${newStatus}`,
+            name: customerName,
+            from: formatLocation(ride.pickup),
+            to: formatLocation(ride.destination),
+            taxi_type: ride.type || 'ride',
+            date: typeof ride.postedDate === 'string' ? new Date(ride.postedDate).toLocaleDateString() : '',
+            time: ride.time || '',
+            passengers: ride.passengers || ride.seats?.total || '',
+            status_message: statusMessage,
+          },
+          { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
+        );
       }
-
-      // Create consolidated booking details string
-      const bookingDetails = `
-📋 BOOKING DETAILS
-━━━━━━━━━━━━━━━━━━━━
-
-🆔 Booking ID: ${ride.bookingId || 'N/A'}
-📅 Date & Time: ${bookingDate}
-⏰ Pickup Time: ${ride.time || 'TBD'}
-� Frequency: ${ride.frequency || 'one-time'}
-
-📍 ROUTE INFORMATION
-From: ${formatLocation(ride.pickup)}
-To: ${formatLocation(ride.destination)}
-⏱️ Duration: ${ride.duration || 'TBD'}
-
-🚗 VEHICLE & DRIVER
-Vehicle: ${ride.vehicle || 'TBD'}
-Driver: ${ride.driver?.name || 'TBD'}
-
-👥 PASSENGERS & LUGGAGE
-Passengers: ${ride.passengers || ride.seats?.total || 'N/A'}
-Seats Available: ${ride.seats?.available || 'N/A'}/${ride.seats?.total || 'N/A'}
-Luggage: ${ride.luggage || '0'} pieces
-Hand Carry: ${ride.handCarry || '0'} pieces
-
-💰 PAYMENT INFORMATION
-Price: ${ride.price ? `$${ride.price}` : 'TBD'}
-Payment Method: ${paymentMethod}
-
-📞 CONTACT
-Phone: ${customerPhone}
-Type: ${ride.type || 'ride'}
-      `.trim();
-
-      await emailjs.send(
-        process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
-        process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
-        {
-          to_email: customerEmail,
-          subject: `🚖 Ride Status Update: ${newStatus}`,
-          name: customerName,
-          status_message: statusMessage,
-          booking_details: bookingDetails
-        },
-        { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
-      );
 
       console.log(`Status change email sent to ${customerEmail} for status: ${newStatus}`);
     } catch (error) {
@@ -1196,7 +1171,7 @@ Type: ${ride.type || 'ride'}
             pickupLocation: ride?.pickup?.location,
             destinationLocation: ride?.destination?.location,
           }
-          const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/shared-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(remoteId)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify(body),
@@ -1231,7 +1206,7 @@ Type: ${ride.type || 'ride'}
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/private-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(`http://localhost:5000/api/private-rides/${encodeURIComponent(remoteId)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({ status }),
@@ -1273,7 +1248,7 @@ Type: ${ride.type || 'ride'}
 
     (async () => {
       try {
-        const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/personal-rides/${encodeURIComponent(remoteId)}`, {
+        const res = await fetch(`http://localhost:5000/api/personal-rides/${encodeURIComponent(remoteId)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({ status }),
@@ -1346,7 +1321,6 @@ Type: ${ride.type || 'ride'}
                   <th className="text-left py-4 px-6 font-semibold text-slate-700">Route</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-700">Customer</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-700 hidden lg:table-cell">Seats</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700 hidden xl:table-cell">Payment Method</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-700">Status</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-700">Actions</th>
                 </tr>
@@ -1416,54 +1390,6 @@ Type: ${ride.type || 'ride'}
                         <span className="badge bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-medium">
                           {it.seats.available}/{it.seats.total}
                         </span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 hidden xl:table-cell">
-                      <div className="text-slate-700">
-                        {(() => {
-                          const rec = it as unknown as Record<string, unknown>;
-                          const rawPayload = rec.rawPayload as Record<string, unknown> | undefined;
-                          
-                          // Check multiple possible locations for payment method
-                          let paymentMethod = 'N/A';
-                          
-                          if (rawPayload) {
-                            // Check 1: Direct payment method in rawPayload
-                            if (typeof rawPayload.paymentMethod === 'string' && rawPayload.paymentMethod) {
-                              paymentMethod = rawPayload.paymentMethod;
-                            }
-                            
-                            // Check 2: Payment method inside rawPayload.personalData
-                            if (paymentMethod === 'N/A' && rawPayload.personalData && typeof rawPayload.personalData === 'object') {
-                              const personalData = rawPayload.personalData as Record<string, unknown>;
-                              if (typeof personalData.paymentMethod === 'string' && personalData.paymentMethod) {
-                                paymentMethod = personalData.paymentMethod;
-                              }
-                            }
-                            
-                            // Check 3: Payment method inside rawPayload.bookingData.personalData
-                            if (paymentMethod === 'N/A' && rawPayload.bookingData && typeof rawPayload.bookingData === 'object') {
-                              const bookingData = rawPayload.bookingData as Record<string, unknown>;
-                              if (bookingData.personalData && typeof bookingData.personalData === 'object') {
-                                const personalData = bookingData.personalData as Record<string, unknown>;
-                                if (typeof personalData.paymentMethod === 'string' && personalData.paymentMethod) {
-                                  paymentMethod = personalData.paymentMethod;
-                                }
-                              }
-                            }
-                          }
-                          
-                          // Fallback to direct property
-                          if (paymentMethod === 'N/A' && typeof rec.paymentMethod === 'string' && rec.paymentMethod) {
-                            paymentMethod = rec.paymentMethod;
-                          }
-                          
-                          return (
-                            <span className="inline-block px-2 py-1 bg-purple-50 text-purple-700 rounded text-xs font-medium">
-                              {paymentMethod}
-                            </span>
-                          );
-                        })()}
                       </div>
                     </td>
                     <td className="py-4 px-6">
@@ -1542,7 +1468,7 @@ Type: ${ride.type || 'ride'}
                 ))}
                 {items.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-12 px-6 text-center">
+                    <td colSpan={7} className="py-12 px-6 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <Users className="h-12 w-12 text-slate-300" />
                         <p className="text-slate-500">No shared ride requests found.</p>
@@ -1804,7 +1730,7 @@ Type: ${ride.type || 'ride'}
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/shared-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(remoteId)}`, {
             method: 'DELETE',
           })
           if (!res.ok) {
@@ -1854,7 +1780,7 @@ Type: ${ride.type || 'ride'}
         // Prefer bookingId for remote id if present, else use numeric id
         const remoteId = ride.bookingId ?? ride.id;
         const idForUrl = encodeURIComponent(String(remoteId));
-        const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/shared-rides/${idForUrl}`, {
+        const res = await fetch(`http://localhost:5000/api/shared-rides/${idForUrl}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ postedDate: iso }),
@@ -1948,7 +1874,7 @@ Type: ${ride.type || 'ride'}
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/private-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(`http://localhost:5000/api/private-rides/${encodeURIComponent(remoteId)}`, {
             method: 'DELETE',
             headers: { 'Accept': 'application/json' },
           });
@@ -1975,7 +1901,7 @@ Type: ${ride.type || 'ride'}
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`https://taxi-backend-x5w6.onrender.com/api/personal-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(`http://localhost:5000/api/personal-rides/${encodeURIComponent(remoteId)}`, {
             method: 'DELETE',
             headers: { 'Accept': 'application/json' },
           });
@@ -2313,18 +2239,7 @@ Type: ${ride.type || 'ride'}
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={(e) => { e.preventDefault(); handleRideSubmit(); }} className="space-y-4">
-<div>
-                        <label className="block text-sm font-medium mb-2">Frequency</label>
-                        <Select value={rideForm.frequency} onValueChange={(value) => setRideForm({ ...rideForm, frequency: value, pickupTime: '' })}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="one-time">One Time</SelectItem>
-                            <SelectItem value="daily">Daily</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+
                     <div className="grid md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium mb-2">Pickup Location</label>
@@ -2339,62 +2254,40 @@ Type: ${ride.type || 'ride'}
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
-                      {rideForm.frequency !== "daily" && (
-                        <div>
-                          <label className="block text-sm font-medium mb-2">Date</label>
-                          <Input
-                            type="date"
-                            value={rideForm.rideDate}
-                            onChange={(e) => setRideForm({ ...rideForm, rideDate: e.target.value })}
-                          />
-                          {rideErrors.rideDate && <p className="text-red-500 text-sm">{rideErrors.rideDate}</p>}
-                        </div>
-                      )}
-                      <div className={rideForm.frequency === "daily" ? "md:col-span-2" : ""}>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Date</label>
+                        <Input
+                          type="date"
+                          value={rideForm.rideDate}
+                          onChange={(e) => setRideForm({ ...rideForm, rideDate: e.target.value })}
+                        />
+                        {rideErrors.rideDate && <p className="text-red-500 text-sm">{rideErrors.rideDate}</p>}
+                      </div>
+                      <div>
                         <label className="block text-sm font-medium mb-2">Pickup Time</label>
-                        {rideForm.frequency === "daily" ? (
-                          <div className="flex gap-2">
-                            <Input
-                              type="time"
-                              value={rideForm.pickupTime}
-                              onChange={(e) => setRideForm({ ...rideForm, pickupTime: e.target.value })}
-                              className="flex-1"
-                            />
-                            <Select value={rideForm.ampm} onValueChange={(value) => setRideForm({ ...rideForm, ampm: value })}>
-                              <SelectTrigger className="w-20">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="AM">AM</SelectItem>
-                                <SelectItem value="PM">PM</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <Select value={rideForm.pickupTime} onValueChange={(value) => setRideForm({ ...rideForm, pickupTime: value })}>
-                              <SelectTrigger className="flex-1">
-                                <SelectValue placeholder="Select time slot" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="12-2">12-2</SelectItem>
-                                <SelectItem value="2-4">2-4</SelectItem>
-                                <SelectItem value="4-6">4-6</SelectItem>
-                                <SelectItem value="6-8">6-8</SelectItem>
-                                <SelectItem value="8-10">8-10</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Select value={rideForm.ampm} onValueChange={(value) => setRideForm({ ...rideForm, ampm: value })}>
-                              <SelectTrigger className="w-20">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="AM">AM</SelectItem>
-                                <SelectItem value="PM">PM</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
+                        <div className="flex gap-2">
+                          <Select value={rideForm.pickupTime} onValueChange={(value) => setRideForm({ ...rideForm, pickupTime: value })}>
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Select time slot" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="12-2">12-2</SelectItem>
+                              <SelectItem value="2-4">2-4</SelectItem>
+                              <SelectItem value="4-6">4-6</SelectItem>
+                              <SelectItem value="6-8">6-8</SelectItem>
+                              <SelectItem value="8-10">8-10</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select value={rideForm.ampm} onValueChange={(value) => setRideForm({ ...rideForm, ampm: value })}>
+                            <SelectTrigger className="w-20">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="AM">AM</SelectItem>
+                              <SelectItem value="PM">PM</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                         {rideErrors.pickupTime && <p className="text-red-500 text-sm">{rideErrors.pickupTime}</p>}
                       </div>
                     </div>
@@ -2431,7 +2324,18 @@ Type: ${ride.type || 'ride'}
                         </div>
                         {rideErrors.price && <p className="text-red-500 text-sm">{rideErrors.price}</p>}
                       </div>
-                      
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Frequency</label>
+                        <Select value={rideForm.frequency} onValueChange={(value) => setRideForm({ ...rideForm, frequency: value })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="one-time">One Time</SelectItem>
+                            <SelectItem value="daily">Daily</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
 
 

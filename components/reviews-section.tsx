@@ -32,7 +32,7 @@ export function ReviewsSection() {
         // Try backend first
         const base =
           (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "") ||
-          "https://taxi-backend-x5w6.onrender.com";
+          "http://localhost:5000";
         const apiUrl = base.endsWith("/api")
           ? `${base}/reviews`
           : `${base}/api/reviews`;

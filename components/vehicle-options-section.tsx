@@ -52,7 +52,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
     // Attempt to fetch vehicles from backend API
     ;(async () => {
       try {
-        const resp = await fetch("https://taxi-backend-x5w6.onrender.com/api/vehicles", { cache: "no-store" })
+        const resp = await fetch("http://localhost:5000/api/vehicles", { cache: "no-store" })
         if (!mounted) return
         if (!resp.ok) throw new Error(`Server responded ${resp.status}`)
         const json = await resp.json()

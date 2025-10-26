@@ -37,6 +37,20 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const [passengers, setPassengers] = useState(1)
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
+  const [fromPlace, setFromPlace] = useState<{
+    placeId?: string
+    lat?: number
+    lng?: number
+    address?: string
+    name?: string
+  } | null>(null)
+  const [toPlace, setToPlace] = useState<{
+    placeId?: string
+    lat?: number
+    lng?: number
+    address?: string
+    name?: string
+  } | null>(null)
   // default pickup date: tomorrow (local date) in yyyy-MM-dd format
   const _tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd')
   const [date, setDate] = useState<string>(_tomorrow)
@@ -110,7 +124,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     let mounted = true
     ;(async () => {
       try {
-        const res = await fetch('https://taxi-backend-x5w6.onrender.com/api/rates')
+        const res = await fetch('http://localhost:5000/api/rates')
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         const rates = json?.data?.rates
@@ -123,6 +137,189 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     })()
     return () => { mounted = false }
   }, [])
+
+  // --- Google Places Autocomplete for the "From" input ---
+  // Lightweight typing for the subset of google.maps we use here
+  type GoogleMaps = {
+    maps: {
+      places?: {
+        Autocomplete: new (el: Element, opts?: { types?: string[] }) => {
+          addListener: (event: string, fn: () => void) => void
+          getPlace: () => { formatted_address?: string; name?: string }
+        }
+      }
+      event?: {
+        clearInstanceListeners: (obj: unknown) => void
+      }
+    }
+  }
+  const loadGoogleMapsScript = (apiKey?: string) => {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const existing = ((window as unknown) as Record<string, unknown>)["google"];
+        if (existing && (existing as Record<string, unknown>)["maps"]) {
+          const maps = (existing as Record<string, unknown>)["maps"] as Record<string, unknown> | undefined;
+          if (maps && (maps as Record<string, unknown>)["places"]) {
+            resolve();
+            return;
+          }
+        }
+
+        if (!apiKey) {
+          reject(new Error("Missing Google Maps API key (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)"));
+          return;
+        }
+
+        const scriptId = "google-maps-places-script";
+        if (document.getElementById(scriptId)) {
+          // Wait until the script has initialized google.maps.places
+          const waitFor = () => {
+            const g = ((window as unknown) as Record<string, unknown>)["google"] as Record<string, unknown> | undefined;
+            if (g && (g as Record<string, unknown>)["maps"] && ((g as Record<string, unknown>)["maps"] as Record<string, unknown>)["places"]) {
+              resolve();
+            } else {
+              setTimeout(waitFor, 100);
+            }
+          };
+          waitFor();
+          return;
+        }
+
+        const s = document.createElement("script");
+        s.id = scriptId;
+        s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+        s.async = true;
+        s.defer = true;
+        s.onload = () => resolve();
+        s.onerror = (err) => reject(err);
+        document.head.appendChild(s);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    let autocompleteFrom: unknown | null = null;
+    let autocompleteTo: unknown | null = null;
+
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    loadGoogleMapsScript(apiKey as string | undefined)
+      .then(() => {
+        if (!mounted) return;
+        try {
+          const g = ((window as unknown) as Record<string, unknown>)["google"] as unknown as GoogleMaps | undefined;
+          const maps = g && (g.maps as GoogleMaps["maps"] | undefined);
+          const places = maps && maps.places;
+          if (!places) return;
+
+          const elFrom = document.getElementById("from") as HTMLInputElement | null;
+          const elTo = document.getElementById("to") as HTMLInputElement | null;
+          if (!elFrom && !elTo) return;
+
+          if (elFrom) {
+            // @ts-expect-error - runtime google maps types
+            autocompleteFrom = new g!.maps.places.Autocomplete(elFrom, { types: ["geocode"] });
+            // @ts-expect-error - runtime listener provided by google maps
+            autocompleteFrom.addListener("place_changed", () => {
+              try {
+                // @ts-expect-error - runtime type from Google Maps
+                const place = autocompleteFrom.getPlace();
+                if (place) {
+                  const addr = typeof place.formatted_address === "string" && place.formatted_address.trim()
+                    ? place.formatted_address
+                    : typeof place.name === "string"
+                    ? place.name
+                    : ""
+                  if (addr) setFrom(addr)
+
+                  // extract place details if available
+                  try {
+                    const placeTyped = place as unknown as { geometry?: { location?: { lat: () => number; lng: () => number } }; place_id?: string; formatted_address?: string; name?: string }
+                    const loc = placeTyped.geometry && placeTyped.geometry.location
+                    const lat = loc ? loc.lat() : undefined
+                    const lng = loc ? loc.lng() : undefined
+                    setFromPlace({
+                      placeId: (placeTyped.place_id as string) || undefined,
+                      lat,
+                      lng,
+                      address: (placeTyped.formatted_address as string) || undefined,
+                      name: (placeTyped.name as string) || undefined,
+                    })
+                  } catch {
+                    // ignore geometry extraction errors
+                  }
+                }
+              } catch {
+                // ignore
+              }
+            });
+          }
+
+          if (elTo) {
+            // @ts-expect-error - runtime google maps types
+            autocompleteTo = new g!.maps.places.Autocomplete(elTo, { types: ["geocode"] });
+            // @ts-expect-error - runtime listener provided by google maps
+            autocompleteTo.addListener("place_changed", () => {
+              try {
+                // @ts-expect-error - runtime type from Google Maps
+                const place = autocompleteTo.getPlace();
+                if (place) {
+                  const addr = typeof place.formatted_address === "string" && place.formatted_address.trim()
+                    ? place.formatted_address
+                    : typeof place.name === "string"
+                    ? place.name
+                    : ""
+                  if (addr) setTo(addr)
+
+                  try {
+                    const placeTyped = place as unknown as { geometry?: { location?: { lat: () => number; lng: () => number } }; place_id?: string; formatted_address?: string; name?: string }
+                    const loc = placeTyped.geometry && placeTyped.geometry.location
+                    const lat = loc ? loc.lat() : undefined
+                    const lng = loc ? loc.lng() : undefined
+                    setToPlace({
+                      placeId: (placeTyped.place_id as string) || undefined,
+                      lat,
+                      lng,
+                      address: (placeTyped.formatted_address as string) || undefined,
+                      name: (placeTyped.name as string) || undefined,
+                    })
+                  } catch {
+                    // ignore geometry extraction errors
+                  }
+                }
+              } catch {
+                // ignore
+              }
+            });
+          }
+        } catch {
+          // ignore initialization errors
+        }
+      })
+      .catch(() => {
+        // If API key missing or script failed, we silently continue without autocomplete
+      });
+
+    return () => {
+      mounted = false;
+      try {
+        const g = ((window as unknown) as Record<string, unknown>)["google"] as unknown as GoogleMaps | undefined;
+        if (g && g.maps && g.maps.event) {
+          if (autocompleteFrom) {
+            g.maps.event.clearInstanceListeners(autocompleteFrom);
+          }
+          if (autocompleteTo) {
+            g.maps.event.clearInstanceListeners(autocompleteTo);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
+
 
   useEffect(() => {
     // prefer backend rate when available, otherwise fall back to localStorage
@@ -247,6 +444,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       mapDistance,
       mapDuration,
   calculatedFare: currentFare,
+  fromPlace: fromPlace || undefined,
+  toPlace: toPlace || undefined,
     }
 
     // If a parent provided onAddSharedRide, prefer that (keeps existing behavior)
@@ -260,7 +459,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     }
 
     // Default behavior: POST to backend endpoints
-  const endpoint = rideType === 'shared' ? 'https://taxi-backend-x5w6.onrender.com/api/shared-rides' : 'https://taxi-backend-x5w6.onrender.com/api/private-rides'
+  const endpoint = rideType === 'shared' ? 'http://localhost:5000/api/shared-rides' : 'http://localhost:5000/api/private-rides'
     ;(async () => {
       try {
         const res = await fetch(endpoint, {
@@ -305,6 +504,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     setPassengers(1)
     setFrom("")
     setTo("")
+  setFromPlace(null)
+  setToPlace(null)
   setDate(_tomorrow)
     setMapDistance(null)
     setMapDuration(null)

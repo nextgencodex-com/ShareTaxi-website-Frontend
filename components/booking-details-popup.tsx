@@ -165,6 +165,7 @@ export function BookingDetailsPopup({
   };
 
   const handleContinueToPayment = () => {
+    console.log("Continue to payment clicked data:", formData, bookingData);
     setHasAttemptedSubmit(true);
     const errors = validateFormData();
     if (errors.length > 0) {
