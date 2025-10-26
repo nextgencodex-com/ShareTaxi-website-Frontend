@@ -139,11 +139,18 @@ Special Requests: ${personalData?.specialRequests || "None"}
 Price: ${extractedTotal} for ${extractedSeats} persons
     `.trim();
 
-    // Generate a booking code and helpful URLs for confirm/cancel (client-side)
-    const bookingCode = `BK-${Date.now()}`;
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const confirmUrl = origin ? `${origin}/booking/confirm?code=${bookingCode}` : "";
-    const cancelUrl = origin ? `${origin}/booking/cancel?code=${bookingCode}` : "";
+  // Generate a booking code and helpful URLs for confirm/cancel (client-side)
+  const bookingCode = `BK-${Date.now()}`;
+  // Create mailto links so clicking Confirm/Cancel in the email opens an email to the admin
+  const adminNotificationEmail = "therath2426@gmail.com";
+  const nameForBody = personalData?.fullName ? String(personalData.fullName) : "N/A";
+  const baseBody = `Booking ID: ${bookingCode}\nName: ${nameForBody}\n`;
+  const confirmSubject = encodeURIComponent(`Booking ${bookingCode} - Confirm`);
+  const cancelSubject = encodeURIComponent(`Booking ${bookingCode} - Cancel`);
+  const confirmBody = encodeURIComponent(baseBody + `Status: Confirm`);
+  const cancelBody = encodeURIComponent(baseBody + `Status: Cancel`);
+  const confirmUrl = `mailto:${adminNotificationEmail}?subject=${confirmSubject}&body=${confirmBody}`;
+  const cancelUrl = `mailto:${adminNotificationEmail}?subject=${cancelSubject}&body=${cancelBody}`;
 
     // Derive a few more template fields for EmailJS
     const fromLocation = isJoinRideFlow ? rideData?.pickup.location || "" : bookingData?.from || "";
