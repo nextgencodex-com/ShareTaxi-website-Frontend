@@ -73,6 +73,62 @@ const sendConfirmationEmail = async (
       }
     }
 
+    // Determine the display total to match UI Booking Summary
+    // For join flow: prefer rideData.price (formatted or number), otherwise compute progressive total
+    // For regular flow: prefer extracted total from calculatedFare (blue), otherwise compute total via pricing helpers
+    let displayTotal = extractedTotal;
+    let displayPerPerson = extractedPerPersonFare;
+
+    const seatCountForCalc = seatsCount || extractedSeats || getSeatCount(personalData);
+
+    if (isJoinRideFlow) {
+      // Prefer rideData.price when present
+      const rawPrice = (rideData as unknown as Record<string, unknown>)?.["price"];
+      if (rawPrice !== undefined && rawPrice !== null && rawPrice !== "") {
+        if (typeof rawPrice === "number") {
+          displayTotal = formatPriceUSD(rawPrice);
+          // compute per-person from numeric price if seats known
+          if (seatCountForCalc && seatCountForCalc > 0) {
+            displayPerPerson = formatPriceUSD(rawPrice / seatCountForCalc);
+          }
+        } else {
+          const s = String(rawPrice).trim();
+          displayTotal = s.startsWith("$") ? s : `$${s}`;
+        }
+      } else {
+        const totalNum = calculateProgressiveSharedTotal(seatCountForCalc || 1);
+        displayTotal = formatPriceUSD(totalNum);
+        if (seatCountForCalc && seatCountForCalc > 0) displayPerPerson = formatPriceUSD(totalNum / seatCountForCalc);
+      }
+    } else {
+      if (bookingData?.calculatedFare) {
+        // already parsed extractedTotal above from calculatedFare
+        if (!extractedTotal || extractedTotal === "N/A") {
+          // fallback: compute total using pricing helper
+          const passengersNum = typeof bookingData?.passengers === "string"
+            ? parseInt(bookingData?.passengers || "1", 10)
+            : bookingData?.passengers || 1;
+          const seatsForCalc = parseInt(String(personalData?.seatCount || "1"), 10);
+          const distanceForCalc = bookingData?.mapDistance ? parseFloat(bookingData.mapDistance) : 0;
+          const trip = (bookingData?.tripType as "one-way" | "round-trip" | "multi-city") || "one-way";
+          const totalNum = calculateTotalPrice(distanceForCalc, seatsForCalc, passengersNum, trip);
+          displayTotal = formatPriceUSD(totalNum);
+        }
+        // per-person already set from parsed HTML if available
+      } else {
+        // No calculatedFare HTML present - compute total from bookingData
+        const passengersNum = typeof bookingData?.passengers === "string"
+          ? parseInt(bookingData?.passengers || "1", 10)
+          : bookingData?.passengers || 1;
+        const seatsForCalc = parseInt(String(personalData?.seatCount || "1"), 10);
+        const distanceForCalc = bookingData?.mapDistance ? parseFloat(bookingData.mapDistance) : 0;
+        const trip = (bookingData?.tripType as "one-way" | "round-trip" | "multi-city") || "one-way";
+        const totalNum = calculateTotalPrice(distanceForCalc, seatsForCalc, passengersNum, trip);
+        displayTotal = formatPriceUSD(totalNum);
+        if (seatsForCalc && seatsForCalc > 0) displayPerPerson = formatPriceUSD(totalNum / seatsForCalc);
+      }
+    }
+
     // Format booking details for email
     const from = isJoinRideFlow 
       ? rideData?.pickup.location || "N/A"
@@ -176,8 +232,8 @@ Price: ${extractedTotal} for ${extractedSeats} persons
         subject: subjectOverride || "🚖 Pending Booking!",
 
         // Primary booking fields (match your EmailJS template placeholders)
-        booking_code: bookingCode,
-        total_price: extractedTotal,
+  booking_code: bookingCode,
+  total_price: displayTotal || extractedTotal,
         total_distance: totalDistance,
         from_location: fromLocation,
         to_location: toLocation,
@@ -207,7 +263,7 @@ Price: ${extractedTotal} for ${extractedSeats} persons
         passengers: personalData?.seatCount || "",
         luggage: specialRequest,
         seats: extractedSeats,
-        per_person_fare: extractedPerPersonFare,
+  per_person_fare: displayPerPerson || extractedPerPersonFare,
         booking_details: bookingDetails,
         status_message:
           "Your booking request has been received and is currently under review. We will contact you soon to confirm and share next steps.",
