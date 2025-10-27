@@ -157,15 +157,17 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-blue-400 rounded-full flex items-center justify-center">
-                    <Clock className="h-3 w-3 text-blue-400" />
+                {rideData.frequency !== 'daily' && (
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 border-2 border-blue-400 rounded-full flex items-center justify-center">
+                      <Clock className="h-3 w-3 text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">{parseTimeForDisplay(rideData.time, rideData.frequency)}</p>
+                      <p className="text-gray-600 text-sm">{rideData.duration}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">{parseTimeForDisplay(rideData.time, rideData.frequency)}</p>
-                    <p className="text-gray-600 text-sm">{rideData.duration}</p>
-                  </div>
-                </div>
+                )}
 
                 <div className="flex items-center gap-3">
                   <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">

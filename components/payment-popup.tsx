@@ -1323,11 +1323,11 @@ Please confirm this booking. Thank you!
           // Prepare WhatsApp message
           const whatsappSeats = seatsToBook;
           
-          // Calculate pricing for join ride flow
-          const totalPrice = calculateProgressiveSharedTotal(seatsToBook);
-          const perPersonPrice = totalPrice / seatsToBook;
-          const whatsappTotal = formatPriceUSD(totalPrice);
-          const whatsappPerPersonFare = formatPriceUSD(perPersonPrice);
+          // Calculate correct price from rideData.price for WhatsApp
+          const whatsappPricePerPerson = parseFloat(rideData?.price.replace(/[^0-9.]/g, '') || "0") || 0;
+          const whatsappTotalPrice = whatsappPricePerPerson * seatsToBook;
+          const whatsappTotal = formatPriceUSD(whatsappTotalPrice);
+          const whatsappPerPersonFare = formatPriceUSD(whatsappPricePerPerson);
 
           // Prefer rawPayload date/time when available; fallback to rideData.time parsing
           let displayDate = "N/A";
@@ -1390,9 +1390,9 @@ Please confirm this booking. Thank you!
             rideData?.pickup?.location || "N/A"
           } → ${rideData?.destination?.location || "N/A"}\nDate: ${displayDate}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
             personalData?.fullName || "N/A"
-          }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ‪+94${
+          }\n• Email: ${personalData?.email || "N/A"}\n• Phone: +94${
             personalData?.phone || "N/A"
-          }‬\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${
+          }\n• Seats: ${seatsToBook}\n• Payment Method: ${(personalData as any)?.paymentMethod || "N/A"}\n\nSpecial Requests: ${
             personalData?.specialRequests || "None"
           }\n\nPrice: ${whatsappTotal} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim();
 
@@ -1666,21 +1666,23 @@ Please confirm this booking. Thank you!
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-blue-400 rounded-full flex items-center justify-center">
-                    <Clock className="h-3 w-3 text-blue-400" />
+                {!(isJoinRideFlow && rideData?.frequency === 'daily') && (
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 border-2 border-blue-400 rounded-full flex items-center justify-center">
+                      <Clock className="h-3 w-3 text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {isJoinRideFlow
+                          ? rideData?.time
+                          : bookingData?.time || "N/A"}
+                      </p>
+                      <p className="text-gray-600 text-sm">
+                        {isJoinRideFlow ? rideData?.duration : "45 min"}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">
-                      {isJoinRideFlow
-                        ? rideData?.time
-                        : bookingData?.time || "N/A"}
-                    </p>
-                    <p className="text-gray-600 text-sm">
-                      {isJoinRideFlow ? rideData?.duration : "45 min"}
-                    </p>
-                  </div>
-                </div>
+                )}
 
                 <div className="flex items-center gap-3">
                   <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
@@ -1736,38 +1738,58 @@ Please confirm this booking. Thank you!
                 </div>
               )}
 
-              {isJoinRideFlow && (
-                <div className="flex justify-end mb-4">
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-gray-900">
-                      {
-                        // Prefer an explicit price coming from the ride data when available
-                        // rideData.price may be a formatted string like "$12.00" or a number
-                        (() => {
-                          try {
-                            const p = ((rideData as unknown) as Record<string, unknown>)?.["price"];
-                            if (p !== undefined && p !== null && p !== "") {
-                              if (typeof p === "number") return formatPriceUSD(p);
-                              const s = String(p).trim();
-                              // If already formatted with $, show as-is, otherwise prefix $
-                              return s.startsWith("$") ? s : `$${s}`;
-                            }
-                          } catch {
-                            // ignore and fallback
-                          }
-                          return formatPriceUSD(
-                            calculateProgressiveSharedTotal(selectedSeats || 1)
-                          );
-                        })()
-                      }
-                    </p>
-                    <p className="text-gray-600">
-                      for {selectedSeats || 1} seat
-                      {(selectedSeats || 1) > 1 ? "s" : ""}
-                    </p>
-                  </div>
-                </div>
-              )}
+{isJoinRideFlow && (
+  <div className="flex justify-end mb-4">
+    <div className="text-right">
+      <p className="text-2xl font-bold text-gray-900">
+        {(() => {
+          try {
+            const p = ((rideData as unknown) as Record<string, unknown>)?.["price"];
+            const seatCount = Number(selectedSeats) || 1;
+
+            // If price exists, handle number or formatted string
+            if (p !== undefined && p !== null && p !== "") {
+              let pricePerPerson = 0;
+
+              if (typeof p === "number") {
+                pricePerPerson = p;
+              } else {
+                const s = String(p).trim();
+                // Extract numeric value from formatted strings like "$12.00"
+                pricePerPerson = parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
+              }
+
+              // Calculate total price
+              const totalPrice = pricePerPerson * seatCount;
+
+              return formatPriceUSD(totalPrice);
+            }
+          } catch {
+            // ignore and fallback
+          }
+
+          // fallback if price missing
+          return formatPriceUSD(
+            calculateProgressiveSharedTotal(selectedSeats || 1)
+          );
+        })()}
+      </p>
+
+      <p className="text-gray-600">
+        for {selectedSeats || 1} seat
+        {(selectedSeats || 1) > 1 ? "s" : ""}
+      </p>
+
+      <div className="text-xs text-gray-500 mt-1">
+        {(() => {
+          const p = ((rideData as unknown) as Record<string, unknown>)?.["price"];
+          return p ? `Per person: ${typeof p === "number" ? formatPriceUSD(p) : p}` : "";
+        })()}
+      </div>
+    </div>
+  </div>
+)}
+
 
               <hr className="border-gray-200" />
 
