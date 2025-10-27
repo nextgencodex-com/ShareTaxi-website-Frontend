@@ -131,78 +131,52 @@ const sendConfirmationEmail = async (
     }
 
     // Format booking details for email
-    const from = isJoinRideFlow
+    const from = isJoinRideFlow 
       ? rideData?.pickup.location || "N/A"
       : bookingData?.from || "N/A";
-    const to = isJoinRideFlow
+    const to = isJoinRideFlow 
       ? rideData?.destination.location || "N/A"
       : bookingData?.to || "N/A";
-
-    const date = isJoinRideFlow
+    
+    const date = isJoinRideFlow 
       ? (() => {
           if (!rideData?.time) return "N/A";
           const timeString = rideData.time.trim();
-          if (
-            timeString.includes(",") ||
-            timeString.includes("/") ||
-            timeString.includes("-")
-          ) {
+          if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
             const timeParts = timeString.split(" ");
             if (timeParts.length >= 3) {
-              const timeIndex = timeParts.findIndex(
-                (part) =>
-                  part.includes(":") ||
-                  part.includes("AM") ||
-                  part.includes("PM") ||
-                  part.includes("am") ||
-                  part.includes("pm")
+              const timeIndex = timeParts.findIndex(part => 
+                part.includes(":") || part.includes("AM") || part.includes("PM") || 
+                part.includes("am") || part.includes("pm")
               );
-              return timeIndex > 0
-                ? timeParts.slice(0, timeIndex).join(" ")
-                : timeParts.slice(0, 3).join(" ");
+              return timeIndex > 0 ? timeParts.slice(0, timeIndex).join(" ") : timeParts.slice(0, 3).join(" ");
             }
           }
           return new Date().toLocaleDateString();
         })()
-      : bookingData?.date || "N/A";
-
-    const time = isJoinRideFlow
+      : (bookingData?.date || "N/A");
+    
+    const time = isJoinRideFlow 
       ? (() => {
           if (!rideData?.time) return "N/A";
           const timeString = rideData.time.trim();
-          if (
-            timeString.includes(",") ||
-            timeString.includes("/") ||
-            timeString.includes("-")
-          ) {
+          if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
             const timeParts = timeString.split(" ");
             if (timeParts.length >= 3) {
-              const timeIndex = timeParts.findIndex(
-                (part) =>
-                  part.includes(":") ||
-                  part.includes("AM") ||
-                  part.includes("PM") ||
-                  part.includes("am") ||
-                  part.includes("pm")
+              const timeIndex = timeParts.findIndex(part => 
+                part.includes(":") || part.includes("AM") || part.includes("PM") || 
+                part.includes("am") || part.includes("pm")
               );
-              return timeIndex > 0
-                ? timeParts.slice(timeIndex).join(" ")
-                : timeParts.slice(3).join(" ");
+              return timeIndex > 0 ? timeParts.slice(timeIndex).join(" ") : timeParts.slice(3).join(" ");
             }
           }
           return timeString;
         })()
-      : bookingData?.time || "N/A";
+      : (bookingData?.time || "N/A");
 
-    const rideType = isJoinRideFlow
-      ? "Shared"
-      : bookingData?.rideType === "personal"
-      ? "Personal"
-      : "Shared";
-    const tripType = bookingData?.tripType
-      ? bookingData.tripType
-          .replace("-", " ")
-          .replace(/\b\w/g, (l) => l.toUpperCase())
+    const rideType = isJoinRideFlow ? "Shared" : (bookingData?.rideType === "personal" ? "Personal" : "Shared");
+    const tripType = bookingData?.tripType 
+      ? bookingData.tripType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())
       : "One Way Ride";
 
     const bookingDetails = `
@@ -222,22 +196,18 @@ Special Requests: ${personalData?.specialRequests || "None"}
 Price: ${extractedTotal} for ${extractedSeats} persons
     `.trim();
 
-    // Generate a booking code and helpful URLs for confirm/cancel (client-side)
-    const bookingCode = `BK-${Date.now()}`;
-    // Create mailto links so clicking Confirm/Cancel in the email opens an email to the admin
-    const adminNotificationEmail = "therath2426@gmail.com";
-    const nameForBody = personalData?.fullName
-      ? String(personalData.fullName)
-      : "N/A";
-    const baseBody = `Booking ID: ${bookingCode}\nName: ${nameForBody}\n`;
-    const confirmSubject = encodeURIComponent(
-      `Booking ${bookingCode} - Confirm`
-    );
-    const cancelSubject = encodeURIComponent(`Booking ${bookingCode} - Cancel`);
-    const confirmBody = encodeURIComponent(baseBody + `Status: Confirm`);
-    const cancelBody = encodeURIComponent(baseBody + `Status: Cancel`);
-    const confirmUrl = `mailto:${adminNotificationEmail}?subject=${confirmSubject}&body=${confirmBody}`;
-    const cancelUrl = `mailto:${adminNotificationEmail}?subject=${cancelSubject}&body=${cancelBody}`;
+  // Generate a booking code and helpful URLs for confirm/cancel (client-side)
+  const bookingCode = `BK-${Date.now()}`;
+  // Create mailto links so clicking Confirm/Cancel in the email opens an email to the admin
+  const adminNotificationEmail = "therath2426@gmail.com";
+  const nameForBody = personalData?.fullName ? String(personalData.fullName) : "N/A";
+  const baseBody = `Booking ID: ${bookingCode}\nName: ${nameForBody}\n`;
+  const confirmSubject = encodeURIComponent(`Booking ${bookingCode} - Confirm`);
+  const cancelSubject = encodeURIComponent(`Booking ${bookingCode} - Cancel`);
+  const confirmBody = encodeURIComponent(baseBody + `Status: Confirm`);
+  const cancelBody = encodeURIComponent(baseBody + `Status: Cancel`);
+  const confirmUrl = `mailto:${adminNotificationEmail}?subject=${confirmSubject}&body=${confirmBody}`;
+  const cancelUrl = `mailto:${adminNotificationEmail}?subject=${cancelSubject}&body=${cancelBody}`;
 
     // Derive a few more template fields for EmailJS
     const fromLocation = isJoinRideFlow ? rideData?.pickup.location || "" : bookingData?.from || "";
@@ -256,13 +226,9 @@ Price: ${extractedTotal} for ${extractedSeats} persons
     const customerName = personalData?.fullName || "";
     const customerEmail = personalData?.email || "";
     const customerPhone = personalData?.phone ? `+94${personalData.phone}` : "";
-    const passengerCount = String(
-      extractedSeats || personalData?.seatCount || ""
-    );
+    const passengerCount = String(extractedSeats || personalData?.seatCount || "");
     const paymentMethod = (() => {
-      const maybe = (personalData as unknown as Record<string, unknown>)?.[
-        "paymentMethod"
-      ];
+      const maybe = (personalData as unknown as Record<string, unknown>)?.["paymentMethod"];
       return typeof maybe === "string" ? maybe : "";
     })();
     const specialRequest = personalData?.specialRequests || "";
@@ -281,8 +247,8 @@ Price: ${extractedTotal} for ${extractedSeats} persons
         total_distance: totalDistance,
         from_location: fromLocation,
         to_location: toLocation,
-        pickup_date: isJoinRideFlow ? date || "" : bookingData?.date || "",
-        pickup_time: isJoinRideFlow ? time || "" : bookingData?.time || "",
+        pickup_date: isJoinRideFlow ? (date || "") : (bookingData?.date || ""),
+        pickup_time: isJoinRideFlow ? (time || "") : (bookingData?.time || ""),
         vehicle_type: vehicleType,
 
         // Customer details
@@ -301,9 +267,9 @@ Price: ${extractedTotal} for ${extractedSeats} persons
         name: customerName,
         from: fromLocation,
         to: toLocation,
-        taxi_type: isJoinRideFlow ? "shared" : bookingData?.rideType || "",
-        date: isJoinRideFlow ? date || "" : bookingData?.date || "",
-        time: isJoinRideFlow ? time || "" : bookingData?.time || "",
+        taxi_type: isJoinRideFlow ? "shared" : (bookingData?.rideType || ""),
+        date: isJoinRideFlow ? (date || "") : (bookingData?.date || ""),
+        time: isJoinRideFlow ? (time || "") : (bookingData?.time || ""),
         passengers: personalData?.seatCount || "",
         luggage: specialRequest,
         seats: extractedSeats,
@@ -391,7 +357,6 @@ interface PersonalData {
   emergencyContact?: string;
   specialRequests: string;
   seatCount: number | string;
-  paymentMethod?: string;
 }
 
 interface RideData {
@@ -417,7 +382,6 @@ interface RideData {
   };
   price: string;
   distanceKm?: number;
-  frequency?: string;
 }
 
 interface PaymentDetailsPopupProps {
@@ -588,10 +552,10 @@ export function PaymentDetailsPopup({
   // Helper function to extract numeric price from calculatedFare HTML
   const extractNumericPrice = (calculatedFareHtml?: string): string => {
     if (!calculatedFareHtml) return `${PER_SEAT_RATE_USD}.00`;
-
+    
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = calculatedFareHtml;
-
+    
     // Extract the per-person fare (green text) - this is what we want for PER_SEAT_RATE_USD
     const perPersonElement = tempDiv.querySelector('[style*="color:green"]');
     if (perPersonElement) {
@@ -600,7 +564,7 @@ export function PaymentDetailsPopup({
       const numericPrice = priceText.replace(/[$\s]/g, "");
       return numericPrice || `${PER_SEAT_RATE_USD}.00`;
     }
-
+    
     // If no per-person fare found, return default
     return `${PER_SEAT_RATE_USD}.00`;
   };
@@ -651,11 +615,14 @@ export function PaymentDetailsPopup({
 
     // POST new shared ride to backend instead of localStorage
     try {
-      const res = await fetch("http://localhost:5000/api/shared-rides", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newRide),
-      });
+      const res = await fetch(
+        "http://localhost:5000/api/shared-rides",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newRide),
+        }
+      );
 
       if (!res.ok) {
         const text = await res.text();
@@ -730,11 +697,14 @@ export function PaymentDetailsPopup({
 
     // POST new personal ride to backend instead of localStorage
     try {
-      const res = await fetch("http://localhost:5000/api/personal-rides", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newRide),
-      });
+      const res = await fetch(
+        "http://localhost:5000/api/personal-rides",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newRide),
+        }
+      );
 
       if (!res.ok) {
         const text = await res.text();
@@ -1029,38 +999,18 @@ export function PaymentDetailsPopup({
 
           // Build date/time using rawPayload when available for email too
           {
-            const raw = (rideData as unknown as Record<string, unknown>)?.[
-              "rawPayload"
-            ] as Record<string, unknown> | undefined;
-            const rawRideDate =
-              typeof raw?.["rideDate"] === "string"
-                ? (raw?.["rideDate"] as string)
-                : undefined;
-            const rawPickupTime =
-              typeof raw?.["pickupTime"] === "string"
-                ? (raw?.["pickupTime"] as string)
-                : undefined;
-            const rawAmPm =
-              typeof raw?.["ampm"] === "string"
-                ? (raw?.["ampm"] as string)
-                : undefined;
+            const raw = (rideData as unknown as Record<string, unknown>)?.["rawPayload"] as
+              | Record<string, unknown>
+              | undefined;
+            const rawRideDate = typeof raw?.["rideDate"] === "string" ? (raw?.["rideDate"] as string) : undefined;
+            const rawPickupTime = typeof raw?.["pickupTime"] === "string" ? (raw?.["pickupTime"] as string) : undefined;
+            const rawAmPm = typeof raw?.["ampm"] === "string" ? (raw?.["ampm"] as string) : undefined;
             let emailDisplayDate = rawRideDate || "N/A";
-            let emailDisplayTime = rawPickupTime
-              ? rawAmPm
-                ? `${rawPickupTime} ${rawAmPm}`
-                : rawPickupTime
-              : "N/A";
-            if (
-              (emailDisplayDate === "N/A" || emailDisplayTime === "N/A") &&
-              rideData?.time
-            ) {
+            let emailDisplayTime = rawPickupTime ? (rawAmPm ? `${rawPickupTime} ${rawAmPm}` : rawPickupTime) : "N/A";
+            if ((emailDisplayDate === "N/A" || emailDisplayTime === "N/A") && rideData?.time) {
               const timeString = rideData.time.trim();
               if (emailDisplayDate === "N/A") {
-                if (
-                  timeString.includes(",") ||
-                  timeString.includes("/") ||
-                  timeString.includes("-")
-                ) {
+                if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
                   const timeParts = timeString.split(" ");
                   if (timeParts.length >= 3) {
                     const timeIndex = timeParts.findIndex(
@@ -1071,10 +1021,7 @@ export function PaymentDetailsPopup({
                         part.includes("am") ||
                         part.includes("pm")
                     );
-                    emailDisplayDate =
-                      timeIndex > 0
-                        ? timeParts.slice(0, timeIndex).join(" ")
-                        : timeParts.slice(0, 3).join(" ");
+                    emailDisplayDate = timeIndex > 0 ? timeParts.slice(0, timeIndex).join(" ") : timeParts.slice(0, 3).join(" ");
                   } else {
                     emailDisplayDate = new Date().toLocaleDateString();
                   }
@@ -1083,11 +1030,7 @@ export function PaymentDetailsPopup({
                 }
               }
               if (emailDisplayTime === "N/A") {
-                if (
-                  timeString.includes(",") ||
-                  timeString.includes("/") ||
-                  timeString.includes("-")
-                ) {
+                if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
                   const timeParts = timeString.split(" ");
                   if (timeParts.length >= 3) {
                     const timeIndex = timeParts.findIndex(
@@ -1098,10 +1041,7 @@ export function PaymentDetailsPopup({
                         part.includes("am") ||
                         part.includes("pm")
                     );
-                    emailDisplayTime =
-                      timeIndex > 0
-                        ? timeParts.slice(timeIndex).join(" ")
-                        : timeParts.slice(3).join(" ");
+                    emailDisplayTime = timeIndex > 0 ? timeParts.slice(timeIndex).join(" ") : timeParts.slice(3).join(" ");
                   } else {
                     emailDisplayTime = timeString;
                   }
@@ -1110,24 +1050,13 @@ export function PaymentDetailsPopup({
                 }
               }
             }
-            // Calculate correct price from rideData.price
-            const pricePerPerson = parseFloat(rideData?.price.replace(/[^0-9.]/g, '') || "0") || 0;
-            const totalPrice = pricePerPerson * seatsToBook;
-            const emailTotalPrice = formatPriceUSD(totalPrice);
-            const paymentMethod = (personalData as any)?.paymentMethod || "N/A";
-            
-            // For daily rides, show "Daily" instead of "N/A" for date
-            const displayDateForMessage = (rideData?.frequency === "daily") ? "Daily" : emailDisplayDate;
-            
             const joinRideEmailDetails = `\nTaxi Booking Request\n\nRoute: ${
               rideData?.pickup?.location || "N/A"
-            } → ${
-              rideData?.destination?.location || "N/A"
-            }\nDate: ${displayDateForMessage}\nTime: ${emailDisplayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
+            } → ${rideData?.destination?.location || "N/A"}\nDate: ${emailDisplayDate}\nTime: ${emailDisplayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
               personalData?.fullName || "N/A"
-            }\n• Email: ${personalData?.email || "N/A"}\n• Phone: +94${
+            }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ‪+94${
               personalData?.phone || "N/A"
-            }\n• Seats: ${seatsToBook}\n• Payment Method: ${paymentMethod}\n\nSpecial Requests: ${
+            }‬\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${
               personalData?.specialRequests || "None"
             }\n\nPrice: ${formattedTotal} for ${seatsToBook} persons (Per person: ${formattedPerPerson})\n\nPlease confirm this booking. Thank you!`.trim();
             const emailSubject = `Join Shared Ride Request - ${
@@ -1161,17 +1090,7 @@ export function PaymentDetailsPopup({
           }
 
           setConfirmationMessage(
-            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${
-              bookingData?.from || "Unknown"
-            } to ${bookingData?.to || "Unknown"}. Date ${
-              bookingData?.date || "Unknown"
-            }. Time ${bookingData?.time || "Unknown"}. Type: ${
-              bookingData?.rideType || "Unknown"
-            }. personal Details Name: ${
-              personalData?.fullName || "Unknown"
-            }  Email : ${personalData?.email || "Unknown"} phone : ${
-              personalData?.phone || "Unknown"
-            } Seats: ${seatsToBook} Thank you!`
+            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"} Seats: ${seatsToBook} Thank you!`
           );
           setShowConfirmation(true);
 
@@ -1219,8 +1138,7 @@ export function PaymentDetailsPopup({
       }
 
       // Dynamic ride type and trip labeling for regular (non-join) flow
-      const rideTypeText =
-        bookingData?.rideType === "personal" ? "Personal" : "Shared";
+      const rideTypeText = bookingData?.rideType === "personal" ? "Personal" : "Shared";
       const mapTripType = (t?: string) => {
         const v = (t || "one-way").toLowerCase();
         if (v === "round-trip") return "Round Trip";
@@ -1303,18 +1221,8 @@ Please confirm this booking. Thank you!
 
       // Show confirmation and close form after successful booking
       setConfirmationMessage(
-        `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${
-          bookingData?.from || "Unknown"
-        } to ${bookingData?.to || "Unknown"}. Date ${
-          bookingData?.date || "Unknown"
-        }. Time ${bookingData?.time || "Unknown"}. Type: ${
-          bookingData?.rideType || "Unknown"
-        }. personal Details Name: ${
-          personalData?.fullName || "Unknown"
-        }  Email : ${personalData?.email || "Unknown"} phone : ${
-          personalData?.phone || "Unknown"
-        }  Thank you!`
-      );
+            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"}  Thank you!`
+          );
       setShowConfirmation(true);
 
       // Close the form after successful booking and refresh the page
@@ -1414,7 +1322,7 @@ Please confirm this booking. Thank you!
 
           // Prepare WhatsApp message
           const whatsappSeats = seatsToBook;
-
+          
           // Calculate pricing for join ride flow
           const totalPrice = calculateProgressiveSharedTotal(seatsToBook);
           const perPersonPrice = totalPrice / seatsToBook;
@@ -1424,39 +1332,20 @@ Please confirm this booking. Thank you!
           // Prefer rawPayload date/time when available; fallback to rideData.time parsing
           let displayDate = "N/A";
           let displayTime = "N/A";
-          const raw = (rideData as unknown as Record<string, unknown>)?.[
-            "rawPayload"
-          ] as Record<string, unknown> | undefined;
-          const rawRideDate =
-            typeof raw?.["rideDate"] === "string"
-              ? (raw?.["rideDate"] as string)
-              : undefined;
-          const rawPickupTime =
-            typeof raw?.["pickupTime"] === "string"
-              ? (raw?.["pickupTime"] as string)
-              : undefined;
-          const rawAmPm =
-            typeof raw?.["ampm"] === "string"
-              ? (raw?.["ampm"] as string)
-              : undefined;
+          const raw = (rideData as unknown as Record<string, unknown>)?.["rawPayload"] as
+            | Record<string, unknown>
+            | undefined;
+          const rawRideDate = typeof raw?.["rideDate"] === "string" ? (raw?.["rideDate"] as string) : undefined;
+          const rawPickupTime = typeof raw?.["pickupTime"] === "string" ? (raw?.["pickupTime"] as string) : undefined;
+          const rawAmPm = typeof raw?.["ampm"] === "string" ? (raw?.["ampm"] as string) : undefined;
 
           if (rawRideDate) displayDate = rawRideDate;
-          if (rawPickupTime)
-            displayTime = rawAmPm
-              ? `${rawPickupTime} ${rawAmPm}`
-              : rawPickupTime;
+          if (rawPickupTime) displayTime = rawAmPm ? `${rawPickupTime} ${rawAmPm}` : rawPickupTime;
 
-          if (
-            (displayDate === "N/A" || displayTime === "N/A") &&
-            rideData?.time
-          ) {
+          if ((displayDate === "N/A" || displayTime === "N/A") && rideData?.time) {
             const timeString = rideData.time.trim();
             if (displayDate === "N/A") {
-              if (
-                timeString.includes(",") ||
-                timeString.includes("/") ||
-                timeString.includes("-")
-              ) {
+              if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
                 const timeParts = timeString.split(" ");
                 if (timeParts.length >= 3) {
                   const timeIndex = timeParts.findIndex(
@@ -1467,10 +1356,7 @@ Please confirm this booking. Thank you!
                       part.includes("am") ||
                       part.includes("pm")
                   );
-                  displayDate =
-                    timeIndex > 0
-                      ? timeParts.slice(0, timeIndex).join(" ")
-                      : timeParts.slice(0, 3).join(" ");
+                  displayDate = timeIndex > 0 ? timeParts.slice(0, timeIndex).join(" ") : timeParts.slice(0, 3).join(" ");
                 } else {
                   displayDate = new Date().toLocaleDateString();
                 }
@@ -1479,11 +1365,7 @@ Please confirm this booking. Thank you!
               }
             }
             if (displayTime === "N/A") {
-              if (
-                timeString.includes(",") ||
-                timeString.includes("/") ||
-                timeString.includes("-")
-              ) {
+              if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
                 const timeParts = timeString.split(" ");
                 if (timeParts.length >= 3) {
                   const timeIndex = timeParts.findIndex(
@@ -1494,10 +1376,7 @@ Please confirm this booking. Thank you!
                       part.includes("am") ||
                       part.includes("pm")
                   );
-                  displayTime =
-                    timeIndex > 0
-                      ? timeParts.slice(timeIndex).join(" ")
-                      : timeParts.slice(3).join(" ");
+                  displayTime = timeIndex > 0 ? timeParts.slice(timeIndex).join(" ") : timeParts.slice(3).join(" ");
                 } else {
                   displayTime = timeString;
                 }
@@ -1507,26 +1386,15 @@ Please confirm this booking. Thank you!
             }
           }
 
-          // Calculate correct price from rideData.price
-          const whatsappPricePerPerson = parseFloat(rideData?.price.replace(/[^0-9.]/g, '') || "0") || 0;
-          const whatsappTotalPrice = whatsappPricePerPerson * seatsToBook;
-          const whatsappFormattedTotal = formatPriceUSD(whatsappTotalPrice);
-          const whatsappPaymentMethod = (personalData as any)?.paymentMethod || "N/A";
-          
-          // For daily rides, show "Daily" instead of "N/A" for date
-          const displayDateForWhatsApp = (rideData?.frequency === "daily") ? "Daily" : displayDate;
-          
           const joinRideDetails = `\nTaxi Booking Request\n\nRoute: ${
             rideData?.pickup?.location || "N/A"
-          } → ${
-            rideData?.destination?.location || "N/A"
-          }\nDate: ${displayDateForWhatsApp}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
+          } → ${rideData?.destination?.location || "N/A"}\nDate: ${displayDate}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
             personalData?.fullName || "N/A"
-          }\n• Email: ${personalData?.email || "N/A"}\n• Phone: +94${
+          }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ‪+94${
             personalData?.phone || "N/A"
-          }\n• Seats: ${seatsToBook}\n• Payment Method: ${whatsappPaymentMethod}\n\nSpecial Requests: ${
+          }‬\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${
             personalData?.specialRequests || "None"
-          }\n\nPrice: ${whatsappFormattedTotal} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim();
+          }\n\nPrice: ${whatsappTotal} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim();
 
           const whatsappLink = `https://wa.me/94759627589?text=${encodeURIComponent(
             joinRideDetails
@@ -1550,22 +1418,12 @@ Please confirm this booking. Thank you!
             true,
             seatsToBook,
             whatsappSeats,
-            whatsappFormattedTotal,
-            rideData.price
+            whatsappTotal,
+            whatsappPerPersonFare
           );
 
-          setConfirmationMessage(
-            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${
-              bookingData?.from || "Unknown"
-            } to ${bookingData?.to || "Unknown"}. Date ${
-              bookingData?.date || "Unknown"
-            }. Time ${bookingData?.time || "Unknown"}. Type: ${
-              bookingData?.rideType || "Unknown"
-            }. personal Details Name: ${
-              personalData?.fullName || "Unknown"
-            }  Email : ${personalData?.email || "Unknown"} phone : ${
-              personalData?.phone || "Unknown"
-            } Seats: ${seatsToBook} Thank you!`
+         setConfirmationMessage(
+            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"} Seats: ${seatsToBook} Thank you!`
           );
           setShowConfirmation(true);
 
@@ -1661,18 +1519,8 @@ Please confirm this booking. Thank you!
 
       // Show confirmation and close form after successful booking
       setConfirmationMessage(
-        `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${
-          bookingData?.from || "Unknown"
-        } to ${bookingData?.to || "Unknown"}. Date ${
-          bookingData?.date || "Unknown"
-        }. Time ${bookingData?.time || "Unknown"}. Type: ${
-          bookingData?.rideType || "Unknown"
-        }. personal Details Name: ${
-          personalData?.fullName || "Unknown"
-        }  Email : ${personalData?.email || "Unknown"} phone : ${
-          personalData?.phone || "Unknown"
-        }  Thank you!`
-      );
+            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"}  Thank you!`
+          );
       setShowConfirmation(true);
 
       // Close the form after successful booking and refresh the page
@@ -1849,7 +1697,17 @@ Please confirm this booking. Thank you!
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div></div>
+                  <div className="w-6 h-6 border-2 border-purple-400 rounded-full flex items-center justify-center">
+                    <Users className="h-3 w-3 text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      {isJoinRideFlow
+                        ? `${rideData?.seats.available}/${rideData?.seats.total} seats`
+                        : `${personalData?.seatCount || "N/A"} seats`}
+                    </p>
+                    <p className="text-gray-600 text-sm">Available</p>
+                  </div>
                 </div>
               </div>
 
@@ -1882,59 +1740,31 @@ Please confirm this booking. Thank you!
                 <div className="flex justify-end mb-4">
                   <div className="text-right">
                     <p className="text-2xl font-bold text-gray-900">
-                      {(() => {
-                        try {
-                          const p = (
-                            rideData as unknown as Record<string, unknown>
-                          )?.["price"];
-                          const seatCount = Number(selectedSeats) || 1;
-
-                          // If price exists, handle number or formatted string
-                          if (p !== undefined && p !== null && p !== "") {
-                            let pricePerPerson = 0;
-
-                            if (typeof p === "number") {
-                              pricePerPerson = p;
-                            } else {
+                      {
+                        // Prefer an explicit price coming from the ride data when available
+                        // rideData.price may be a formatted string like "$12.00" or a number
+                        (() => {
+                          try {
+                            const p = ((rideData as unknown) as Record<string, unknown>)?.["price"];
+                            if (p !== undefined && p !== null && p !== "") {
+                              if (typeof p === "number") return formatPriceUSD(p);
                               const s = String(p).trim();
-                              // Extract numeric value from formatted strings like "$12.00"
-                              pricePerPerson =
-                                parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
+                              // If already formatted with $, show as-is, otherwise prefix $
+                              return s.startsWith("$") ? s : `$${s}`;
                             }
-
-                            // Calculate total price
-                            const totalPrice = pricePerPerson * seatCount;
-
-                            return formatPriceUSD(totalPrice);
+                          } catch {
+                            // ignore and fallback
                           }
-                        } catch {
-                          // ignore and fallback
-                        }
-
-                        // fallback if price missing
-                        return formatPriceUSD(
-                          calculateProgressiveSharedTotal(selectedSeats || 1)
-                        );
-                      })()}
+                          return formatPriceUSD(
+                            calculateProgressiveSharedTotal(selectedSeats || 1)
+                          );
+                        })()
+                      }
                     </p>
-
                     <p className="text-gray-600">
                       for {selectedSeats || 1} seat
                       {(selectedSeats || 1) > 1 ? "s" : ""}
                     </p>
-
-                    <div className="text-xs text-gray-500 mt-1">
-                      {(() => {
-                        const p = (
-                          rideData as unknown as Record<string, unknown>
-                        )?.["price"];
-                        return p
-                          ? `Per person: ${
-                              typeof p === "number" ? formatPriceUSD(p) : p
-                            }`
-                          : "";
-                      })()}
-                    </div>
                   </div>
                 </div>
               )}
