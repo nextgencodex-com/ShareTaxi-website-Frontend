@@ -77,49 +77,54 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
         throw new Error(body.message || 'Failed to create private ride')
       }
 
-      // Send a welcome/under-review email to the customer
+      // Send a welcome/under-review email to the customer using the booking template variables
       try {
-        // Format booking details for email
+        // Format pickup location string
         const pickupLocation = payload.pickupAddress || (typeof payload.pickupLocation === 'string' ? payload.pickupLocation : 'N/A');
-        
-        const bookingDetails = `
-Route: ${pickupLocation} → ${formData.dropoffAddress}
-Date: ${formData.bookingDate}
-Vehicle: ${vehicle.name}
-Type: Personal, One Way Ride
 
-Personal Details:
-• Name: ${formData.name}
-• Email: ${formData.email}
-• Phone: +94${formData.phone}
-• Passengers: 1
+        // Generate a client-side booking code. Prefer server-generated ID if you have one.
+        const bookingCode = `BK-${Date.now()}`;
 
-Vehicle Features:
-${vehicle.features.map(f => `• ${f}`).join('\n')}
+        // Confirm / cancel URLs (client-side). Replace with server links if available.
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        const confirmUrl = origin ? `${origin}/booking/confirm?code=${encodeURIComponent(bookingCode)}` : '';
+        const cancelUrl = origin ? `${origin}/booking/cancel?code=${encodeURIComponent(bookingCode)}` : '';
 
-Price: ${vehicle.price}
-        `.trim();
+        // Total price (template expects USD value). Use vehicle.price (string) here.
+        const totalPrice = vehicle.price || '';
+
+        // total distance not available here; leave empty or compute if you have a route/distance service
+        const totalDistance = '';
+
+        // Special request / notes
+        const specialRequest = String(payload.notes ?? '');
 
         await emailjs.send(
           process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
           process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
           {
             to_email: formData.email,
-            subject: '🚖 Thanks! Your personal ride request is under review',
-            name: formData.name,
-            from: pickupLocation,
-            to: formData.dropoffAddress,
-            taxi_type: 'personal',
-            date: formData.bookingDate,
-            time: '',
-            passengers: 1,
-            booking_details: bookingDetails,
-            status_message: 'Your booking request has been received and is currently under review. We will contact you soon to confirm and share next steps.'
+            booking_code: bookingCode,
+            total_price: totalPrice,
+            total_distance: totalDistance,
+            from_location: pickupLocation,
+            to_location: formData.dropoffAddress,
+            pickup_date: formData.bookingDate,
+            pickup_time: '',
+            vehicle_type: 'personal',
+            customer_name: formData.name,
+            customer_email: formData.email,
+            customer_phone: `+94${formData.phone}`,
+            passenger_count: 1,
+            payment_method: '',
+            special_request: specialRequest,
+            confirm_url: confirmUrl,
+            cancel_url: cancelUrl,
           },
           { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
-        )
+        );
       } catch (e) {
-        console.warn('EmailJS send failed (non-blocking):', e)
+        console.warn('EmailJS send failed (non-blocking):', e);
       }
 
       // Success — close popup

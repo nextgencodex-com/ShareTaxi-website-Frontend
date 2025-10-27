@@ -82,20 +82,21 @@ const sendConfirmationEmail = async (
     const seatCountForCalc = seatsCount || extractedSeats || getSeatCount(personalData);
 
     if (isJoinRideFlow) {
-      // Prefer rideData.price when present
+      // Prefer rideData.price when present. rideData.price is a per-person value in the UI,
+      // so compute total = perPerson * seatCount. If price is not numeric, fall back to
+      // the progressive shared total calculation.
       const rawPrice = (rideData as unknown as Record<string, unknown>)?.["price"];
-      if (rawPrice !== undefined && rawPrice !== null && rawPrice !== "") {
-        if (typeof rawPrice === "number") {
-          displayTotal = formatPriceUSD(rawPrice);
-          // compute per-person from numeric price if seats known
-          if (seatCountForCalc && seatCountForCalc > 0) {
-            displayPerPerson = formatPriceUSD(rawPrice / seatCountForCalc);
-          }
-        } else {
-          const s = String(rawPrice).trim();
-          displayTotal = s.startsWith("$") ? s : `$${s}`;
-        }
+      const parsedPerPerson = rawPrice !== undefined && rawPrice !== null && String(rawPrice).trim() !== ""
+        ? Number(String(rawPrice).replace(/[^0-9.]/g, ""))
+        : NaN;
+
+      if (!isNaN(parsedPerPerson) && parsedPerPerson > 0) {
+        // Treat as per-person price
+        displayPerPerson = formatPriceUSD(parsedPerPerson);
+        const totalNum = parsedPerPerson * (seatCountForCalc || 1);
+        displayTotal = formatPriceUSD(totalNum);
       } else {
+        // Fallback to progressive total (when price not present or not numeric)
         const totalNum = calculateProgressiveSharedTotal(seatCountForCalc || 1);
         displayTotal = formatPriceUSD(totalNum);
         if (seatCountForCalc && seatCountForCalc > 0) displayPerPerson = formatPriceUSD(totalNum / seatCountForCalc);
@@ -211,7 +212,16 @@ Price: ${extractedTotal} for ${extractedSeats} persons
     // Derive a few more template fields for EmailJS
     const fromLocation = isJoinRideFlow ? rideData?.pickup.location || "" : bookingData?.from || "";
     const toLocation = isJoinRideFlow ? rideData?.destination.location || "" : bookingData?.to || "";
-    const totalDistance = isJoinRideFlow ? String(rideData?.distanceKm ?? "") : String(bookingData?.mapDistance ?? "");
+    // Try multiple possible fields for distance: rideData.distanceKm, rawPayload.mapDistance, rawPayload.distanceKm or bookingData.mapDistance
+    const totalDistance = (() => {
+      if (isJoinRideFlow) {
+        const rd = rideData as unknown as Record<string, unknown> | undefined;
+        const rawPayload = rd?.rawPayload as Record<string, unknown> | undefined;
+        const cand = rd?.distanceKm ?? rawPayload?.mapDistance ?? rawPayload?.distanceKm ?? rawPayload?.distance ?? "";
+        return String(cand ?? "");
+      }
+      return String(bookingData?.mapDistance ?? "");
+    })();
     const vehicleType = isJoinRideFlow ? rideData?.vehicle || "" : bookingData?.rideType || "";
     const customerName = personalData?.fullName || "";
     const customerEmail = personalData?.email || "";
@@ -773,7 +783,7 @@ export function PaymentDetailsPopup({
               : 1,
         },
         price: bookingData.calculatedFare ? "Calculated" : "$15.00",
-        bookingId: `BK-${Date.now()}`,
+        bookingId: `Ref-${Date.now()}`,
         customerEmail: personalData.email,
         customerPhone: personalData.phone,
         specialRequests: personalData.specialRequests || "None",
@@ -811,7 +821,7 @@ export function PaymentDetailsPopup({
         price:
           rideData.price ||
           formatPriceUSD(calculateProgressiveSharedTotal(seatsRequested)),
-        bookingId: `BK-${Date.now()}`,
+        bookingId: `Ref-${Date.now()}`,
         customerEmail: personalData.email,
         customerPhone: personalData.phone,
         specialRequests: personalData.specialRequests || "None",
@@ -968,20 +978,24 @@ export function PaymentDetailsPopup({
 
           // Prepare and open email links and confirmation as before
           const extractedSeats = seatsToBook;
-          let extractedTotal = "N/A";
-          let extractedPerPersonFare = "N/A";
-          if (bookingData?.calculatedFare) {
-            const tempDiv = document.createElement("div");
-            tempDiv.innerHTML = bookingData.calculatedFare;
-            const perPersonElement = tempDiv.querySelector(
-              '[style*="color:green"]'
-            );
-            const totalElement = tempDiv.querySelector('[style*="color:blue"]');
-            if (perPersonElement)
-              extractedPerPersonFare = perPersonElement.textContent || "N/A";
-            if (totalElement)
-              extractedTotal = totalElement.textContent || "N/A";
+
+          // Compute per-person and total prices for join flow.
+          let perPersonNum = NaN;
+          const rawRidePrice = (rideData as unknown as Record<string, unknown>)?.["price"];
+          if (rawRidePrice !== undefined && rawRidePrice !== null && String(rawRidePrice).trim() !== "") {
+            perPersonNum = Number(String(rawRidePrice).replace(/[^0-9.]/g, ""));
           }
+
+          let totalNum: number;
+          if (!isNaN(perPersonNum) && perPersonNum > 0) {
+            totalNum = perPersonNum * seatsToBook;
+          } else {
+            totalNum = calculateProgressiveSharedTotal(seatsToBook);
+            perPersonNum = totalNum / seatsToBook;
+          }
+
+          const formattedTotal = formatPriceUSD(totalNum);
+          const formattedPerPerson = formatPriceUSD(perPersonNum);
 
           // Build date/time using rawPayload when available for email too
           {
@@ -1044,7 +1058,7 @@ export function PaymentDetailsPopup({
               personalData?.phone || "N/A"
             }‬\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${
               personalData?.specialRequests || "None"
-            }\n\nPrice: $${extractedPerPersonFare} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim();
+            }\n\nPrice: ${formattedTotal} for ${seatsToBook} persons (Per person: ${formattedPerPerson})\n\nPlease confirm this booking. Thank you!`.trim();
             const emailSubject = `Join Shared Ride Request - ${
               rideData?.pickup?.location || "Unknown"
             } to ${rideData?.destination?.location || "Unknown"}`;
@@ -1070,8 +1084,8 @@ export function PaymentDetailsPopup({
               true,
               seatsToBook,
               extractedSeats,
-              extractedTotal,
-              extractedPerPersonFare
+              formattedTotal,
+              formattedPerPerson
             );
           }
 

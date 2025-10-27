@@ -115,7 +115,7 @@ interface AdminPanelProps {
 /* ---------- Helper utilities ---------- */
 
 const generateBookingId = () =>
-  "BK-" + Date.now().toString(36).toUpperCase().slice(-8);
+  "Ref-" + Date.now().toString(36).toUpperCase().slice(-8);
 
 const localKeys = {
   SHARED_RIDES: "admin_shared_rides_v1",
@@ -1101,7 +1101,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
         await emailjs.send(
           process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
-          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID2!,
           {
             to_email: customerEmail,
             subject: `🚖 Ride Status Update: ${newStatus}`,
@@ -1121,7 +1121,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         console.warn('Failed to build booking details for status email, sending basic message instead.', innerErr);
         await emailjs.send(
           process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
-          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID2!,
           {
             to_email: customerEmail,
             subject: `🚖 Ride Status Update: ${newStatus}`,
