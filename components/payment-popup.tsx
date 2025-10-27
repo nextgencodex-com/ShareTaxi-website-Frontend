@@ -36,7 +36,8 @@ const sendConfirmationEmail = async (
   seatsCount?: number,
   totalPrice?: string,
   perPersonFare?: string,
-  subjectOverride?: string
+  subjectOverride?: string,
+  bookingMethod?: string
 ) => {
   try {
     // Extract pricing information
@@ -74,52 +75,78 @@ const sendConfirmationEmail = async (
     }
 
     // Format booking details for email
-    const from = isJoinRideFlow 
+    const from = isJoinRideFlow
       ? rideData?.pickup.location || "N/A"
       : bookingData?.from || "N/A";
-    const to = isJoinRideFlow 
+    const to = isJoinRideFlow
       ? rideData?.destination.location || "N/A"
       : bookingData?.to || "N/A";
-    
-    const date = isJoinRideFlow 
+
+    const date = isJoinRideFlow
       ? (() => {
           if (!rideData?.time) return "N/A";
           const timeString = rideData.time.trim();
-          if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
+          if (
+            timeString.includes(",") ||
+            timeString.includes("/") ||
+            timeString.includes("-")
+          ) {
             const timeParts = timeString.split(" ");
             if (timeParts.length >= 3) {
-              const timeIndex = timeParts.findIndex(part => 
-                part.includes(":") || part.includes("AM") || part.includes("PM") || 
-                part.includes("am") || part.includes("pm")
+              const timeIndex = timeParts.findIndex(
+                (part) =>
+                  part.includes(":") ||
+                  part.includes("AM") ||
+                  part.includes("PM") ||
+                  part.includes("am") ||
+                  part.includes("pm")
               );
-              return timeIndex > 0 ? timeParts.slice(0, timeIndex).join(" ") : timeParts.slice(0, 3).join(" ");
+              return timeIndex > 0
+                ? timeParts.slice(0, timeIndex).join(" ")
+                : timeParts.slice(0, 3).join(" ");
             }
           }
           return new Date().toLocaleDateString();
         })()
-      : (bookingData?.date || "N/A");
-    
-    const time = isJoinRideFlow 
+      : bookingData?.date || "N/A";
+
+    const time = isJoinRideFlow
       ? (() => {
           if (!rideData?.time) return "N/A";
           const timeString = rideData.time.trim();
-          if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
+          if (
+            timeString.includes(",") ||
+            timeString.includes("/") ||
+            timeString.includes("-")
+          ) {
             const timeParts = timeString.split(" ");
             if (timeParts.length >= 3) {
-              const timeIndex = timeParts.findIndex(part => 
-                part.includes(":") || part.includes("AM") || part.includes("PM") || 
-                part.includes("am") || part.includes("pm")
+              const timeIndex = timeParts.findIndex(
+                (part) =>
+                  part.includes(":") ||
+                  part.includes("AM") ||
+                  part.includes("PM") ||
+                  part.includes("am") ||
+                  part.includes("pm")
               );
-              return timeIndex > 0 ? timeParts.slice(timeIndex).join(" ") : timeParts.slice(3).join(" ");
+              return timeIndex > 0
+                ? timeParts.slice(timeIndex).join(" ")
+                : timeParts.slice(3).join(" ");
             }
           }
           return timeString;
         })()
-      : (bookingData?.time || "N/A");
+      : bookingData?.time || "N/A";
 
-    const rideType = isJoinRideFlow ? "Shared" : (bookingData?.rideType === "personal" ? "Personal" : "Shared");
-    const tripType = bookingData?.tripType 
-      ? bookingData.tripType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())
+    const rideType = isJoinRideFlow
+      ? "Shared"
+      : bookingData?.rideType === "personal"
+      ? "Personal"
+      : "Shared";
+    const tripType = bookingData?.tripType
+      ? bookingData.tripType
+          .replace("-", " ")
+          .replace(/\b\w/g, (l) => l.toUpperCase())
       : "One Way Ride";
 
     const bookingDetails = `
@@ -131,83 +158,108 @@ Type: ${rideType}, ${tripType}
 Personal Details:
 • Name: ${personalData?.fullName || "N/A"}
 • Email: ${personalData?.email || "N/A"}
-• Phone: +94${personalData?.phone || "N/A"}
+• Phone: ${
+      personalData?.phone?.startsWith("+")
+        ? personalData.phone
+        : "+94" + (personalData?.phone || "N/A")
+    }
 • Seats: ${extractedSeats}
+• Payment Method: ${personalData?.paymentMethod || "N/A"}
+• Booking Method: ${bookingMethod || "N/A"}
 
 Special Requests: ${personalData?.specialRequests || "None"}
 
 Price: ${extractedTotal} for ${extractedSeats} persons
     `.trim();
 
-  // Generate a booking code and helpful URLs for confirm/cancel (client-side)
-  const bookingCode = `BK-${Date.now()}`;
-  // Create mailto links so clicking Confirm/Cancel in the email opens an email to the admin
-  const adminNotificationEmail = "therath2426@gmail.com";
-  const nameForBody = personalData?.fullName ? String(personalData.fullName) : "N/A";
-  const baseBody = `Booking ID: ${bookingCode}\nName: ${nameForBody}\n`;
-  const confirmSubject = encodeURIComponent(`Booking ${bookingCode} - Confirm`);
-  const cancelSubject = encodeURIComponent(`Booking ${bookingCode} - Cancel`);
-  const confirmBody = encodeURIComponent(baseBody + `Status: Confirm`);
-  const cancelBody = encodeURIComponent(baseBody + `Status: Cancel`);
-  const confirmUrl = `mailto:${adminNotificationEmail}?subject=${confirmSubject}&body=${confirmBody}`;
-  const cancelUrl = `mailto:${adminNotificationEmail}?subject=${cancelSubject}&body=${cancelBody}`;
-
-    // Derive a few more template fields for EmailJS
-    const fromLocation = isJoinRideFlow ? rideData?.pickup.location || "" : bookingData?.from || "";
-    const toLocation = isJoinRideFlow ? rideData?.destination.location || "" : bookingData?.to || "";
-    const totalDistance = isJoinRideFlow ? String(rideData?.distanceKm ?? "") : String(bookingData?.mapDistance ?? "");
-    const vehicleType = isJoinRideFlow ? rideData?.vehicle || "" : bookingData?.rideType || "";
-    const customerName = personalData?.fullName || "";
-    const customerEmail = personalData?.email || "";
-    const customerPhone = personalData?.phone ? `+94${personalData.phone}` : "";
-    const passengerCount = String(extractedSeats || personalData?.seatCount || "");
-    const paymentMethod = (() => {
-      const maybe = (personalData as unknown as Record<string, unknown>)?.["paymentMethod"];
-      return typeof maybe === "string" ? maybe : "";
-    })();
-    const specialRequest = personalData?.specialRequests || "";
-
     const result = await emailjs.send(
       process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
       process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
       {
-        // Basic recipient / subject
-        to_email: customerEmail,
+        to_email: personalData?.email,
         subject: subjectOverride || "🚖 Pending Booking!",
+        name: personalData?.fullName || "",
+        from: isJoinRideFlow
+          ? rideData?.pickup.location
+          : bookingData?.from || "",
+        to: isJoinRideFlow
+          ? rideData?.destination.location
+          : bookingData?.to || "",
+        taxi_type: isJoinRideFlow ? "shared" : bookingData?.rideType || "",
+        date: isJoinRideFlow
+          ? (() => {
+              // For daily rides, don't include date
+              if (rideData?.frequency === "daily") return "";
 
-        // Primary booking fields (match your EmailJS template placeholders)
-        booking_code: bookingCode,
-        total_price: extractedTotal,
-        total_distance: totalDistance,
-        from_location: fromLocation,
-        to_location: toLocation,
-        pickup_date: isJoinRideFlow ? (date || "") : (bookingData?.date || ""),
-        pickup_time: isJoinRideFlow ? (time || "") : (bookingData?.time || ""),
-        vehicle_type: vehicleType,
+              if (!rideData?.time) return "";
+              const timeString = rideData.time.trim();
+              if (
+                timeString.includes(",") ||
+                timeString.includes("/") ||
+                timeString.includes("-")
+              ) {
+                const timeParts = timeString.split(" ");
+                if (timeParts.length >= 3) {
+                  const timeIndex = timeParts.findIndex(
+                    (part) =>
+                      part.includes(":") ||
+                      part.includes("AM") ||
+                      part.includes("PM") ||
+                      part.includes("am") ||
+                      part.includes("pm")
+                  );
+                  return timeIndex > 0
+                    ? timeParts.slice(0, timeIndex).join(" ")
+                    : timeParts.slice(0, 3).join(" ");
+                }
+              }
+              return new Date().toLocaleDateString();
+            })()
+          : bookingData?.date || "",
+        time: isJoinRideFlow
+          ? (() => {
+              if (!rideData?.time) return "";
+              const timeString = rideData.time.trim();
 
-        // Customer details
-        customer_name: customerName,
-        customer_email: customerEmail,
-        customer_phone: customerPhone,
-        passenger_count: passengerCount,
-        payment_method: paymentMethod,
-        special_request: specialRequest,
+              // For daily rides, extract just the time part
+              if (rideData?.frequency === "daily") {
+                const timeMatch = timeString.match(
+                  /(\d{1,2}-\d{1,2}\s*(AM|PM))/i
+                );
+                if (timeMatch) {
+                  return timeMatch[0];
+                }
+                return timeString;
+              }
 
-        // Actions / links
-        confirm_url: confirmUrl,
-        cancel_url: cancelUrl,
-
-        // Fallback fields used elsewhere in templates
-        name: customerName,
-        from: fromLocation,
-        to: toLocation,
-        taxi_type: isJoinRideFlow ? "shared" : (bookingData?.rideType || ""),
-        date: isJoinRideFlow ? (date || "") : (bookingData?.date || ""),
-        time: isJoinRideFlow ? (time || "") : (bookingData?.time || ""),
+              if (
+                timeString.includes(",") ||
+                timeString.includes("/") ||
+                timeString.includes("-")
+              ) {
+                const timeParts = timeString.split(" ");
+                if (timeParts.length >= 3) {
+                  const timeIndex = timeParts.findIndex(
+                    (part) =>
+                      part.includes(":") ||
+                      part.includes("AM") ||
+                      part.includes("PM") ||
+                      part.includes("am") ||
+                      part.includes("pm")
+                  );
+                  return timeIndex > 0
+                    ? timeParts.slice(timeIndex).join(" ")
+                    : timeParts.slice(3).join(" ");
+                }
+              }
+              return timeString;
+            })()
+          : bookingData?.time || "",
         passengers: personalData?.seatCount || "",
-        luggage: specialRequest,
+        luggage: personalData?.specialRequests || "", // Use special requests or empty for luggage
         seats: extractedSeats,
         per_person_fare: extractedPerPersonFare,
+        total_price: extractedTotal,
         booking_details: bookingDetails,
         status_message:
           "Your booking request has been received and is currently under review. We will contact you soon to confirm and share next steps.",
@@ -291,6 +343,7 @@ interface PersonalData {
   emergencyContact?: string;
   specialRequests: string;
   seatCount: number | string;
+  paymentMethod?: string;
 }
 
 interface RideData {
@@ -316,6 +369,7 @@ interface RideData {
   };
   price: string;
   distanceKm?: number;
+  frequency?: string;
 }
 
 interface PaymentDetailsPopupProps {
@@ -356,6 +410,21 @@ export function PaymentDetailsPopup({
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   // submit attempt flag removed (was unused)
 
+  // Function to parse time for display
+  const parseTimeForDisplay = (time: string, frequency?: string) => {
+    if (frequency === "daily") {
+      // For daily rides, extract just the time part (e.g., "4-6 PM" from "4-6 PM")
+      const timeMatch = time.match(/(\d{1,2}-\d{1,2}\s*(AM|PM))/i);
+      if (timeMatch) {
+        return timeMatch[0];
+      }
+      // Fallback: if no match, return the original time
+      return time;
+    }
+    // For one-time rides, return the full time string
+    return time;
+  };
+
   // Validation functions
   const validateBookingData = () => {
     console.log("Validating booking data - personalData:", personalData);
@@ -391,11 +460,17 @@ export function PaymentDetailsPopup({
       errors.push("Email address is too long");
     }
 
-    // Phone validation
+    // Phone validation - support international numbers
     if (!personalData.phone?.trim()) {
       errors.push("Phone number is required");
-    } else if (!/^\d{8,10}$/.test(personalData.phone.trim())) {
-      errors.push("Phone number must be 8-10 digits");
+    } else {
+      const phone = personalData.phone.trim();
+      // Allow international format: + followed by 7-15 digits, or just 8-15 digits
+      if (!/^(\+\d{7,15}|\d{8,15})$/.test(phone)) {
+        errors.push(
+          "Please enter a valid phone number (international format: +1234567890 or 1234567890)"
+        );
+      }
     }
 
     // Special Requests validation (optional, but reasonable length)
@@ -486,10 +561,10 @@ export function PaymentDetailsPopup({
   // Helper function to extract numeric price from calculatedFare HTML
   const extractNumericPrice = (calculatedFareHtml?: string): string => {
     if (!calculatedFareHtml) return `${PER_SEAT_RATE_USD}.00`;
-    
+
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = calculatedFareHtml;
-    
+
     // Extract the per-person fare (green text) - this is what we want for PER_SEAT_RATE_USD
     const perPersonElement = tempDiv.querySelector('[style*="color:green"]');
     if (perPersonElement) {
@@ -498,178 +573,188 @@ export function PaymentDetailsPopup({
       const numericPrice = priceText.replace(/[$\s]/g, "");
       return numericPrice || `${PER_SEAT_RATE_USD}.00`;
     }
-    
+
     // If no per-person fare found, return default
     return `${PER_SEAT_RATE_USD}.00`;
   };
 
-  const addUserSharedRide = useCallback(async () => {
-    if (!bookingData || !personalData || bookingData.rideType !== "shared")
-      return null;
+  const addUserSharedRide = useCallback(
+    async (bookingMethod?: string) => {
+      if (!bookingData || !personalData || bookingData.rideType !== "shared")
+        return null;
 
-    const seatCount = parseInt(String(personalData.seatCount || "1"), 10);
-    // For a newly created shared ride, the user's entered seatCount defines
-    // the total capacity of the ride. Initially, all seats are available.
-    const totalSeats = seatCount;
-    const availableSeats = totalSeats;
+      const seatCount = parseInt(String(personalData.seatCount || "1"), 10);
+      // For a newly created shared ride, the user's entered seatCount defines
+      // the total capacity of the ride. Initially, all seats are available.
+      const totalSeats = seatCount;
+      const availableSeats = totalSeats;
 
-    const newRide = {
-      id: Date.now(),
-      timeAgo: "Just now",
-      pickupDate: bookingData.date || "",
-      postedDate: new Date(),
-      frequency: "one-time",
-      driver: {
-        name: personalData.fullName || "User Driver",
-        image: "/professional-driver-headshot.jpg",
-      },
-      vehicle: "Assigned Vehicle",
-      pickup: {
-        location: bookingData.from || "",
-        type: "Pickup point",
-      },
-      destination: {
-        location: bookingData.to || "",
-        type: "Destination",
-      },
-      time: bookingData.time || "",
-      duration: bookingData.mapDuration || "45 min",
-      seats: {
-        available: availableSeats,
-        total: totalSeats,
-      },
-      price: extractNumericPrice(bookingData.calculatedFare),
-      // persist contact info so admin can contact the user who created the ride
-      customerEmail: personalData.email,
-      customerPhone: personalData.phone,
-      customerName: personalData.fullName,
-      // keep original booking + personal data for admin inspection
-      rawPayload: { bookingData, personalData },
-    };
+      const newRide = {
+        id: Date.now(),
+        timeAgo: "Just now",
+        pickupDate: bookingData.date || "",
+        postedDate: new Date(),
+        frequency: "one-time",
+        driver: {
+          name: personalData.fullName || "User Driver",
+          image: "/professional-driver-headshot.jpg",
+        },
+        vehicle: "Assigned Vehicle",
+        pickup: {
+          location: bookingData.from || "",
+          type: "Pickup point",
+        },
+        destination: {
+          location: bookingData.to || "",
+          type: "Destination",
+        },
+        time: bookingData.time || "",
+        duration: bookingData.mapDuration || "45 min",
+        seats: {
+          available: availableSeats,
+          total: totalSeats,
+        },
+        price: extractNumericPrice(bookingData.calculatedFare),
+        // persist contact info so admin can contact the user who created the ride
+        customerEmail: personalData.email,
+        customerPhone: personalData.phone,
+        customerName: personalData.fullName,
+        paymentMethod: personalData.paymentMethod || "N/A", // Store the selected payment method from form
+        bookingMethod: bookingMethod || "Email", // Store how the booking was submitted (Email/WhatsApp)
+        // keep original booking + personal data for admin inspection
+        rawPayload: { bookingData, personalData },
+      };
 
-    // POST new shared ride to backend instead of localStorage
-    try {
-      const res = await fetch(
-        "http://localhost:5000/api/shared-rides",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newRide),
-        }
-      );
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(
-          "Failed to create shared ride on server:",
-          res.status,
-          text
+      // POST new shared ride to backend instead of localStorage
+      try {
+        const res = await fetch(
+          "https://taxi-backend-x5w6.onrender.com/api/shared-rides",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newRide),
+          }
         );
+
+        if (!res.ok) {
+          const text = await res.text();
+          console.error(
+            "Failed to create shared ride on server:",
+            res.status,
+            text
+          );
+          return null;
+        }
+
+        const data = await res.json();
+        // Send welcome/under-review email automatically
+        try {
+          await sendWelcomeEmail(bookingData, personalData);
+        } catch {}
+        // Dispatch event to notify other components
+        try {
+          window.dispatchEvent(
+            new CustomEvent("userRideAdded", { detail: data })
+          );
+        } catch {}
+        try {
+          window.dispatchEvent(new CustomEvent("rideBooked", { detail: data }));
+        } catch {}
+        return data;
+      } catch (error) {
+        console.error("Error adding user shared ride:", error);
         return null;
       }
+    },
+    [bookingData, personalData]
+  );
 
-      const data = await res.json();
-      // Send welcome/under-review email automatically
+  const addUserPersonalRide = useCallback(
+    async (bookingMethod?: string) => {
+      if (!bookingData || !personalData || bookingData.rideType !== "personal")
+        return null;
+
+      const seatCount = parseInt(String(personalData.seatCount || "1"), 10);
+      const totalSeats = 6; // Standard vehicle capacity
+      const availableSeats = Math.max(0, totalSeats - seatCount);
+
+      const newRide = {
+        id: Date.now(),
+        timeAgo: "Just now",
+        pickupDate: bookingData.date || "",
+        postedDate: new Date(),
+        frequency: "one-time",
+        driver: {
+          name: personalData.fullName || "User Driver",
+          image: "/professional-driver-headshot.jpg",
+        },
+        vehicle: "Assigned Vehicle",
+        pickup: {
+          location: bookingData.from || "",
+          type: "Pickup point",
+        },
+        destination: {
+          location: bookingData.to || "",
+          type: "Destination",
+        },
+        time: bookingData.time || "",
+        duration: bookingData.mapDuration || "45 min",
+        seats: {
+          available: availableSeats,
+          total: totalSeats,
+        },
+        price: extractNumericPrice(bookingData.calculatedFare),
+        customerEmail: personalData.email,
+        customerPhone: personalData.phone,
+        customerName: personalData.fullName,
+        paymentMethod: personalData.paymentMethod || "N/A", // Store the selected payment method from form
+        bookingMethod: bookingMethod || "Email", // Store how the booking was submitted (Email/WhatsApp)
+        rawPayload: { bookingData, personalData },
+      };
+
+      // POST new personal ride to backend instead of localStorage
       try {
-        await sendWelcomeEmail(bookingData, personalData);
-      } catch {}
-      // Dispatch event to notify other components
-      try {
-        window.dispatchEvent(
-          new CustomEvent("userRideAdded", { detail: data })
+        const res = await fetch(
+          "https://taxi-backend-x5w6.onrender.com/api/personal-rides",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newRide),
+          }
         );
-      } catch {}
-      try {
-        window.dispatchEvent(new CustomEvent("rideBooked", { detail: data }));
-      } catch {}
-      return data;
-    } catch (error) {
-      console.error("Error adding user shared ride:", error);
-      return null;
-    }
-  }, [bookingData, personalData]);
 
-  const addUserPersonalRide = useCallback(async () => {
-    if (!bookingData || !personalData || bookingData.rideType !== "personal")
-      return null;
-
-    const seatCount = parseInt(String(personalData.seatCount || "1"), 10);
-    const totalSeats = 6; // Standard vehicle capacity
-    const availableSeats = Math.max(0, totalSeats - seatCount);
-
-    const newRide = {
-      id: Date.now(),
-      timeAgo: "Just now",
-      pickupDate: bookingData.date || "",
-      postedDate: new Date(),
-      frequency: "one-time",
-      driver: {
-        name: personalData.fullName || "User Driver",
-        image: "/professional-driver-headshot.jpg",
-      },
-      vehicle: "Assigned Vehicle",
-      pickup: {
-        location: bookingData.from || "",
-        type: "Pickup point",
-      },
-      destination: {
-        location: bookingData.to || "",
-        type: "Destination",
-      },
-      time: bookingData.time || "",
-      duration: bookingData.mapDuration || "45 min",
-      seats: {
-        available: availableSeats,
-        total: totalSeats,
-      },
-      price: extractNumericPrice(bookingData.calculatedFare),
-      customerEmail: personalData.email,
-      customerPhone: personalData.phone,
-      customerName: personalData.fullName,
-      rawPayload: { bookingData, personalData },
-    };
-
-    // POST new personal ride to backend instead of localStorage
-    try {
-      const res = await fetch(
-        "http://localhost:5000/api/personal-rides",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newRide),
+        if (!res.ok) {
+          const text = await res.text();
+          console.error(
+            "Failed to create personal ride on server:",
+            res.status,
+            text
+          );
+          return null;
         }
-      );
 
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(
-          "Failed to create personal ride on server:",
-          res.status,
-          text
-        );
+        const data = await res.json();
+        // Send welcome/under-review email automatically (same as shared)
+        try {
+          await sendWelcomeEmail(bookingData, personalData);
+        } catch {}
+        // Dispatch event to notify other components
+        try {
+          window.dispatchEvent(
+            new CustomEvent("userRideAdded", { detail: data })
+          );
+        } catch {}
+        try {
+          window.dispatchEvent(new CustomEvent("rideBooked", { detail: data }));
+        } catch {}
+        return data;
+      } catch (error) {
+        console.error("Error adding user personal ride:", error);
         return null;
       }
-
-      const data = await res.json();
-      // Send welcome/under-review email automatically (same as shared)
-      try {
-        await sendWelcomeEmail(bookingData, personalData);
-      } catch {}
-      // Dispatch event to notify other components
-      try {
-        window.dispatchEvent(
-          new CustomEvent("userRideAdded", { detail: data })
-        );
-      } catch {}
-      try {
-        window.dispatchEvent(new CustomEvent("rideBooked", { detail: data }));
-      } catch {}
-      return data;
-    } catch (error) {
-      console.error("Error adding user personal ride:", error);
-      return null;
-    }
-  }, [bookingData, personalData]);
+    },
+    [bookingData, personalData]
+  );
 
   if (!isOpen || (!bookingData && !personalData && !rideData)) return null;
 
@@ -770,8 +855,8 @@ export function PaymentDetailsPopup({
       // Choose endpoint based on ride type: personal rides go to /api/personal-rides
       const endpoint =
         bookingData && bookingData.rideType === "personal"
-          ? "http://localhost:5000/api/personal-rides"
-          : "http://localhost:5000/api/shared-rides";
+          ? "https://taxi-backend-x5w6.onrender.com/api/personal-rides"
+          : "https://taxi-backend-x5w6.onrender.com/api/shared-rides";
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -824,11 +909,11 @@ export function PaymentDetailsPopup({
     // If creation succeeds, we avoid calling saveBookedRide() later to prevent duplicates
     let createdRide: unknown | null = null;
     if (!isJoinRideFlow && bookingData?.rideType === "shared") {
-      createdRide = await addUserSharedRide();
+      createdRide = await addUserSharedRide("Email");
       if (createdRide === null) return;
     }
     if (!isJoinRideFlow && bookingData?.rideType === "personal") {
-      createdRide = await addUserPersonalRide();
+      createdRide = await addUserPersonalRide("Email");
       if (createdRide === null) return;
     }
 
@@ -872,7 +957,7 @@ export function PaymentDetailsPopup({
         try {
           // Call backend booking endpoint
           const res = await fetch(
-            `http://localhost:5000/api/shared-rides/${rideData.id}/book`,
+            `https://taxi-backend-x5w6.onrender.com/api/shared-rides/${rideData.id}/book`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -929,18 +1014,38 @@ export function PaymentDetailsPopup({
 
           // Build date/time using rawPayload when available for email too
           {
-            const raw = (rideData as unknown as Record<string, unknown>)?.["rawPayload"] as
-              | Record<string, unknown>
-              | undefined;
-            const rawRideDate = typeof raw?.["rideDate"] === "string" ? (raw?.["rideDate"] as string) : undefined;
-            const rawPickupTime = typeof raw?.["pickupTime"] === "string" ? (raw?.["pickupTime"] as string) : undefined;
-            const rawAmPm = typeof raw?.["ampm"] === "string" ? (raw?.["ampm"] as string) : undefined;
+            const raw = (rideData as unknown as Record<string, unknown>)?.[
+              "rawPayload"
+            ] as Record<string, unknown> | undefined;
+            const rawRideDate =
+              typeof raw?.["rideDate"] === "string"
+                ? (raw?.["rideDate"] as string)
+                : undefined;
+            const rawPickupTime =
+              typeof raw?.["pickupTime"] === "string"
+                ? (raw?.["pickupTime"] as string)
+                : undefined;
+            const rawAmPm =
+              typeof raw?.["ampm"] === "string"
+                ? (raw?.["ampm"] as string)
+                : undefined;
             let emailDisplayDate = rawRideDate || "N/A";
-            let emailDisplayTime = rawPickupTime ? (rawAmPm ? `${rawPickupTime} ${rawAmPm}` : rawPickupTime) : "N/A";
-            if ((emailDisplayDate === "N/A" || emailDisplayTime === "N/A") && rideData?.time) {
+            let emailDisplayTime = rawPickupTime
+              ? rawAmPm
+                ? `${rawPickupTime} ${rawAmPm}`
+                : rawPickupTime
+              : "N/A";
+            if (
+              (emailDisplayDate === "N/A" || emailDisplayTime === "N/A") &&
+              rideData?.time
+            ) {
               const timeString = rideData.time.trim();
               if (emailDisplayDate === "N/A") {
-                if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
+                if (
+                  timeString.includes(",") ||
+                  timeString.includes("/") ||
+                  timeString.includes("-")
+                ) {
                   const timeParts = timeString.split(" ");
                   if (timeParts.length >= 3) {
                     const timeIndex = timeParts.findIndex(
@@ -951,7 +1056,10 @@ export function PaymentDetailsPopup({
                         part.includes("am") ||
                         part.includes("pm")
                     );
-                    emailDisplayDate = timeIndex > 0 ? timeParts.slice(0, timeIndex).join(" ") : timeParts.slice(0, 3).join(" ");
+                    emailDisplayDate =
+                      timeIndex > 0
+                        ? timeParts.slice(0, timeIndex).join(" ")
+                        : timeParts.slice(0, 3).join(" ");
                   } else {
                     emailDisplayDate = new Date().toLocaleDateString();
                   }
@@ -960,7 +1068,11 @@ export function PaymentDetailsPopup({
                 }
               }
               if (emailDisplayTime === "N/A") {
-                if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
+                if (
+                  timeString.includes(",") ||
+                  timeString.includes("/") ||
+                  timeString.includes("-")
+                ) {
                   const timeParts = timeString.split(" ");
                   if (timeParts.length >= 3) {
                     const timeIndex = timeParts.findIndex(
@@ -971,7 +1083,10 @@ export function PaymentDetailsPopup({
                         part.includes("am") ||
                         part.includes("pm")
                     );
-                    emailDisplayTime = timeIndex > 0 ? timeParts.slice(timeIndex).join(" ") : timeParts.slice(3).join(" ");
+                    emailDisplayTime =
+                      timeIndex > 0
+                        ? timeParts.slice(timeIndex).join(" ")
+                        : timeParts.slice(3).join(" ");
                   } else {
                     emailDisplayTime = timeString;
                   }
@@ -982,11 +1097,17 @@ export function PaymentDetailsPopup({
             }
             const joinRideEmailDetails = `\nTaxi Booking Request\n\nRoute: ${
               rideData?.pickup?.location || "N/A"
-            } → ${rideData?.destination?.location || "N/A"}\nDate: ${emailDisplayDate}\nTime: ${emailDisplayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
+            } → ${rideData?.destination?.location || "N/A"}${
+              rideData?.frequency === "daily"
+                ? ""
+                : `\nDate: ${emailDisplayDate}`
+            }\nTime: ${emailDisplayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
               personalData?.fullName || "N/A"
-            }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ‪+94${
-              personalData?.phone || "N/A"
-            }‬\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${
+            }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ${
+              personalData?.phone?.startsWith("+")
+                ? personalData.phone
+                : "+94" + (personalData?.phone || "N/A")
+            }\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${
               personalData?.specialRequests || "None"
             }\n\nPrice: $${extractedPerPersonFare} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim();
             const emailSubject = `Join Shared Ride Request - ${
@@ -1015,12 +1136,24 @@ export function PaymentDetailsPopup({
               seatsToBook,
               extractedSeats,
               extractedTotal,
-              extractedPerPersonFare
+              extractedPerPersonFare,
+              undefined,
+              "Email"
             );
           }
 
           setConfirmationMessage(
-            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"} Seats: ${seatsToBook} Thank you!`
+            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${
+              bookingData?.from || "Unknown"
+            } to ${bookingData?.to || "Unknown"}. Date ${
+              bookingData?.date || "Unknown"
+            }. Time ${bookingData?.time || "Unknown"}. Type: ${
+              bookingData?.rideType || "Unknown"
+            }. personal Details Name: ${
+              personalData?.fullName || "Unknown"
+            }  Email : ${personalData?.email || "Unknown"} phone : ${
+              personalData?.phone || "Unknown"
+            } Seats: ${seatsToBook} Thank you!`
           );
           setShowConfirmation(true);
 
@@ -1068,7 +1201,8 @@ export function PaymentDetailsPopup({
       }
 
       // Dynamic ride type and trip labeling for regular (non-join) flow
-      const rideTypeText = bookingData?.rideType === "personal" ? "Personal" : "Shared";
+      const rideTypeText =
+        bookingData?.rideType === "personal" ? "Personal" : "Shared";
       const mapTripType = (t?: string) => {
         const v = (t || "one-way").toLowerCase();
         if (v === "round-trip") return "Round Trip";
@@ -1077,24 +1211,31 @@ export function PaymentDetailsPopup({
       };
 
       bookingDetails = `
-Taxi Booking Request
-
-Route: ${bookingData?.from || "N/A"} → ${bookingData?.to || "N/A"}
-Date: ${bookingData?.date || "N/A"}
-Time: ${bookingData?.time || "N/A"}
-Type: ${rideTypeText}, ${mapTripType(bookingData?.tripType)}
-
-Personal Details:
-• Name: ${personalData?.fullName || "N/A"}
-• Email: ${personalData?.email || "N/A"}
-• Phone: ‪+94${personalData?.phone || "N/A"}‬
-• Seats: ${personalData?.seatCount || "N/A"}
-
-Special Requests: ${personalData?.specialRequests || "None"}
-
-Price: $${priceText.replace("$", "")} for ${personalData?.seatCount} persons
-
-Please confirm this booking. Thank you!
+      Taxi Booking Request
+      
+      Route: ${bookingData?.from || "N/A"} → ${bookingData?.to || "N/A"}
+      Date: ${bookingData?.date || "N/A"}
+      Time: ${bookingData?.time || "N/A"}
+      Type: ${rideTypeText}, ${mapTripType(bookingData?.tripType)}
+      
+      Personal Details:
+      • Name: ${personalData?.fullName || "N/A"}
+      • Email: ${personalData?.email || "N/A"}
+      • Phone: ${
+        personalData?.phone?.startsWith("+")
+          ? personalData.phone
+          : "+94" + (personalData?.phone || "N/A")
+      }
+      • Persons: ${personalData?.seatCount || "N/A"}
+      • Payment Method: ${personalData?.paymentMethod || "N/A"}
+      
+      Special Requests: ${personalData?.specialRequests || "None"}
+      
+      Price: $${priceText.replace("$", "")} for ${personalData?.seatCount} ${
+        personalData?.seatCount > 1 ? "persons" : "person"
+      }
+      
+      Please confirm this booking. Thank you!
       `.trim();
 
       // Send booking request to company
@@ -1141,7 +1282,9 @@ Please confirm this booking. Thank you!
         selectedSeats,
         regularSeats,
         regularTotal,
-        regularPerPersonFare
+        regularPerPersonFare,
+        undefined,
+        "Email"
       );
 
       // Persist booked ride unless we already created the ride above
@@ -1151,8 +1294,18 @@ Please confirm this booking. Thank you!
 
       // Show confirmation and close form after successful booking
       setConfirmationMessage(
-            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"}  Thank you!`
-          );
+        `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${
+          bookingData?.from || "Unknown"
+        } to ${bookingData?.to || "Unknown"}. Date ${
+          bookingData?.date || "Unknown"
+        }. Time ${bookingData?.time || "Unknown"}. Type: ${
+          bookingData?.rideType || "Unknown"
+        }. personal Details Name: ${
+          personalData?.fullName || "Unknown"
+        }  Email : ${personalData?.email || "Unknown"} phone : ${
+          personalData?.phone || "Unknown"
+        }  Thank you!`
+      );
       setShowConfirmation(true);
 
       // Close the form after successful booking and refresh the page
@@ -1169,43 +1322,28 @@ Please confirm this booking. Thank you!
     console.log("WhatsApp booking clicked - personalData:", personalData);
     console.log("WhatsApp booking clicked - selectedSeats:", selectedSeats);
 
-    // Set submit attempt flag (tracked via validationErrors state)
-
-    // Run validation
     const errors = validateBookingData();
     setValidationErrors(errors);
-
-    // Stop if validation failed
     if (errors.length > 0) {
       console.log("Validation errors:", errors);
       return;
     }
 
-    // Clear any previous errors
     setValidationErrors([]);
 
-    // Always call addUserSharedRide if this is a shared ride booking, regardless of join flow
     if (bookingData?.rideType === "shared" && !isJoinRideFlow) {
-      const created = await addUserSharedRide();
+      const created = await addUserSharedRide("WhatsApp");
       if (created === null) return;
     }
     if (bookingData?.rideType === "personal" && !isJoinRideFlow) {
-      const created = await addUserPersonalRide();
+      const created = await addUserPersonalRide("WhatsApp");
       if (created === null) return;
     }
 
     let bookingDetails = "";
 
     if (isJoinRideFlow) {
-      // For shared rides, simulate booking success, update seats, show confirmation
-      console.log(
-        "WhatsApp booking - onUpdateSeats:",
-        onUpdateSeats,
-        "rideData:",
-        rideData,
-        "selectedSeats:",
-        selectedSeats
-      );
+      // ✅ FIXED: JOIN RIDE (One Time Rides)
       if (rideData && personalData) {
         const seatsToBook =
           selectedSeats ||
@@ -1213,9 +1351,8 @@ Please confirm this booking. Thank you!
           1;
 
         try {
-          // Call backend booking endpoint
           const res = await fetch(
-            `http://localhost:5000/api/shared-rides/${rideData.id}/book`,
+            `https://taxi-backend-x5w6.onrender.com/api/shared-rides/${rideData.id}/book`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1240,98 +1377,64 @@ Please confirm this booking. Thank you!
 
           const result = await res.json();
 
-          // Notify parent/UI to update seats
           if (onUpdateSeats) onUpdateSeats(rideData.id, seatsToBook);
-
-          // Dispatch event for other listeners
           try {
             window.dispatchEvent(
               new CustomEvent("rideBooked", { detail: result })
             );
           } catch {}
 
-          // Prepare WhatsApp message
-          const whatsappSeats = seatsToBook;
-          
-          // Calculate pricing for join ride flow
           const totalPrice = calculateProgressiveSharedTotal(seatsToBook);
           const perPersonPrice = totalPrice / seatsToBook;
           const whatsappTotal = formatPriceUSD(totalPrice);
           const whatsappPerPersonFare = formatPriceUSD(perPersonPrice);
 
-          // Prefer rawPayload date/time when available; fallback to rideData.time parsing
-          let displayDate = "N/A";
-          let displayTime = "N/A";
-          const raw = (rideData as unknown as Record<string, unknown>)?.["rawPayload"] as
-            | Record<string, unknown>
-            | undefined;
-          const rawRideDate = typeof raw?.["rideDate"] === "string" ? (raw?.["rideDate"] as string) : undefined;
-          const rawPickupTime = typeof raw?.["pickupTime"] === "string" ? (raw?.["pickupTime"] as string) : undefined;
-          const rawAmPm = typeof raw?.["ampm"] === "string" ? (raw?.["ampm"] as string) : undefined;
+          let displayDate = new Date().toLocaleDateString();
+          let displayTime = rideData?.time || "N/A";
 
-          if (rawRideDate) displayDate = rawRideDate;
-          if (rawPickupTime) displayTime = rawAmPm ? `${rawPickupTime} ${rawAmPm}` : rawPickupTime;
+          const joinRideDetails = `
+  Taxi Booking Request
+  
+  Route: ${rideData?.pickup?.location || "N/A"} → ${
+            rideData?.destination?.location || "N/A"
+          }
+  Date: ${displayDate}
+  Time: ${displayTime}
+  Type: Shared, One Time Ride
+  
+  Personal Details:
+  • Name: ${personalData?.fullName || "N/A"}
+  • Email: ${personalData?.email || "N/A"}
+  • Phone: ${
+    personalData?.phone?.startsWith("+")
+      ? personalData.phone
+      : "+94" + (personalData?.phone || "N/A")
+  }
+  • Seats: ${seatsToBook}
+  • Payment Method: ${personalData?.paymentMethod || "N/A"}
+  
+  Special Requests: ${personalData?.specialRequests || "None"}
+  
+  Price: ${whatsappTotal} for ${seatsToBook} ${
+            seatsToBook > 1 ? "persons" : "person"
+          }
+  
+  Please confirm this booking. Thank you!
+  `.trim();
 
-          if ((displayDate === "N/A" || displayTime === "N/A") && rideData?.time) {
-            const timeString = rideData.time.trim();
-            if (displayDate === "N/A") {
-              if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
-                const timeParts = timeString.split(" ");
-                if (timeParts.length >= 3) {
-                  const timeIndex = timeParts.findIndex(
-                    (part) =>
-                      part.includes(":") ||
-                      part.includes("AM") ||
-                      part.includes("PM") ||
-                      part.includes("am") ||
-                      part.includes("pm")
-                  );
-                  displayDate = timeIndex > 0 ? timeParts.slice(0, timeIndex).join(" ") : timeParts.slice(0, 3).join(" ");
-                } else {
-                  displayDate = new Date().toLocaleDateString();
-                }
-              } else {
-                displayDate = new Date().toLocaleDateString();
-              }
-            }
-            if (displayTime === "N/A") {
-              if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
-                const timeParts = timeString.split(" ");
-                if (timeParts.length >= 3) {
-                  const timeIndex = timeParts.findIndex(
-                    (part) =>
-                      part.includes(":") ||
-                      part.includes("AM") ||
-                      part.includes("PM") ||
-                      part.includes("am") ||
-                      part.includes("pm")
-                  );
-                  displayTime = timeIndex > 0 ? timeParts.slice(timeIndex).join(" ") : timeParts.slice(3).join(" ");
-                } else {
-                  displayTime = timeString;
-                }
-              } else {
-                displayTime = timeString;
-              }
-            }
+          // ✅ FIX: Use official API endpoint with safe encoding
+          const phoneNumber = "94759627589";
+          const formattedMessage = encodeURIComponent(joinRideDetails).replace(
+            /%0A/g,
+            "%0D%0A"
+          );
+          const whatsappLink = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${formattedMessage}`;
+
+          if (typeof window !== "undefined") {
+            window.open(whatsappLink, "_blank", "noopener,noreferrer");
           }
 
-          const joinRideDetails = `\nTaxi Booking Request\n\nRoute: ${
-            rideData?.pickup?.location || "N/A"
-          } → ${rideData?.destination?.location || "N/A"}\nDate: ${displayDate}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
-            personalData?.fullName || "N/A"
-          }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ‪+94${
-            personalData?.phone || "N/A"
-          }‬\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${
-            personalData?.specialRequests || "None"
-          }\n\nPrice: ${whatsappTotal} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim();
-
-          const whatsappLink = `https://wa.me/94759627589?text=${encodeURIComponent(
-            joinRideDetails
-          )}`;
-          window.open(whatsappLink, "_blank");
-
-          // Send confirmation email to customer
+          // ✅ Confirmation Email to Customer
           const customerEmailSubject =
             "Thanks for choosing us — Your Booking Has Been Received";
           const customerEmailLink = `mailto:${
@@ -1347,13 +1450,25 @@ Please confirm this booking. Thank you!
             rideData,
             true,
             seatsToBook,
-            whatsappSeats,
+            seatsToBook,
             whatsappTotal,
-            whatsappPerPersonFare
+            whatsappPerPersonFare,
+            undefined,
+            "WhatsApp"
           );
 
-         setConfirmationMessage(
-            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"} Seats: ${seatsToBook} Thank you!`
+          setConfirmationMessage(
+            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${
+              bookingData?.from || "Unknown"
+            } to ${bookingData?.to || "Unknown"}. Date ${
+              bookingData?.date || "Unknown"
+            }. Time ${bookingData?.time || "Unknown"}. Type: ${
+              bookingData?.rideType || "Unknown"
+            }. personal Details Name: ${
+              personalData?.fullName || "Unknown"
+            }  Email : ${personalData?.email || "Unknown"} phone : ${
+              personalData?.phone || "Unknown"
+            } Seats: ${seatsToBook} Thank you!`
           );
           setShowConfirmation(true);
 
@@ -1372,17 +1487,11 @@ Please confirm this booking. Thank you!
         }
       }
     } else {
-      // const rideTypeFormatted = bookingData?.rideType ? bookingData.rideType.charAt(0).toUpperCase() + bookingData.rideType.slice(1) : "N/A"
-      // const tripTypeFormatted = bookingData?.tripType ? bookingData.tripType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : "N/A"
-
-      // const subject = `Taxi Booking Request - ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}`
-
-      // Extract price from calculated fare HTML - prioritize total price (blue) over per-person (green)
+      // ✅ REGULAR (Personal or Shared) RIDE FLOW — Unchanged
       let priceText = "Price not calculated";
       if (bookingData?.calculatedFare) {
         const tempDiv = document.createElement("div");
         tempDiv.innerHTML = bookingData.calculatedFare;
-        // First try to get the total price (blue), then fallback to per-person (green)
         const totalElement = tempDiv.querySelector('[style*="color:blue"]');
         const perPersonElement = tempDiv.querySelector(
           '[style*="color:green"]'
@@ -1393,39 +1502,51 @@ Please confirm this booking. Thank you!
           priceText = perPersonElement.textContent || "Price not available";
         }
       } else {
-        // Fallback to calculated price if no fare calculator was used
         const calc = getCalculatedPrice();
         priceText = formatPriceUSD(calc.total);
       }
 
       bookingDetails = `
-Taxi Booking Request
+  Taxi Booking Request
+  
+  Route: ${bookingData?.from || "N/A"} → ${bookingData?.to || "N/A"}
+  Date: ${bookingData?.date || "N/A"}
+  Time: ${bookingData?.time || "N/A"}
+  Type: ${
+    bookingData?.rideType === "shared" ? "Shared Ride" : "Personal Ride"
+  }, One Way Ride
+  
+  Personal Details:
+  • Name: ${personalData?.fullName || "N/A"}
+  • Email: ${personalData?.email || "N/A"}
+  • Phone: ${
+    personalData?.phone?.startsWith("+")
+      ? personalData.phone
+      : "+94" + (personalData?.phone || "N/A")
+  }
+  • Seats: ${personalData?.seatCount || "N/A"}
+  • Payment Method: ${personalData?.paymentMethod || "N/A"}
+  
+  Special Requests: ${personalData?.specialRequests || "None"}
+  
+  Price: $${priceText.replace("$", "")} for ${personalData?.seatCount} ${
+        Number(personalData?.seatCount) === 1 ? "person" : "persons"
+      }
+  
+  Please confirm this booking. Thank you!
+  `.trim();
 
-Route: ${bookingData?.from || "N/A"} → ${bookingData?.to || "N/A"}
-Date: ${bookingData?.date || "N/A"}
-Time: ${bookingData?.time || "N/A"}
-Type: Shared, One Way Ride
+      const phoneNumber = "94759627589";
+      const formattedMessage = encodeURIComponent(bookingDetails).replace(
+        /%0A/g,
+        "%0D%0A"
+      );
+      const whatsappLink = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${formattedMessage}`;
 
-Personal Details:
-• Name: ${personalData?.fullName || "N/A"}
-• Email: ${personalData?.email || "N/A"}
-• Phone: ‪+94${personalData?.phone || "N/A"}‬
-• Seats: ${personalData?.seatCount || "N/A"}
+      if (typeof window !== "undefined") {
+        window.open(whatsappLink, "_blank", "noopener,noreferrer");
+      }
 
-Special Requests: ${personalData?.specialRequests || "None"}
-
-Price: $${priceText.replace("$", "")} for ${personalData?.seatCount} persons
-
-Please confirm this booking. Thank you!
-      `.trim();
-
-      // Send WhatsApp message
-      const whatsappLink = `https://wa.me/94759627589?text=${encodeURIComponent(
-        bookingDetails
-      )}`;
-      window.open(whatsappLink, "_blank");
-
-      // Send confirmation email to customer
       const customerEmailSubject =
         "Thanks for choosing us — Your Booking Has Been Received";
       const customerEmailLink = `mailto:${
@@ -1435,25 +1556,34 @@ Please confirm this booking. Thank you!
       )}&body=${encodeURIComponent(bookingDetails)}`;
       window.open(customerEmailLink, "_blank");
 
-      // Send confirmation email to customer immediately
       await sendConfirmationEmail(
         bookingData,
         personalData,
         rideData,
         false,
-        selectedSeats
+        selectedSeats,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "WhatsApp"
       );
 
-      // Save the booked ride to backend
-      // await saveBookedRide()
-
-      // Show confirmation and close form after successful booking
       setConfirmationMessage(
-            `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"}  Thank you!`
-          );
+        `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${
+          bookingData?.from || "Unknown"
+        } to ${bookingData?.to || "Unknown"}. Date ${
+          bookingData?.date || "Unknown"
+        }. Time ${bookingData?.time || "Unknown"}. Type: ${
+          bookingData?.rideType || "Unknown"
+        }. personal Details Name: ${
+          personalData?.fullName || "Unknown"
+        }  Email : ${personalData?.email || "Unknown"} phone : ${
+          personalData?.phone || "Unknown"
+        }  Thank you!`
+      );
       setShowConfirmation(true);
 
-      // Close the form after successful booking and refresh the page
       setTimeout(() => {
         onClose();
         window.location.reload();
@@ -1603,7 +1733,10 @@ Please confirm this booking. Thank you!
                   <div>
                     <p className="font-semibold text-gray-900">
                       {isJoinRideFlow
-                        ? rideData?.time
+                        ? parseTimeForDisplay(
+                            rideData?.time || "N/A",
+                            rideData?.frequency
+                          )
                         : bookingData?.time || "N/A"}
                     </p>
                     <p className="text-gray-600 text-sm">
@@ -1627,17 +1760,7 @@ Please confirm this booking. Thank you!
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-purple-400 rounded-full flex items-center justify-center">
-                    <Users className="h-3 w-3 text-purple-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">
-                      {isJoinRideFlow
-                        ? `${rideData?.seats.available}/${rideData?.seats.total} seats`
-                        : `${personalData?.seatCount || "N/A"} seats`}
-                    </p>
-                    <p className="text-gray-600 text-sm">Available</p>
-                  </div>
+                  
                 </div>
               </div>
 
@@ -1666,35 +1789,65 @@ Please confirm this booking. Thank you!
                 </div>
               )}
 
+
+
               {isJoinRideFlow && (
                 <div className="flex justify-end mb-4">
                   <div className="text-right">
                     <p className="text-2xl font-bold text-gray-900">
-                      {
-                        // Prefer an explicit price coming from the ride data when available
-                        // rideData.price may be a formatted string like "$12.00" or a number
-                        (() => {
-                          try {
-                            const p = ((rideData as unknown) as Record<string, unknown>)?.["price"];
-                            if (p !== undefined && p !== null && p !== "") {
-                              if (typeof p === "number") return formatPriceUSD(p);
+                      {(() => {
+                        try {
+                          const p = (
+                            rideData as unknown as Record<string, unknown>
+                          )?.["price"];
+                          const seatCount = Number(selectedSeats) || 1;
+
+                          // If price exists, handle number or formatted string
+                          if (p !== undefined && p !== null && p !== "") {
+                            let pricePerPerson = 0;
+
+                            if (typeof p === "number") {
+                              pricePerPerson = p;
+                            } else {
                               const s = String(p).trim();
-                              // If already formatted with $, show as-is, otherwise prefix $
-                              return s.startsWith("$") ? s : `$${s}`;
+                              // Extract numeric value from formatted strings like "$12.00"
+                              pricePerPerson =
+                                parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
                             }
-                          } catch {
-                            // ignore and fallback
+
+                            // Calculate total price
+                            const totalPrice = pricePerPerson * seatCount;
+
+                            return formatPriceUSD(totalPrice);
                           }
-                          return formatPriceUSD(
-                            calculateProgressiveSharedTotal(selectedSeats || 1)
-                          );
-                        })()
-                      }
+                        } catch {
+                          // ignore and fallback
+                        }
+
+                        // fallback if price missing
+                        return formatPriceUSD(
+                          calculateProgressiveSharedTotal(selectedSeats || 1)
+                        );
+                      })()}
                     </p>
+
                     <p className="text-gray-600">
                       for {selectedSeats || 1} seat
                       {(selectedSeats || 1) > 1 ? "s" : ""}
                     </p>
+
+                    <div className="text-xs text-gray-500 mt-1">
+                      {(() => {
+                        const p = (
+                          rideData as unknown as Record<string, unknown>
+                        )?.["price"];
+                        return p
+                          ? `Per person: ${
+                              typeof p === "number" ? formatPriceUSD(p) : p
+                            }`
+                          : "";
+                      })()}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1717,7 +1870,11 @@ Please confirm this booking. Thank you!
                 <div>
                   <p className="text-gray-600">Phone</p>
                   <p className="font-semibold text-gray-900">
-                    +94{personalData?.phone || "N/A"}
+                    {personalData?.phone?.startsWith("+")
+                      ? personalData.phone
+                      : personalData?.phone
+                      ? `+94${personalData.phone}`
+                      : "N/A"}
                   </p>
                 </div>
                 <div>
