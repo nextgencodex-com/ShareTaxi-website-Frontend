@@ -415,6 +415,7 @@ interface RideData {
   };
   price: string;
   distanceKm?: number;
+  frequency?: string;
 }
 
 interface PaymentDetailsPopupProps {
@@ -1109,11 +1110,14 @@ export function PaymentDetailsPopup({
             const emailTotalPrice = formatPriceUSD(totalPrice);
             const paymentMethod = (personalData as any)?.paymentMethod || "N/A";
             
+            // For daily rides, show "Daily" instead of "N/A" for date
+            const displayDateForMessage = (rideData?.frequency === "daily") ? "Daily" : emailDisplayDate;
+            
             const joinRideEmailDetails = `\nTaxi Booking Request\n\nRoute: ${
               rideData?.pickup?.location || "N/A"
             } → ${
               rideData?.destination?.location || "N/A"
-            }\nDate: ${emailDisplayDate}\nTime: ${emailDisplayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
+            }\nDate: ${displayDateForMessage}\nTime: ${emailDisplayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
               personalData?.fullName || "N/A"
             }\n• Email: ${personalData?.email || "N/A"}\n• Phone: +94${
               personalData?.phone || "N/A"
@@ -1503,11 +1507,14 @@ Please confirm this booking. Thank you!
           const whatsappFormattedTotal = formatPriceUSD(whatsappTotalPrice);
           const whatsappPaymentMethod = (personalData as any)?.paymentMethod || "N/A";
           
+          // For daily rides, show "Daily" instead of "N/A" for date
+          const displayDateForWhatsApp = (rideData?.frequency === "daily") ? "Daily" : displayDate;
+          
           const joinRideDetails = `\nTaxi Booking Request\n\nRoute: ${
             rideData?.pickup?.location || "N/A"
           } → ${
             rideData?.destination?.location || "N/A"
-          }\nDate: ${displayDate}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
+          }\nDate: ${displayDateForWhatsApp}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
             personalData?.fullName || "N/A"
           }\n• Email: ${personalData?.email || "N/A"}\n• Phone: +94${
             personalData?.phone || "N/A"

@@ -55,10 +55,16 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
   // Function to parse time for display
   const parseTimeForDisplay = (time: string, frequency?: string) => {
     if (frequency === 'daily') {
-      // For daily rides, extract just the time part (e.g., "4-6 PM" from "4-6 PM")
-      const timeMatch = time.match(/(\d{1,2}-\d{1,2}\s*(AM|PM))/i)
+      // For daily rides, extract just the time part (e.g., "01:30 AM" or "4-6 PM")
+      // Check for new format (HH:MM AM/PM)
+      const timeMatch = time.match(/(\d{1,2}:\d{2}\s*(AM|PM))/i)
       if (timeMatch) {
         return timeMatch[0]
+      }
+      // Check for old format (HH-HH AM/PM)
+      const oldTimeMatch = time.match(/(\d{1,2}-\d{1,2}\s*(AM|PM))/i)
+      if (oldTimeMatch) {
+        return oldTimeMatch[0]
       }
       // Fallback: if no match, return the original time
       return time

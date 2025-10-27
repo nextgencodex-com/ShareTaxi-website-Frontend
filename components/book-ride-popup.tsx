@@ -122,6 +122,29 @@ Price: ${vehicle.price}
         console.warn('EmailJS send failed (non-blocking):', e)
       }
 
+      // Open WhatsApp with formatted message
+      const whatsappMessage = `🚖 *Vehicle Request*  
+Name: ${formData.name}  
+Email: ${formData.email}  
+Phone: +94${formData.phone}  
+Booking Date: ${formData.bookingDate}  
+Pickup: ${formData.pickupAddress}  
+Dropoff: ${formData.dropoffAddress}  
+Vehicle: ${vehicle.name}`;
+
+      const whatsappLink = `https://wa.me/94759627589?text=${encodeURIComponent(whatsappMessage)}`;
+      window.open(whatsappLink, '_blank');
+
+      // Reset form data
+      setFormData({
+        name: "",
+        email: "",
+        phone: "",
+        pickupAddress: "",
+        dropoffAddress: "",
+        bookingDate: "",
+      });
+
       // Success — close popup
       onClose()
     } catch (error) {
