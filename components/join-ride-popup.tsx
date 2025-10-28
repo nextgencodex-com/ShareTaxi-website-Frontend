@@ -306,7 +306,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
               <ul className="space-y-2 text-gray-700">
                 <li className="flex items-start gap-2">
                   <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
-                  <span>Be ready at the pickup point 5 minutes before departure time</span>
+                  <span>Be ready at the pickup point 10 minutes before departure time</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
@@ -331,7 +331,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
             onClick={handleContinueToPayment}
             className="w-full bg-orange-500 hover:bg-orange-600 text-white h-14 text-lg font-semibold rounded-2xl"
           >
-            Continue To Payment
+            Request to Join Ride
           </Button>
         </div>
       </div>
