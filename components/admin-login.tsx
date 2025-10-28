@@ -62,16 +62,16 @@ export function AdminLogin({ isOpen, onClose, onLogin }: AdminLoginProps) {
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-blue-900/80 via-purple-900/80 to-teal-900/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
       {/* Animated background particles */}
-      <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
       </div>
 
-      <Card className={`w-full max-w-md relative transform transition-all duration-500 ${isAnimated ? 'scale-100 opacity-100' : 'scale-95 opacity-0'} glassmorphism-card`}>
+      <Card className={`w-full max-w-md relative z-10 transform transition-all duration-500 ${isAnimated ? 'scale-100 opacity-100' : 'scale-95 opacity-0'} glassmorphism-card`}>
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-full p-2 hover:bg-white/20 transition-colors group z-10"
+          className="absolute right-4 top-4 rounded-full p-2 hover:bg-white/20 transition-colors group z-20"
         >
           <X className="h-5 w-5 text-white/80 group-hover:text-white transition-colors" />
         </button>
@@ -94,7 +94,7 @@ export function AdminLogin({ isOpen, onClose, onLogin }: AdminLoginProps) {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Username field */}
             <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-white/90">
+              <label className="flex items-center gap-2 text-sm font-medium text-black">
                 <User className="h-4 w-4" />
                 Username
               </label>
@@ -104,7 +104,7 @@ export function AdminLogin({ isOpen, onClose, onLogin }: AdminLoginProps) {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="Enter admin username"
-                  className="w-full bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:border-blue-400 focus:ring-blue-400/20 transition-all duration-300 rounded-lg py-3 px-4"
+                  className="w-full bg-white border-gray-300 text-black placeholder:text-black focus:border-blue-400 focus:ring-blue-400/20 transition-all duration-300 rounded-lg py-3 px-4"
                   disabled={isLoading}
                 />
                 {username && <CheckCircle2 className="absolute right-3 top-3 h-5 w-5 text-green-400" />}
@@ -113,7 +113,7 @@ export function AdminLogin({ isOpen, onClose, onLogin }: AdminLoginProps) {
 
             {/* Password field */}
             <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-white/90">
+              <label className="flex items-center gap-2 text-sm font-medium text-black">
                 <Lock className="h-4 w-4" />
                 Password
               </label>
@@ -123,7 +123,7 @@ export function AdminLogin({ isOpen, onClose, onLogin }: AdminLoginProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter admin password"
-                  className="w-full bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:border-blue-400 focus:ring-blue-400/20 transition-all duration-300 rounded-lg py-3 px-4"
+                  className="w-full bg-white border-gray-300 text-black placeholder:text-black focus:border-blue-400 focus:ring-blue-400/20 transition-all duration-300 rounded-lg py-3 px-4"
                   disabled={isLoading}
                 />
                 {password && <CheckCircle2 className="absolute right-3 top-3 h-5 w-5 text-green-400" />}
