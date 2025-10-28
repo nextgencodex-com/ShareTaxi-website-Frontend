@@ -138,39 +138,67 @@ const sendConfirmationEmail = async (
       ? rideData?.destination.location || "N/A"
       : bookingData?.to || "N/A";
     
-    const date = isJoinRideFlow 
+    // Prefer explicit pickupDate/pickupDateFormatted or rawPayload date fields for join-flow daily rides.
+    const date = isJoinRideFlow
       ? (() => {
-          if (!rideData?.time) return "N/A";
-          const timeString = rideData.time.trim();
-          if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
-            const timeParts = timeString.split(" ");
-            if (timeParts.length >= 3) {
-              const timeIndex = timeParts.findIndex(part => 
-                part.includes(":") || part.includes("AM") || part.includes("PM") || 
-                part.includes("am") || part.includes("pm")
-              );
-              return timeIndex > 0 ? timeParts.slice(0, timeIndex).join(" ") : timeParts.slice(0, 3).join(" ");
+          // 1) rideData.pickupDateFormatted (string) or rideData.pickupDate (Date)
+          const rd = rideData as unknown as Record<string, unknown> | undefined;
+          if (rd) {
+            if (typeof rd.pickupDateFormatted === "string" && rd.pickupDateFormatted.trim() !== "") {
+              return rd.pickupDateFormatted as string;
+            }
+            if (rd.pickupDate instanceof Date && !isNaN((rd.pickupDate as Date).getTime())) {
+              return (rd.pickupDate as Date).toLocaleDateString();
             }
           }
-          return new Date().toLocaleDateString();
+
+          // 2) rawPayload fields commonly used by API
+          const raw = (rideData as unknown as Record<string, unknown>)?.rawPayload as Record<string, unknown> | undefined;
+          const candidate = raw?.pickupDate ?? raw?.rideDate ?? raw?.date;
+          if (typeof candidate === "string" && candidate.trim() !== "") {
+            const d = new Date(candidate as string);
+            if (!isNaN(d.getTime())) return d.toLocaleDateString();
+            return String(candidate);
+          }
+
+          // 3) Fallback: try to parse rideData.time for a leading date part
+          if (rideData?.time) {
+            const timeString = String(rideData.time).trim();
+            const parts = timeString.split(" ");
+            if (parts.length >= 3) {
+              const timeIndex = parts.findIndex(part => /[:]|AM|PM|am|pm/.test(part));
+              if (timeIndex > 0) return parts.slice(0, timeIndex).join(" ");
+            }
+          }
+
+          return "N/A";
         })()
       : (bookingData?.date || "N/A");
-    
-    const time = isJoinRideFlow 
+
+    const time = isJoinRideFlow
       ? (() => {
-          if (!rideData?.time) return "N/A";
-          const timeString = rideData.time.trim();
-          if (timeString.includes(",") || timeString.includes("/") || timeString.includes("-")) {
-            const timeParts = timeString.split(" ");
-            if (timeParts.length >= 3) {
-              const timeIndex = timeParts.findIndex(part => 
-                part.includes(":") || part.includes("AM") || part.includes("PM") || 
-                part.includes("am") || part.includes("pm")
-              );
-              return timeIndex > 0 ? timeParts.slice(timeIndex).join(" ") : timeParts.slice(3).join(" ");
-            }
+          const rd = rideData as unknown as Record<string, unknown> | undefined;
+          // Prefer explicit rawPayload pickupTime/ampm
+          const raw = rd?.rawPayload as Record<string, unknown> | undefined;
+          const pickTime = raw?.pickupTime ?? raw?.time ?? rd?.pickupTime;
+          const ampm = raw?.ampm ?? rd?.ampm;
+          if (typeof pickTime === "string" && pickTime.trim() !== "") {
+            return ampm ? `${pickTime} ${String(ampm)}` : String(pickTime);
           }
-          return timeString;
+
+          // Next prefer rideData.time's time portion
+          if (rideData?.time) {
+            const timeString = String(rideData.time).trim();
+            const parts = timeString.split(" ");
+            if (parts.length >= 3) {
+              const timeIndex = parts.findIndex(part => /[:]|AM|PM|am|pm/.test(part));
+              if (timeIndex >= 0) return parts.slice(timeIndex).join(" ");
+            }
+            // If no AM/PM parts, return the whole time string
+            return timeString;
+          }
+
+          return "N/A";
         })()
       : (bookingData?.time || "N/A");
 

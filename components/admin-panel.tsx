@@ -1099,6 +1099,25 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
         // Append booking details to the status message so template variable 'status_message' contains both
         const fullStatusMessage = `${statusMessage}\n\nBooking details:\n${bookingDetails}`;
+        const bookingCode = `BK-${Date.now()}`;
+        // Pre-fill mailto links that admins can click to notify the customer directly
+        const subjectConfirm = encodeURIComponent(`Booking ${bookingCode} - Confirmed`);
+        const subjectCancel = encodeURIComponent(`Booking ${bookingCode} - Cancelled`);
+        const bodyConfirm = encodeURIComponent([
+          `Booking ID: ${bookingCode}`,
+          `Name: ${customerName}`,
+          `Route: ${pickupStr} → ${destStr}`,
+          `Status: Confirmed`,
+        ].join('\n'));
+        const bodyCancel = encodeURIComponent([
+          `Booking ID: ${bookingCode}`,
+          `Name: ${customerName}`,
+          `Route: ${pickupStr} → ${destStr}`,
+          `Status: Cancelled`,
+        ].join('\n'));
+
+        const confirmUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectConfirm}&body=${bodyConfirm}`;
+        const cancelUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectCancel}&body=${bodyCancel}`;
 
         await emailjs.send(
           process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
@@ -1114,12 +1133,31 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             time: timeStr,
             passengers: ride.passengers || ride.seats?.total || '',
             status_message: fullStatusMessage,
+            confirm_url: confirmUrl,
+        cancel_url: cancelUrl,
           },
           { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
         );
       } catch (innerErr) {
         // If building booking details fails for any reason, fall back to sending the basic status message
         console.warn('Failed to build booking details for status email, sending basic message instead.', innerErr);
+        const bookingCode = `BK-${Date.now()}`;
+        const subjectConfirmFallback = encodeURIComponent(`Booking ${bookingCode} - Confirmed`);
+        const subjectCancelFallback = encodeURIComponent(`Booking ${bookingCode} - Cancelled`);
+        const bodyConfirmFallback = encodeURIComponent([
+          `Booking ID: ${bookingCode}`,
+          `Name: ${customerName}`,
+          `Route: ${formatLocation(ride.pickup)} → ${formatLocation(ride.destination)}`,
+          `Status: Confirmed`,
+        ].join('\n'));
+        const bodyCancelFallback = encodeURIComponent([
+          `Booking ID: ${bookingCode}`,
+          `Name: ${customerName}`,
+          `Route: ${formatLocation(ride.pickup)} → ${formatLocation(ride.destination)}`,
+          `Status: Cancelled`,
+        ].join('\n'));
+        const confirmUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectConfirmFallback}&body=${bodyConfirmFallback}`;
+        const cancelUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectCancelFallback}&body=${bodyCancelFallback}`;
         await emailjs.send(
           process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
           process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID2!,
@@ -1134,6 +1172,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             time: ride.time || '',
             passengers: ride.passengers || ride.seats?.total || '',
             status_message: statusMessage,
+            confirm_url: confirmUrl,
+            cancel_url: cancelUrl,
           },
           { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
         );
