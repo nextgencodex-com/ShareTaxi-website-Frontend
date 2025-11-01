@@ -227,7 +227,7 @@ Price: ${extractedTotal} for ${extractedSeats} persons
   // Generate a booking code and helpful URLs for confirm/cancel (client-side)
   const bookingCode = `BK-${Date.now()}`;
   // Create mailto links so clicking Confirm/Cancel in the email opens an email to the admin
-  const adminNotificationEmail = "therath2426@gmail.com";
+  const adminNotificationEmail = "Info@sharetaxisrilanka.com";
   const nameForBody = personalData?.fullName ? String(personalData.fullName) : "N/A";
   const baseBody = `Booking ID: ${bookingCode}\nName: ${nameForBody}\n`;
   const confirmSubject = encodeURIComponent(`Booking ${bookingCode} - Confirm`);
@@ -1090,7 +1090,7 @@ export function PaymentDetailsPopup({
             const emailSubject = `Join Shared Ride Request - ${
               rideData?.pickup?.location || "Unknown"
             } to ${rideData?.destination?.location || "Unknown"}`;
-            const emailLink = `mailto:contact@nextgcodex.com?subject=${encodeURIComponent(
+            const emailLink = `mailto:Info@sharetaxisrilanka.com.com?subject=${encodeURIComponent(
               emailSubject
             )}&body=${encodeURIComponent(joinRideEmailDetails)}`;
             window.open(emailLink, "_blank");
@@ -1196,7 +1196,7 @@ Please confirm this booking. Thank you!
       `.trim();
 
       // Send booking request to company
-      const mailtoLink = `mailto:contact@nextgcodex.com?subject=${encodeURIComponent(
+      const mailtoLink = `mailto:Info@sharetaxisrilanka.com.com?subject=${encodeURIComponent(
         `Taxi Booking Request - ${bookingData?.from || "Unknown"} to ${
           bookingData?.to || "Unknown"
         }`
@@ -1424,7 +1424,7 @@ Please confirm this booking. Thank you!
             personalData?.specialRequests || "None"
           }\n\nPrice: ${whatsappTotal} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim();
 
-          const whatsappLink = `https://wa.me/94759627589?text=${encodeURIComponent(
+          const whatsappLink = `https://wa.me/94774018001?text=${encodeURIComponent(
             joinRideDetails
           )}`;
           window.open(whatsappLink, "_blank");
@@ -1518,7 +1518,7 @@ Please confirm this booking. Thank you!
       `.trim();
 
       // Send WhatsApp message
-      const whatsappLink = `https://wa.me/94759627589?text=${encodeURIComponent(
+      const whatsappLink = `https://wa.me/94774018001?text=${encodeURIComponent(
         bookingDetails
       )}`;
       window.open(whatsappLink, "_blank");
