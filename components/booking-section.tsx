@@ -351,6 +351,11 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const handleDistanceChange = (distance: string | null, duration: string | null) => {
     setMapDistance(distance)
     setMapDuration(duration)
+    
+    // Auto-calculate fare when distance changes from map
+    if (distance && parseFloat(distance) > 0) {
+      calculateFareForType(tripType, parseFloat(distance))
+    }
   }
 
   // Validation functions
@@ -767,9 +772,9 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                         </div>
                       </div>
 
-                      {/* Fare Calculator for One-Way/Round-Trip */}
-                      <div className="space-y-3 bg-gray-50 p-4 rounded-lg border">
-                        <h4 className="flex items-center gap-2 font-semibold">
+                      {/* Fare Calculator for One-Way/Round-Trip - MOBILE RESPONSIVE FIX */}
+                      <div className="space-y-3 bg-gray-50 p-3 sm:p-4 rounded-lg border">
+                        <h4 className="flex items-center gap-2 font-semibold text-sm sm:text-base">
                           <span className="text-lg">📍</span> Fare Calculator
                         </h4>
                         <div className="flex gap-2">
@@ -796,12 +801,19 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           </Button> */}
                         </div>
                         {(fareResults["one-way"] || fareResults["round-trip"]) && (
-                          <div
-                            className="p-2 bg-white border rounded text-sm"
-                            dangerouslySetInnerHTML={{
-                              __html: fareResults[tripType] || ""
-                            }}
-                          />
+                          <div className="p-2 sm:p-3 bg-white border rounded text-xs sm:text-sm overflow-x-auto">
+                            <div className="min-w-[250px]">
+                              <div className="space-y-1.5 sm:space-y-2">
+                                {fareResults[tripType]?.split('<br>').map((line, idx) => (
+                                  <div 
+                                    key={idx} 
+                                    dangerouslySetInnerHTML={{ __html: line }}
+                                    className="break-words"
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
                         )}
                       </div>
 
@@ -810,7 +822,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                   <Button
                     onClick={handleNextClick}
                     disabled={!(fareResults[tripType] && !fareResults[tripType].includes("⚠️"))}
-                    className="w-full bg-blue-500 text-white hover:bg-blue-600 py-3 text-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-blue-500 text-white hover:bg-blue-600 py-3 text-base sm:text-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     size="lg"
                   >
                     {!fareResults[tripType] || fareResults[tripType].includes("⚠️") ? "Calculate Fare First →" : "Next →"}
@@ -828,7 +840,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                     <p className="text-muted-foreground text-sm">Track available rides in real-time</p>
                   </div>
                   <div className="h-[500px] relative">
-                    <Map from={from} to={to} onDistanceChange={handleDistanceChange} />
+                    <Map from={from} to={to} onDistanceChange={handleDistanceChange} key={`${from}-${to}`} />
                     <div className="absolute inset-0 bg-gradient-to-t from-background/10 to-transparent pointer-events-none" />
                   </div>
                   {mapDistance && mapDuration && (
@@ -862,6 +874,13 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
               </div>
             )}
 
+            {/* Hidden Map for Mobile - Calculates distance in background */}
+            {isMobile && !showMapMobile && from && to && (
+              <div className="hidden">
+                <Map from={from} to={to} onDistanceChange={handleDistanceChange} key={`hidden-${from}-${to}`} />
+              </div>
+            )}
+
             {/* Mobile Map - Show When Toggled */}
             {isMobile && showMapMobile && (
               <Card className="bg-card/50 backdrop-blur-sm border-border/50 shadow-xl overflow-hidden transition-all duration-500 ease-in-out">
@@ -871,7 +890,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                     <p className="text-muted-foreground text-sm">Track available rides in real-time</p>
                   </div>
                   <div className="h-[400px] relative">
-                    <Map from={from} to={to} onDistanceChange={handleDistanceChange} />
+                    <Map from={from} to={to} onDistanceChange={handleDistanceChange} key={`mobile-${from}-${to}`} />
                     <div className="absolute inset-0 bg-gradient-to-t from-background/10 to-transparent pointer-events-none" />
                   </div>
                   {mapDistance && mapDuration && (

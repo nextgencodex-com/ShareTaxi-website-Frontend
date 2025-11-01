@@ -8,6 +8,11 @@ import { BookRidePopup } from "./book-ride-popup"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useIsMobile } from "@/components/ui/use-mobile"
 
+// 🧭 Add these for swipe in mobile view
+import Slider from "react-slick"
+import "slick-carousel/slick/slick.css"
+import "slick-carousel/slick/slick-theme.css"
+
 interface Vehicle {
   id: number | string
   name: string
@@ -20,44 +25,37 @@ interface Vehicle {
   gradient?: string
   buttonColor?: string
 }
+
 interface VehicleOptionsSectionProps {
-  // kept for compatibility but ignored by this component per product decision
   initialVehicles?: Vehicle[]
 }
 
 export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSectionProps) {
-  // Show only backend-provided vehicles. Do not render local/default vehicles.
   const [allVehicles, setAllVehicles] = useState<Vehicle[]>([])
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
   const [isPopupOpen, setIsPopupOpen] = useState(false)
-  // Loading and error states to avoid ReferenceError during rendering
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(0)
   const [passengerFilter, setPassengerFilter] = useState("all")
   const [shuffledGradients, setShuffledGradients] = useState<string[]>([])
   const [showMore, setShowMore] = useState(false)
-
   const isMobile = useIsMobile()
 
   useEffect(() => {
-    // Initialize from initialVehicles and then try to fetch from backend
     let mounted = true
     setLoading(true)
     setError(null)
-
-    // Fetch vehicles from backend API. Do NOT populate UI from local defaults.
     setAllVehicles([])
 
-    // Attempt to fetch vehicles from backend API
     ;(async () => {
       try {
         const resp = await fetch("http://localhost:5000/api/vehicles", { cache: "no-store" })
         if (!mounted) return
         if (!resp.ok) throw new Error(`Server responded ${resp.status}`)
         const json = await resp.json()
-        // Expecting { success: true, data: { vehicles: [...] } } or an array directly
-  let vehiclesFromApi: unknown[] = []
+
+        let vehiclesFromApi: unknown[] = []
         if (Array.isArray(json)) {
           vehiclesFromApi = json
         } else if (json && json.data && Array.isArray(json.data.vehicles)) {
@@ -91,12 +89,11 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
                 handCarry: handCarry ?? "",
                 image: image ?? "/placeholder.svg",
                 features: (features ?? []) as string[],
-                gradient: gradient,
+                gradient,
                 buttonColor,
               }
             }
 
-            // Fallback empty vehicle if shape is unexpected
             return {
               id: "",
               name: "",
@@ -112,10 +109,8 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
           setAllVehicles(normalized)
         }
       } catch (err: unknown) {
-        // keep defaults and surface a friendly error
         if (err instanceof Error) console.warn("Failed to fetch vehicles:", err.message)
         else console.warn("Failed to fetch vehicles:", err)
-        // We intentionally do not show local defaults. Surface an error and leave the list empty.
         if (mounted) setError("Could not load vehicles from server.")
       } finally {
         if (mounted) setLoading(false)
@@ -128,7 +123,6 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
   }, [initialVehicles])
 
   useEffect(() => {
-    // Shuffle gradients only on client side to avoid hydration mismatch
     const gradients = [
       "bg-gradient-to-br from-yellow-400 to-orange-500",
       "bg-gradient-to-br from-orange-400 to-red-500",
@@ -136,8 +130,8 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
     ]
     const shuffled = [...gradients]
     for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
     }
     setShuffledGradients(shuffled)
   }, [currentPage])
@@ -153,25 +147,17 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
   const totalPages = Math.ceil(filteredVehicles.length / vehiclesPerPage)
   const startIndex = currentPage * vehiclesPerPage
   const displayedVehicles = filteredVehicles.slice(startIndex, startIndex + vehiclesPerPage)
-
-  // For mobile: show first 2 initially, then all after showMore
   const mobileVehicles = showMore ? displayedVehicles : displayedVehicles.slice(0, 2)
   const shouldShowMoreButton = isMobile && filteredVehicles.length > 2
 
   const handleFilterChange = (value: string) => {
     setPassengerFilter(value)
     setCurrentPage(0)
-    setShowMore(false) // Reset showMore when filter changes
+    setShowMore(false)
   }
 
-  const handlePrevPage = () => {
-    setCurrentPage((prev) => Math.max(0, prev - 1))
-  }
-
-  const handleNextPage = () => {
-    setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1))
-  }
-
+  const handlePrevPage = () => setCurrentPage((prev) => Math.max(0, prev - 1))
+  const handleNextPage = () => setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1))
   const handleBookNow = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle)
     setIsPopupOpen(true)
@@ -182,7 +168,6 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
     setSelectedVehicle(null)
   }
 
-  // Convert our Vehicle type to BookRidePopup Vehicle type
   const convertVehicleForBooking = (vehicle: Vehicle | null) => {
     if (!vehicle) return null
     return {
@@ -195,6 +180,16 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
       image: vehicle.image || "/placeholder.svg",
       features: vehicle.features || []
     }
+  }
+
+  // 🧭 Slider settings for mobile
+  const sliderSettings = {
+    dots: true,
+    infinite: false,
+    speed: 400,
+    slidesToShow: 1,
+    slidesToScroll: 1,
+    arrows: false
   }
 
   return (
@@ -239,112 +234,163 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
 
           {displayedVehicles.length > 0 ? (
             <>
-              <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                {(isMobile ? mobileVehicles : displayedVehicles).map((vehicle: Vehicle, index: number) => (
-                  <div key={vehicle.id} className={`${shuffledGradients[index]} rounded-3xl p-6 text-white shadow-xl`}>
-                    <div className="text-center mb-6">
-                      <h3 className="text-2xl font-bold mb-2">{vehicle.name}</h3>
-                      <p className="text-lg opacity-90">{vehicle.price}$ per day</p>
+              {/* ✅ Mobile Swipe View */}
+              {isMobile ? (
+                <Slider {...sliderSettings}>
+                  {displayedVehicles.map((vehicle: Vehicle, index: number) => (
+                    <div key={vehicle.id} className="px-2">
+                      <div className={`${shuffledGradients[index % shuffledGradients.length]} rounded-3xl p-6 text-white shadow-xl`}>
+                        <div className="text-center mb-6">
+                          <h3 className="text-2xl font-bold mb-2">{vehicle.name}</h3>
+                          <p className="text-lg opacity-90">{vehicle.price}$ per day</p>
+                        </div>
 
-                    </div>
+                        <div className="flex justify-center items-center gap-8 mb-6">
+                          <div className="text-center">
+                            <Users className="h-8 w-8 mx-auto mb-2" />
+                            <p className="text-sm font-medium">{vehicle.passengers}</p>
+                            <p className="text-xs opacity-80">Passengers</p>
+                          </div>
+                          <div className="text-center">
+                            <Briefcase className="h-8 w-8 mx-auto mb-2" />
+                            <p className="text-sm font-medium">{vehicle.luggage}</p>
+                            <p className="text-xs opacity-80">Luggage</p>
+                          </div>
+                          <div className="text-center">
+                            <ShoppingBag className="h-8 w-8 mx-auto mb-2" />
+                            <p className="text-sm font-medium">{vehicle.handCarry}</p>
+                            <p className="text-xs opacity-80">Carry</p>
+                          </div>
+                        </div>
 
-                    <div className="flex justify-center items-center gap-8 mb-6">
-                      <div className="text-center">
-                        <Users className="h-8 w-8 mx-auto mb-2" />
-                        <p className="text-sm font-medium">{vehicle.passengers}</p>
-                        <p className="text-xs opacity-80">Passengers</p>
+                        <div className="mb-6 rounded-2xl overflow-hidden">
+                          <Image
+                            src={vehicle.image || "/placeholder.svg"}
+                            alt={vehicle.name}
+                            width={392}
+                            height={232}
+                            className="w-full h-auto object-cover"
+                          />
+                        </div>
+
+                        <div className="mb-6">
+                          <p className="font-semibold mb-3">Features:</p>
+                          <ul className="space-y-1">
+                            {(vehicle.features || []).map((feature: string, index: number) => (
+                              <li key={index} className="text-sm flex items-center">
+                                <span className="w-2 h-2 bg-white rounded-full mr-3"></span>
+                                {feature}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <Button
+                          onClick={() => handleBookNow(vehicle)}
+                          className={`w-full ${vehicle.buttonColor} text-white font-semibold py-3 rounded-xl`}
+                        >
+                          Book Now
+                        </Button>
                       </div>
-                      <div className="text-center">
-                        <Briefcase className="h-8 w-8 mx-auto mb-2" />
-                        <p className="text-sm font-medium">{vehicle.luggage}</p>
-                        <p className="text-xs opacity-80">Luggage</p>
+                    </div>
+                  ))}
+                </Slider>
+              ) : (
+                // ✅ Desktop Grid (unchanged)
+                <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+                  {displayedVehicles.map((vehicle: Vehicle, index: number) => (
+                    <div key={vehicle.id} className={`${shuffledGradients[index]} rounded-3xl p-6 text-white shadow-xl`}>
+                      <div className="text-center mb-6">
+                        <h3 className="text-2xl font-bold mb-2">{vehicle.name}</h3>
+                        <p className="text-lg opacity-90">{vehicle.price}$ per day</p>
                       </div>
-                      <div className="text-center">
-                        <ShoppingBag className="h-8 w-8 mx-auto mb-2" />
-                        <p className="text-sm font-medium">{vehicle.handCarry}</p>
-                        <p className="text-xs opacity-80">Carry</p>
+
+                      <div className="flex justify-center items-center gap-8 mb-6">
+                        <div className="text-center">
+                          <Users className="h-8 w-8 mx-auto mb-2" />
+                          <p className="text-sm font-medium">{vehicle.passengers}</p>
+                          <p className="text-xs opacity-80">Passengers</p>
+                        </div>
+                        <div className="text-center">
+                          <Briefcase className="h-8 w-8 mx-auto mb-2" />
+                          <p className="text-sm font-medium">{vehicle.luggage}</p>
+                          <p className="text-xs opacity-80">Luggage</p>
+                        </div>
+                        <div className="text-center">
+                          <ShoppingBag className="h-8 w-8 mx-auto mb-2" />
+                          <p className="text-sm font-medium">{vehicle.handCarry}</p>
+                          <p className="text-xs opacity-80">Carry</p>
+                        </div>
                       </div>
+
+                      <div className="mb-6 rounded-2xl overflow-hidden">
+                        <Image
+                          src={vehicle.image || "/placeholder.svg"}
+                          alt={vehicle.name}
+                          width={392}
+                          height={232}
+                          className="w-full h-auto object-cover"
+                        />
+                      </div>
+
+                      <div className="mb-6">
+                        <p className="font-semibold mb-3">Features:</p>
+                        <ul className="space-y-1">
+                          {(vehicle.features || []).map((feature: string, index: number) => (
+                            <li key={index} className="text-sm flex items-center">
+                              <span className="w-2 h-2 bg-white rounded-full mr-3"></span>
+                              {feature}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <Button
+                        onClick={() => handleBookNow(vehicle)}
+                        className={`w-full ${vehicle.buttonColor} text-white font-semibold py-3 rounded-xl`}
+                      >
+                        Book Now
+                      </Button>
                     </div>
+                  ))}
+                </div>
+              )}
 
-                    <div className="mb-6 rounded-2xl overflow-hidden">
-                      <Image
-                        src={vehicle.image || "/placeholder.svg"}
-                        alt={vehicle.name}
-                        width={392}
-                        height={232}
-                        className="w-full h-auto object-cover"
-                      />
-                    </div>
-
-                    <div className="mb-6">
-                      <p className="font-semibold mb-3">Features:</p>
-                      <ul className="space-y-1">
-                        {(vehicle.features || []).map((feature: string, index: number) => (
-                          <li key={index} className="text-sm flex items-center">
-                            <span className="w-2 h-2 bg-white rounded-full mr-3"></span>
-                            {feature}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    <Button
-                      onClick={() => handleBookNow(vehicle)}
-                      className={`w-full ${vehicle.buttonColor} text-white font-semibold py-3 rounded-xl`}
-                    >
-                      Book Now
-                    </Button>
-                  </div>
-                ))}
-              </div>
-
-              {shouldShowMoreButton ? (
-                <div className="flex items-center justify-center mt-8">
+              {!isMobile && (
+                <div className="flex items-center justify-center gap-4 mt-8">
                   <Button
-                    onClick={() => setShowMore(true)}
-                    variant="outline"
-                    className="px-6 py-2 rounded-full border-2 border-gray-300 bg-white hover:bg-gray-50"
+                    onClick={handlePrevPage}
+                    disabled={currentPage === 0}
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full disabled:opacity-30"
                   >
-                    Show More
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+
+                  <div className="flex justify-center gap-2">
+                    {Array.from({ length: totalPages }).map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentPage(index)}
+                        className={`w-3 h-3 rounded-full transition-colors ${
+                          index === currentPage ? "bg-yellow-500" : "bg-gray-300"
+                        }`}
+                        aria-label={`Go to page ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+
+                  <Button
+                    onClick={handleNextPage}
+                    disabled={currentPage === totalPages - 1}
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full disabled:opacity-30"
+                  >
+                    <ChevronRight className="h-6 w-6" />
                   </Button>
                 </div>
-              ) : (
-                !isMobile && (
-                  <div className="flex items-center justify-center gap-4 mt-8">
-                    <Button
-                      onClick={handlePrevPage}
-                      disabled={currentPage === 0}
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full disabled:opacity-30"
-                    >
-                      <ChevronLeft className="h-6 w-6" />
-                    </Button>
-
-                    <div className="flex justify-center gap-2">
-                      {Array.from({ length: totalPages }).map((_, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setCurrentPage(index)}
-                          className={`w-3 h-3 rounded-full transition-colors ${
-                            index === currentPage ? "bg-yellow-500" : "bg-gray-300"
-                          }`}
-                          aria-label={`Go to page ${index + 1}`}
-                        />
-                      ))}
-                    </div>
-
-                    <Button
-                      onClick={handleNextPage}
-                      disabled={currentPage === totalPages - 1}
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full disabled:opacity-30"
-                    >
-                      <ChevronRight className="h-6 w-6" />
-                    </Button>
-                  </div>
-                )
               )}
             </>
           ) : (

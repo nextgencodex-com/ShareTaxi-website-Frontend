@@ -45,6 +45,7 @@ export function HeroSection() {
             >
               {t('buttons.bookIndividualRide')}
             </Button>
+            
             <Button
               variant="outline"
               size="lg"

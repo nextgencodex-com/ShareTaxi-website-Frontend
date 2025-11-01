@@ -1,9 +1,14 @@
+"use client";
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Star, ThumbsUp, TrendingUp } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ReviewFormDialog } from "./review-form-dialog";
+import Slider from "react-slick"; // ✅ Add this for mobile slider
+import "slick-carousel/slick/slick.css";
+import "slick-carousel/slick/slick-theme.css";
 
 type Review = {
   id: string | number;
@@ -25,11 +30,9 @@ export function ReviewsSection() {
   const [totalReviews, setTotalReviews] = useState(6);
   const [ratingDistribution, setRatingDistribution] = useState([4, 2, 0, 0, 0]);
 
-  // Load reviews on component mount
   useEffect(() => {
     const loadReviews = async () => {
       try {
-        // Try backend first
         const base =
           (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "") ||
           "http://localhost:5000";
@@ -46,68 +49,35 @@ export function ReviewsSection() {
               json && json.data && json.data.reviews
                 ? json.data.reviews
                 : json || [];
-          } else {
-            console.warn("Failed to load reviews from API:", resp.status);
           }
-        } catch (err: unknown) {
-          console.warn(
-            "Could not reach reviews API:",
-            err instanceof Error ? err.message : String(err)
-          );
-        }
+        } catch {}
 
         if (serverReviews.length > 0) {
-          type ServerReview = {
-            id?: string | number;
-            _id?: string | number;
-            name?: string;
-            authorName?: string;
-            avatar?: string;
-            vehicle?: string;
-            driver?: string;
-            createdAt?: string | number;
-            date?: string | number;
-            rating?: number | string;
-            rate?: number | string;
-            review?: string;
-            comment?: string;
-            helpful?: number;
-            tag?: string;
-            raw?: Record<string, unknown>;
-          };
-
-          // Normalize server reviews to our UI shape
-          const normalized: Review[] = (serverReviews as ServerReview[]).map(
-            (r) => ({
-              id: r.id || r._id || Date.now(),
-              name: r.name || r.authorName || "Anonymous",
-              avatar: r.avatar || "/placeholder.svg",
-              vehicle: (r.vehicle ?? (r.raw && r.raw.vehicle) ?? "") as string,
-              driver: (r.driver ?? (r.raw && r.raw.driver) ?? "") as string,
-              date: new Date(
-                r.createdAt || r.date || Date.now()
-              ).toLocaleDateString("en-US", {
-                month: "2-digit",
-                day: "2-digit",
-                year: "numeric",
-              }),
-              rating: Number(r.rating || r.rate || 0),
-              review: r.review || r.comment || "",
-              helpful: r.helpful || 0,
-              tag: r.tag || (r.vehicle && "Individual") || "Individual",
-              tagColor:
-                r.tag === "Shared"
-                  ? "bg-blue-100 text-blue-600"
-                  : "bg-purple-100 text-purple-600",
-            })
-          );
+          const normalized: Review[] = serverReviews.map((r: any) => ({
+            id: r.id || r._id || Date.now(),
+            name: r.name || r.authorName || "Anonymous",
+            avatar: r.avatar || "/placeholder.svg",
+            vehicle: r.vehicle || "",
+            driver: r.driver || "",
+            date: new Date(r.createdAt || r.date || Date.now()).toLocaleDateString(
+              "en-US",
+              { month: "2-digit", day: "2-digit", year: "numeric" }
+            ),
+            rating: Number(r.rating || r.rate || 0),
+            review: r.review || r.comment || "",
+            helpful: r.helpful || 0,
+            tag: r.tag || "Individual",
+            tagColor:
+              r.tag === "Shared"
+                ? "bg-blue-100 text-blue-600"
+                : "bg-purple-100 text-purple-600",
+          }));
 
           setReviews(normalized);
           calculateStats(normalized);
           return;
         }
 
-        // Fallback to static reviews.json when backend has none or fails
         const response = await fetch("/reviews.json");
         const staticReviews = await response.json();
         setReviews(staticReviews);
@@ -116,46 +86,45 @@ export function ReviewsSection() {
         console.error("Error loading reviews:", error);
       }
     };
-
     loadReviews();
   }, []);
 
   const calculateStats = (allReviews: Review[]) => {
     if (allReviews.length === 0) return;
-
-    // Average rating
     const totalRating = allReviews.reduce(
       (sum, review) => sum + review.rating,
       0
     );
     const avg = Number((totalRating / allReviews.length).toFixed(1));
     setAverageRating(avg);
-
-    // Total reviews
     setTotalReviews(allReviews.length);
 
-    // Rating distribution (count of each star rating)
-    const distribution = [0, 0, 0, 0, 0]; // 1-5 star counts
+    const distribution = [0, 0, 0, 0, 0];
     allReviews.forEach((review) => {
       if (review.rating >= 1 && review.rating <= 5) {
         distribution[review.rating - 1]++;
       }
     });
-    setRatingDistribution(distribution.reverse()); // Reverse for display (5 stars first)
+    setRatingDistribution(distribution.reverse());
   };
 
   const handleSubmitReview = (newReview: Review) => {
     setReviews((prev) => [newReview, ...prev]);
-
-    // Save to localStorage
-    const storedReviews = localStorage.getItem("userReviews");
-    const userReviews = storedReviews ? JSON.parse(storedReviews) : [];
-    userReviews.push(newReview);
-    localStorage.setItem("userReviews", JSON.stringify(userReviews));
-
-    // Recalculate stats
     calculateStats([newReview, ...reviews]);
   };
+
+  // ✅ Slider settings for mobile
+  const sliderSettings = {
+    dots: true,
+    infinite: true,
+    speed: 400,
+    slidesToShow: 1,
+    slidesToScroll: 1,
+    arrows: false,
+    autoplay: true,
+    autoplaySpeed: 4000,
+  };
+
   return (
     <section id="reviews-section" className="py-16 bg-gray-50">
       <div className="container mx-auto px-4">
@@ -169,6 +138,7 @@ export function ReviewsSection() {
           </p>
         </div>
 
+        {/* Stats Section */}
         <div className="bg-blue-50 rounded-2xl p-8 mb-12">
           <div className="grid md:grid-cols-3 gap-8 mb-8">
             <div className="text-center">
@@ -235,7 +205,75 @@ export function ReviewsSection() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 mb-12">
+        {/* ✅ Reviews - Slider on Mobile, Grid on Desktop */}
+        <div className="block md:hidden mb-12">
+          <Slider {...sliderSettings}>
+            {reviews.map((review) => (
+              <div key={review.id} className="px-2">
+                <Card className="bg-white border-0 shadow-lg rounded-2xl overflow-hidden">
+                  <CardContent className="p-6">
+                    <div className="space-y-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-16 w-16">
+                            <AvatarImage
+                              src={"/images/user.png"}
+                              alt={review.name}
+                              className="object-cover"
+                            />
+                            <AvatarFallback>
+                              {review.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-semibold text-gray-900">
+                              {review.name}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {review.vehicle} • Driver: {review.driver} •{" "}
+                              {review.date}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge
+                          className={`${review.tagColor} rounded-full px-3 py-1 text-sm`}
+                        >
+                          {review.tag}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {Array.from({ length: review.rating }).map((_, i) => (
+                          <Star
+                            key={i}
+                            className="h-4 w-4 fill-yellow-400 text-yellow-400"
+                          />
+                        ))}
+                        <span className="text-sm font-semibold text-gray-700 ml-1">
+                          {review.rating}.0
+                        </span>
+                      </div>
+                      <p className="text-gray-700 text-sm leading-relaxed">
+                        {review.review}
+                      </p>
+                      <div className="flex items-center gap-2 pt-2">
+                        <ThumbsUp className="h-4 w-4 text-gray-400" />
+                        <span className="text-sm text-gray-600">
+                          Helpful ({review.helpful})
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ))}
+          </Slider>
+        </div>
+
+        {/* Desktop Grid */}
+        <div className="hidden md:grid md:grid-cols-2 gap-6 mb-12">
           {reviews.map((review) => (
             <Card
               key={review.id}
@@ -258,7 +296,6 @@ export function ReviewsSection() {
                             .join("")}
                         </AvatarFallback>
                       </Avatar>
-
                       <div>
                         <p className="font-semibold text-gray-900">
                           {review.name}
@@ -270,12 +307,11 @@ export function ReviewsSection() {
                       </div>
                     </div>
                     <Badge
-                      className={`${review.tagColor} hover:${review.tagColor} rounded-full px-3 py-1 text-sm`}
+                      className={`${review.tagColor} rounded-full px-3 py-1 text-sm`}
                     >
                       {review.tag}
                     </Badge>
                   </div>
-
                   <div className="flex items-center gap-2">
                     {Array.from({ length: review.rating }).map((_, i) => (
                       <Star
@@ -287,11 +323,9 @@ export function ReviewsSection() {
                       {review.rating}.0
                     </span>
                   </div>
-
                   <p className="text-gray-700 text-sm leading-relaxed">
                     {review.review}
                   </p>
-
                   <div className="flex items-center gap-2 pt-2">
                     <ThumbsUp className="h-4 w-4 text-gray-400" />
                     <span className="text-sm text-gray-600">
@@ -304,6 +338,7 @@ export function ReviewsSection() {
           ))}
         </div>
 
+        {/* Submit Review Section */}
         <div className="bg-gradient-to-r from-orange-400 to-yellow-500 rounded-2xl p-8 text-center text-white">
           <div className="flex items-center justify-center gap-4 mb-4">
             <div className="text-4xl font-bold">Share Your Experience</div>

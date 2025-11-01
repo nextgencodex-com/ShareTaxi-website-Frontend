@@ -116,7 +116,7 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
                   onClick={() => onAdminLoginClick?.()}
                 >
                   <Shield className="h-4 w-4 mr-2" />
-                  Admin
+               
                 </Button>
               </div>
             </div>

@@ -374,7 +374,7 @@ export function BookingDetailsPopup({
               onClick={handleContinueToPayment}
               className="w-full bg-orange-500 hover:bg-orange-600 text-white h-14 text-lg font-semibold rounded-2xl"
             >
-              Continue To Payment
+              Continue To Create a Ride
             </Button>
           </div>
         </div>

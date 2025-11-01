@@ -5,6 +5,7 @@ import { User, Menu, X } from "lucide-react"
 import { useState } from "react"
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from "framer-motion"
 
 interface HeaderProps {
   isLoggedIn?: boolean
@@ -20,7 +21,7 @@ export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: 
   return (
     <>
       <header className="relative z-50 pt-4 md:pt-6 px-4 md:px-6">
-        <div className="bg-black rounded-full px-4 md:px-8 py-3 md:py-4 max-w-6xl mx-auto relative">
+        <div className="bg-black rounded-full px-4 md:px-8 py-3 md:py-4 max-w-6xl mx-auto relative shadow-lg">
           <div className="flex items-center justify-between">
             {/* Mobile Logo */}
             <img src="/images/logo.png" alt="Share Taxi Sri Lanka" className="lg:hidden h-6 md:h-8" />
@@ -54,22 +55,20 @@ export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: 
               </a>
             </nav>
 
-            {/* Desktop - Profile (admin moved to footer) */}
+            {/* Desktop - Profile */}
             <div className="hidden lg:flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={() => {
-                    if (isLoggedIn) {
-                      router.push('/user-profile')
-                    } else {
-                      onLoginClick?.()
-                    }
-                  }}
-                  className="w-10 h-10 rounded-full bg-yellow-400 hover:bg-yellow-500 p-0"
-                >
-                  <User className="h-5 w-5 text-black" />
-                </Button>
-              </div>
+              <Button
+                onClick={() => {
+                  if (isLoggedIn) {
+                    router.push('/user-profile')
+                  } else {
+                    onLoginClick?.()
+                  }
+                }}
+                className="w-10 h-10 rounded-full bg-yellow-400 hover:bg-yellow-500 p-0"
+              >
+                <User className="h-5 w-5 text-black" />
+              </Button>
             </div>
 
             {/* Mobile Menu Button */}
@@ -84,78 +83,41 @@ export function Header({ isLoggedIn = false, onLoginClick, onAdminLoginClick }: 
         </div>
       </header>
 
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-md z-30 lg:hidden overflow-y-auto">
-          <div className="p-4">
-            {/* Close button */}
-            <div className="flex justify-end mb-6">
-              <Button
-                variant="ghost"
-                className="text-white hover:text-yellow-400 hover:bg-transparent p-2 rounded-full"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                <X className="h-6 w-6" />
-              </Button>
+      {/* ✅ Animated Mobile Menu */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-x-0 top-[70px] bg-gradient-to-b from-black/90 to-gray-900/95 backdrop-blur-md z-30 lg:hidden rounded-b-2xl shadow-2xl overflow-hidden"
+          >
+            <div className="p-5 pb-6">
+              <div className="space-y-3 max-w-md mx-auto">
+                {[
+                  { href: "#hero-section", label: tNav('home'), color: "text-yellow-400" },
+                  { href: "#booking-section", label: tNav('bookTaxi'), color: "text-white" },
+                  { href: "#shared-rides-section", label: tNav('sharedRides'), color: "text-white" },
+                  { href: "#vehicle-options-section", label: tNav('carOption'), color: "text-white" },
+                ].map((link, i) => (
+                  <motion.a
+                    key={i}
+                    href={link.href}
+                    className="block bg-gray-900/80 hover:bg-yellow-500/20 rounded-2xl px-5 py-4 transition-all border border-gray-800/70"
+                    whileHover={{ scale: 1.03 }}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <h3 className={`${link.color} font-semibold text-base text-center tracking-wide`}>
+                      {link.label}
+                    </h3>
+                  </motion.a>
+                ))}
+              </div>
             </div>
-
-            {/* Menu items as compact tiles */}
-            <div className="space-y-3 max-w-md mx-auto">
-              {/* Admin tile removed from mobile menu (moved to footer) */}
-
-              {/* Navigation tiles */}
-              <a
-                href="#hero-section"
-                className="block bg-gray-900/90 hover:bg-gray-800 rounded-xl px-4 py-3 transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                <h3 className="text-yellow-400 font-semibold text-base">{tNav('home')}</h3>
-              </a>
-
-              <a
-                href="#booking-section"
-                className="block bg-gray-900/90 hover:bg-gray-800 rounded-xl px-4 py-3 transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                <h3 className="text-white font-semibold text-base">{tNav('bookTaxi')}</h3>
-              </a>
-
-              <a
-                href="#shared-rides-section"
-                className="block bg-gray-900/90 hover:bg-gray-800 rounded-xl px-4 py-3 transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                <h3 className="text-white font-semibold text-base">{tNav('sharedRides')}</h3>
-              </a>
-
-              <a
-                href="#vehicle-options-section"
-                className="block bg-gray-900/90 hover:bg-gray-800 rounded-xl px-4 py-3 transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                <h3 className="text-white font-semibold text-base">{tNav('carOption')}</h3>
-              </a>
-
-              {/* Profile tile */}
-              <button
-                onClick={() => {
-                  if (isLoggedIn) {
-                    router.push('/user-profile')
-                  } else {
-                    onLoginClick?.()
-                  }
-                  setIsMobileMenuOpen(false)
-                }}
-                className="w-full flex items-center justify-start gap-3 bg-transparent"
-              >
-                <div className="w-9 h-9 rounded-full bg-black flex items-center justify-center">
-                  <User className="h-4 w-4 text-yellow-400" />
-                </div>
-                <span className="text-white font-medium text-base">{isLoggedIn ? tNav('profile') : tNav('signIn')}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   )
 }
