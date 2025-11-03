@@ -263,15 +263,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
                           </div>
                         </div>
 
-                        <div className="mb-6 rounded-2xl overflow-hidden">
-                          <Image
-                            src={vehicle.image || "/placeholder.svg"}
-                            alt={vehicle.name}
-                            width={392}
-                            height={232}
-                            className="w-full h-auto object-cover"
-                          />
-                        </div>
+                        
 
                         <div className="mb-6">
                           <p className="font-semibold mb-3">Features:</p>
@@ -323,15 +315,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
                         </div>
                       </div>
 
-                      <div className="mb-6 rounded-2xl overflow-hidden">
-                        <Image
-                          src={vehicle.image || "/placeholder.svg"}
-                          alt={vehicle.name}
-                          width={392}
-                          height={232}
-                          className="w-full h-auto object-cover"
-                        />
-                      </div>
+                      
 
                       <div className="mb-6">
                         <p className="font-semibold mb-3">Features:</p>
