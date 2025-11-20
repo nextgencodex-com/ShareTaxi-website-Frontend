@@ -32,9 +32,22 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
   const [tripType, setTripType] = useState("one-way")
   const [rideType, setRideType] = useState("shared")
-  const [pickupTime, setPickupTime] = useState("")
-  const [pickupAmPm, setPickupAmPm] = useState("AM")
+  const [pickupStart, setPickupStart] = useState("")
+  const [pickupEnd, setPickupEnd] = useState("")
+
+  // Helpers to format and compare time values
+  const formatTimeForPayload = (value: string) => {
+    // expects "HH:MM" (24h) or empty string
+    if (!value) return ""
+    const [hhStr, mmStr] = value.split(":")
+    const hh = parseInt(hhStr || "0", 10)
+    const mm = parseInt(mmStr || "0", 10)
+    const hour12 = hh % 12 === 0 ? 12 : hh % 12
+    return `${hour12}.${mm.toString().padStart(2, '0')}`
+  }
   const [passengers, setPassengers] = useState(1)
+  // Total seats available in a vehicle (constant)
+  const TOTAL_SEATS = 10
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
   const [fromPlace, setFromPlace] = useState<{
@@ -401,9 +414,18 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       }
     }
 
-    // Time validation
-    if (!pickupTime) {
-      errors.push("Pickup time selection is required")
+    // Time validation (start/end)
+    if (!pickupStart || !pickupEnd) {
+      errors.push("Pickup start and end times are required")
+    } else {
+      // compare minutes
+      const toMinutes = (t: string) => {
+        const [hh, mm] = t.split(":").map(s => parseInt(s || "0", 10))
+        return (isNaN(hh) ? 0 : hh) * 60 + (isNaN(mm) ? 0 : mm)
+      }
+      if (toMinutes(pickupEnd) <= toMinutes(pickupStart)) {
+        errors.push("Pickup end time must be after start time")
+      }
     }
 
     // Fare calculation validation
@@ -413,8 +435,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     }
 
     // Passenger validation (already handled by min/max in onChange)
-    if (passengers < 1 || passengers > 20) {
-      errors.push("Number of passengers must be between 1 and 20")
+    if (passengers < 1 || passengers > TOTAL_SEATS) {
+      errors.push(`Number of passengers must be between 1 and ${TOTAL_SEATS}`)
     }
 
     return errors
@@ -441,7 +463,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       to,
       rideType,
       date,
-      time: `${pickupTime} ${pickupAmPm}`,
+      time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
       passengers,
       tripType,
       destinations: tripType === 'multi-city' ? destinations : undefined,
@@ -504,8 +526,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const resetForm = () => {
     setTripType("one-way")
     setRideType("shared")
-    setPickupTime("")
-    setPickupAmPm("AM")
+    setPickupStart("")
+    setPickupEnd("")
     setPassengers(1)
     setFrom("")
     setTo("")
@@ -720,35 +742,28 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                         <Label className="text-gray-700 font-medium">Pickup Time</Label>
                         <div className="flex gap-2">
                           <div className="relative flex-1">
-                            <select
-                              value={pickupTime}
-                              onChange={(e) => setPickupTime(e.target.value)}
-                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10 h-12"
-                            >
-                              <option value="">Select time slot</option>
-                              <option value="12-2">12-2</option>
-                              <option value="2-4">2-4</option>
-                              <option value="4-6">4-6</option>
-                              <option value="6-8">6-8</option>
-                              <option value="8-10">8-10</option>
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                            <Input
+                              type="time"
+                              value={pickupStart}
+                              onChange={(e) => setPickupStart(e.target.value)}
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 pr-10 h-12"
+                              aria-label="Pickup start time"
+                            />
                           </div>
-                          <div className="relative">
-                            <select
-                              value={pickupAmPm}
-                              onChange={(e) => setPickupAmPm(e.target.value)}
-                              className="w-20 p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-8 h-12"
-                            >
-                              <option value="AM">AM</option>
-                              <option value="PM">PM</option>
-                            </select>
-                            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                          <div className="relative flex-1">
+                            <Input
+                              type="time"
+                              value={pickupEnd}
+                              onChange={(e) => setPickupEnd(e.target.value)}
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 pr-10 h-12"
+                              aria-label="Pickup end time"
+                            />
                           </div>
                         </div>
+                        <p className="text-xs text-gray-500">Enter start and end time (will be saved as e.g. 12.30 - 2.00)</p>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-gray-700 font-medium">Seats Count</Label>
+                        <Label className="text-gray-700 font-medium">Seats to Book</Label>
                         <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
                           <button
                             type="button"
@@ -763,13 +778,14 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           </span>
                           <button
                             type="button"
-                            onClick={() => setPassengers(Math.min(20, passengers + 1))}
-                            disabled={passengers >= 20}
+                            onClick={() => setPassengers(Math.min(TOTAL_SEATS, passengers + 1))}
+                            disabled={passengers >= TOTAL_SEATS}
                             className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
                           >
                             +
                           </button>
                         </div>
+                        <p className="text-sm text-gray-600">Available seats: <span className="font-semibold">{Math.max(0, TOTAL_SEATS - passengers)}/{TOTAL_SEATS}</span></p>
                       </div>
 
                       {/* Fare Calculator for One-Way/Round-Trip - MOBILE RESPONSIVE FIX */}
@@ -921,7 +937,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           to,
           rideType,
           date,
-          time: `${pickupTime} ${pickupAmPm}`,
+          time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
           passengers,
           tripType,
           destinations: tripType === 'multi-city' ? destinations : undefined,

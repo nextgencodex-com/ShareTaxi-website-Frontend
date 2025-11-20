@@ -647,6 +647,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     setIsRideSubmitting(true);
     (async () => {
       // Construct payload for API
+      const availableSeatsNum = Number.parseInt(rideForm.availableSeats || '0');
+      const totalSeatsNum = Number.parseInt(rideForm.totalSeats || '0');
       const payload = {
         pickupLocation: rideForm.pickupLocation.trim(),
         destinationLocation: rideForm.destinationLocation.trim(),
@@ -655,12 +657,15 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         ampm: rideForm.ampm,
         luggage: rideForm.luggage,
         handCarry: rideForm.handCarry,
-        availableSeats: Number.parseInt(rideForm.availableSeats || '0'),
-        totalSeats: Number.parseInt(rideForm.totalSeats || '0'),
+        // include both legacy flat fields and a seats object to ensure backend compatibility
+        availableSeats: availableSeatsNum,
+        totalSeats: totalSeatsNum,
+        seats: { available: availableSeatsNum, total: totalSeatsNum },
         price: rideForm.price,
         frequency: rideForm.frequency,
         source: 'admin',
       } as Record<string, unknown>;
+    console.log('Submitting shared ride payload:', payload);
 
       try {
         const res = await fetch('http://localhost:5000/api/shared-rides', {
@@ -673,7 +678,37 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           const json = await res.json();
           // Attempt to map server response into our RideData shape
           const serverRide = json?.data?.ride as Record<string, unknown> | undefined;
-          const idVal = serverRide?.id ?? serverRide?._id ?? serverRide?.bookingId ?? Date.now();
+          // If server persisted but stored seats differently, correct it (best-effort)
+          let idVal: unknown = null;
+          try {
+            idVal = serverRide?.id ?? serverRide?._id ?? serverRide?.bookingId ?? null;
+            if (idVal) {
+              const idStr = String(idVal);
+              const fetchRes = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(idStr)}`);
+              if (fetchRes.ok) {
+                const fetched = await fetchRes.json();
+                const srvSeats = fetched?.seats ?? { available: fetched?.availableSeats, total: fetched?.totalSeats };
+                const srvAvailable = typeof srvSeats?.available === 'number' ? Number(srvSeats.available) : undefined;
+                const srvTotal = typeof srvSeats?.total === 'number' ? Number(srvSeats.total) : undefined;
+                if ((typeof srvAvailable === 'number' && srvAvailable !== availableSeatsNum) || (typeof srvTotal === 'number' && srvTotal !== totalSeatsNum)) {
+                  // Attempt to update server-side seats to the expected values
+                    try {
+                    await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(idStr)}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      // backend expects top-level availableSeats/totalSeats fields
+                      body: JSON.stringify({ availableSeats: availableSeatsNum, totalSeats: totalSeatsNum }),
+                    });
+                  } catch {
+                    // ignore patch errors; proceed with local persist
+                  }
+                }
+              }
+            }
+          } catch (_e) {
+        const err = _e as Error | string | null;
+        console.error("Failed to seed admin demo data:", err);
+      }
           const id = typeof idVal === 'number' ? idVal : Date.now();
           const bookingId = typeof serverRide?.bookingId === 'string' ? serverRide?.bookingId : (typeof idVal === 'string' ? idVal : undefined);
 

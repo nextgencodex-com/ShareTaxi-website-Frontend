@@ -41,10 +41,14 @@ export function BookingDetailsPopup({
   onAddSharedRide,
   bookingData,
 }: BookingDetailsPopupProps) {
+  // Total seats constant: booking input represents seats requested; total vehicle capacity is TOTAL_SEATS
+  const TOTAL_SEATS = 10;
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
-    phone: "",
+    // split phone into country code and local number for better UX
+    phoneCountry: "+94",
+    phoneNumber: "",
     specialRequests: "",
     seatCount: bookingData?.passengers ? Number(bookingData.passengers) : 1,
     paymentMethod: "",
@@ -97,10 +101,15 @@ export function BookingDetailsPopup({
         else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedValue))
           error = "Please enter a valid email address";
         break;
-      case "phone":
+      case "phoneNumber":
         if (!trimmedValue) error = "Phone number is required";
-        else if (!/^(\+\d{7,15}|\d{8,15})$/.test(trimmedValue))
-          error = "Please enter a valid phone number (e.g., +94769278958)";
+        else if (!/^\d{7,15}$/.test(trimmedValue))
+          error = "Please enter a valid phone number (digits only, 7-15 characters)";
+        break;
+      case "phoneCountry":
+        if (!trimmedValue) error = "Country code is required";
+        else if (!/^\+\d{1,4}$/.test(trimmedValue))
+          error = "Please select a valid country code (e.g., +94)";
         break;
       case "paymentMethod":
         if (!trimmedValue) error = "Payment method is required";
@@ -155,11 +164,15 @@ export function BookingDetailsPopup({
     if (!formData.fullName.trim()) errors.push("Full name is required");
     if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
       errors.push("Valid email is required");
-    if (!formData.phone.trim() || !/^(\+\d{7,15}|\d{8,15})$/.test(formData.phone))
-      errors.push("Valid phone number required");
+    // Compose full phone and validate country + number
+    const fullPhone = `${formData.phoneCountry || ""}${formData.phoneNumber || ""}`;
+    if (!formData.phoneNumber.trim() || !/^\d{7,15}$/.test(formData.phoneNumber))
+      errors.push("Valid phone number required (7-15 digits)");
+    else if (!/^(\+\d{8,15})$/.test(fullPhone))
+      errors.push("Valid phone with country code required (e.g., +94769278958)");
     if (!formData.paymentMethod.trim()) errors.push("Payment method is required");
-    if (formData.seatCount < 1 || formData.seatCount > 20)
-      errors.push("Person count must be between 1 and 20");
+    if (formData.seatCount < 1 || formData.seatCount > TOTAL_SEATS)
+      errors.push(`Person count must be between 1 and ${TOTAL_SEATS}`);
     if (formData.specialRequests.length > 500) errors.push("Special requests too long");
     return errors;
   };
@@ -182,6 +195,17 @@ export function BookingDetailsPopup({
   };
 
   const handleClosePaymentPopup = () => setShowPaymentPopup(false);
+
+  // Compose personalData object expected by PaymentDetailsPopup
+  const personalDataForPopup = {
+    fullName: formData.fullName,
+    email: formData.email,
+    // keep phone as local number only (other components prepend +94 or use country separately)
+    phone: `${formData.phoneNumber || ""}`,
+    specialRequests: formData.specialRequests,
+    seatCount: formData.seatCount,
+    paymentMethod: formData.paymentMethod,
+  };
 
   return (
     <>
@@ -331,12 +355,27 @@ export function BookingDetailsPopup({
                 <label className="text-sm font-semibold text-gray-900 mb-2 block">
                   Phone Number
                 </label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange("phone", e.target.value)}
-                  placeholder="Enter phone (e.g., +9476xxxxxxx)"
-                  className="bg-blue-50 border-0 h-12"
-                />
+                <div className="flex gap-2">
+                  <select
+                    value={formData.phoneCountry}
+                    onChange={(e) => handleInputChange("phoneCountry", e.target.value)}
+                    className="w-28 bg-blue-50 border-0 h-12 rounded-md px-3"
+                    aria-label="Country code"
+                  >
+                    <option value="+94">+94 (LK)</option>
+                    <option value="+1">+1 (US)</option>
+                    <option value="+44">+44 (UK)</option>
+                    <option value="+91">+91 (IN)</option>
+                    <option value="+61">+61 (AU)</option>
+                    <option value="+65">+65 (SG)</option>
+                  </select>
+                  <Input
+                    value={formData.phoneNumber}
+                    onChange={(e) => handleInputChange("phoneNumber", e.target.value)}
+                    placeholder="Enter local number (digits only)"
+                    className="flex-1 bg-blue-50 border-0 h-12"
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-sm font-semibold text-gray-900 mb-2 block">
@@ -385,7 +424,7 @@ export function BookingDetailsPopup({
         onClose={handleClosePaymentPopup}
         onBack={handleClosePaymentPopup}
         bookingData={currentBookingData || bookingData}
-        personalData={formData}
+        personalData={personalDataForPopup}
       />
     </>
   );
