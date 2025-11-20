@@ -36,7 +36,8 @@ const sendConfirmationEmail = async (
   seatsCount?: number,
   totalPrice?: string,
   perPersonFare?: string,
-  subjectOverride?: string
+  subjectOverride?: string,
+  recipientEmail?: string
 ) => {
   try {
     // Extract pricing information
@@ -227,7 +228,7 @@ Price: ${extractedTotal} for ${extractedSeats} persons
   // Generate a booking code and helpful URLs for confirm/cancel (client-side)
   const bookingCode = `BK-${Date.now()}`;
   // Create mailto links so clicking Confirm/Cancel in the email opens an email to the admin
-  const adminNotificationEmail = "Info@sharetaxisrilanka.com";
+  const adminNotificationEmail = "therath2426@gmail.com";
   const nameForBody = personalData?.fullName ? String(personalData.fullName) : "N/A";
   const baseBody = `Booking ID: ${bookingCode}\nName: ${nameForBody}\n`;
   const confirmSubject = encodeURIComponent(`Booking ${bookingCode} - Confirm`);
@@ -240,15 +241,47 @@ Price: ${extractedTotal} for ${extractedSeats} persons
     // Derive a few more template fields for EmailJS
     const fromLocation = isJoinRideFlow ? rideData?.pickup.location || "" : bookingData?.from || "";
     const toLocation = isJoinRideFlow ? rideData?.destination.location || "" : bookingData?.to || "";
-    // Try multiple possible fields for distance: rideData.distanceKm, rawPayload.mapDistance, rawPayload.distanceKm or bookingData.mapDistance
+    // Derive a normalized distance string for email templates.
+    const normalizeDistance = (val: unknown): string => {
+      if (val === null || val === undefined) return "";
+      const s = String(val).trim();
+      if (!s) return "";
+      // If it already contains 'km', return as-is
+      if (/km/i.test(s)) return s;
+      // If numeric, append km
+      if (/^\d+(?:\.\d+)?$/.test(s)) return `${s} km`;
+      return s;
+    };
+
     const totalDistance = (() => {
+      // Collect possible candidate fields in order of preference
+      const candidates: unknown[] = [];
       if (isJoinRideFlow) {
         const rd = rideData as unknown as Record<string, unknown> | undefined;
         const rawPayload = rd?.rawPayload as Record<string, unknown> | undefined;
-        const cand = rd?.distanceKm ?? rawPayload?.mapDistance ?? rawPayload?.distanceKm ?? rawPayload?.distance ?? "";
-        return String(cand ?? "");
+        // direct numeric distance from ride
+        candidates.push(rd?.distanceKm);
+        // simple top-level raw payload distance shapes
+        candidates.push(rawPayload?.mapDistance, rawPayload?.distanceKm, rawPayload?.distance);
+        // nested bookingData within rawPayload (some payloads embed bookingData)
+        candidates.push(
+          rawPayload?.bookingData && (rawPayload.bookingData as unknown as Record<string, unknown>)?.mapDistance,
+          rawPayload?.bookingData && (rawPayload.bookingData as unknown as Record<string, unknown>)?.distanceKm
+        );
+      } else {
+        // regular booking flow - prefer bookingData.mapDistance
+        candidates.push(
+          bookingData?.mapDistance,
+          bookingData && (bookingData as unknown as Record<string, unknown>)?.mapDistance
+        );
       }
-      return String(bookingData?.mapDistance ?? "");
+
+      for (const c of candidates) {
+        const n = normalizeDistance(c);
+        if (n) return n;
+      }
+
+      return "";
     })();
     const vehicleType = isJoinRideFlow ? rideData?.vehicle || "" : bookingData?.rideType || "";
     const customerName = personalData?.fullName || "";
@@ -260,13 +293,12 @@ Price: ${extractedTotal} for ${extractedSeats} persons
       return typeof maybe === "string" ? maybe : "";
     })();
     const specialRequest = personalData?.specialRequests || "";
-
     const result = await emailjs.send(
       process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
       process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
       {
         // Basic recipient / subject
-        to_email: customerEmail,
+        to_email: recipientEmail || customerEmail,
         subject: subjectOverride || "🚖 Pending Booking!",
 
         // Primary booking fields (match your EmailJS template placeholders)
@@ -393,6 +425,8 @@ interface RideData {
     name: string;
     image: string;
   };
+  
+  
   vehicle: string;
   pickup: {
     location: string;
@@ -445,6 +479,93 @@ export function PaymentDetailsPopup({
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
   const [bookingInProgress, setBookingInProgress] = useState(false);
+
+  // Admin notification email (centralized) — avoid sending duplicate notifications
+  const ADMIN_NOTIFICATION_EMAIL = "therath2426@gmail.com";
+  // Constant total seats for vehicles; entered seat count is how many seats the user is booking
+  const TOTAL_SEATS = 10;
+
+  // Helper to send one customer confirmation and one optional admin notification
+  const sendBookingNotifications = async (opts: {
+    customerArgs: unknown[];
+    adminSubject?: string;
+    adminEmail?: string;
+    skipCustomer?: boolean;
+  }) => {
+    const { customerArgs, adminSubject, adminEmail, skipCustomer } = opts;
+
+    if (!skipCustomer) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (sendConfirmationEmail as any)(...customerArgs);
+      } catch (err) {
+        console.error("Failed sending customer confirmation:", err);
+      }
+    }
+
+    try {
+      const custEmail = (personalData?.email || "").toLowerCase();
+      const admin = (adminEmail || ADMIN_NOTIFICATION_EMAIL || "").toLowerCase();
+      if (admin && admin !== custEmail) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (sendConfirmationEmail as any)(
+          ...customerArgs,
+          adminSubject || "[Admin] New Booking Request",
+          admin
+        );
+      }
+    } catch (err) {
+      console.warn("Admin notification failed (non-blocking):", err);
+    }
+  };
+
+  // Wrapper that prevents duplicate customer emails for the same booking context
+  const sendBookingNotificationsOnce = async (opts: {
+    customerArgs: unknown[];
+    adminSubject?: string;
+    adminEmail?: string;
+  }) => {
+    const { customerArgs } = opts;
+    try {
+      const custEmail = (personalData?.email || "").toLowerCase();
+      const seats = (customerArgs && customerArgs.length >= 6 && typeof customerArgs[5] !== 'undefined')
+        ? String(customerArgs[5])
+        : "";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fromLoc = bookingData?.from || (rideData as any)?.pickup?.location || "";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toLoc = bookingData?.to || (rideData as any)?.destination?.location || "";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const when = bookingData?.date || (rideData as any)?.time || "";
+      const contextHash = `${fromLoc}::${toLoc}::${when}::${seats}`.toLowerCase();
+
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = window as any;
+        if (!w.__lastBookingEmailSent) w.__lastBookingEmailSent = {};
+        const entry = w.__lastBookingEmailSent[custEmail];
+        const now = Date.now();
+        if (entry && entry.contextHash === contextHash && now - entry.when < 15000) {
+          // recent send for same context — skip customer send, but allow admin
+          console.log("Skipping duplicate customer email; sending admin only", {
+            custEmail,
+            contextHash,
+          });
+          await sendBookingNotifications({ ...opts, skipCustomer: true });
+          return;
+        }
+        // Not a duplicate — send normally and record it
+        await sendBookingNotifications(opts);
+        w.__lastBookingEmailSent[custEmail] = { when: now, contextHash };
+      } catch (e) {
+        // Best-effort fallback: send normally
+        await sendBookingNotifications(opts);
+      }
+    } catch (err) {
+      // If anything goes wrong preparing the context, fall back to normal send
+      await sendBookingNotifications(opts);
+    }
+  };
 
   // Validation state
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -512,8 +633,8 @@ export function PaymentDetailsPopup({
       "personalData.seatCount:",
       personalData.seatCount
     );
-    if (!seatCount || seatCount < 1 || seatCount > 20) {
-      errors.push("Seat count must be between 1 and 20");
+    if (!seatCount || seatCount < 1 || seatCount > TOTAL_SEATS) {
+      errors.push(`Seat count must be between 1 and ${TOTAL_SEATS}`);
     }
 
     // If this is a join-ride flow, ensure we don't allow booking more seats than available
@@ -597,20 +718,22 @@ export function PaymentDetailsPopup({
     return `${PER_SEAT_RATE_USD}.00`;
   };
 
-  const addUserSharedRide = useCallback(async () => {
+  const addUserSharedRide = useCallback(async (opts?: { sendWelcome?: boolean } ) => {
     if (!bookingData || !personalData || bookingData.rideType !== "shared")
       return null;
 
+    const sendWelcome = opts?.sendWelcome ?? true;
+
     const seatCount = parseInt(String(personalData.seatCount || "1"), 10);
-    // For a newly created shared ride, the user's entered seatCount defines
-    // the total capacity of the ride. Initially, all seats are available.
-    const totalSeats = seatCount;
-    const availableSeats = totalSeats;
+    // seatCount represents seats the user is booking. Use TOTAL_SEATS as vehicle capacity.
+    const totalSeats = TOTAL_SEATS;
+    const availableSeats = Math.max(0, totalSeats - seatCount);
 
     const newRide = {
       id: Date.now(),
       timeAgo: "Just now",
       pickupDate: bookingData.date || "",
+
       postedDate: new Date(),
       frequency: "one-time",
       driver: {
@@ -663,9 +786,9 @@ export function PaymentDetailsPopup({
       }
 
       const data = await res.json();
-      // Send welcome/under-review email automatically
+      // Send welcome/under-review email automatically unless caller opted out
       try {
-        await sendWelcomeEmail(bookingData, personalData);
+        if (sendWelcome) await sendWelcomeEmail(bookingData, personalData);
       } catch {}
       // Dispatch event to notify other components
       try {
@@ -683,12 +806,15 @@ export function PaymentDetailsPopup({
     }
   }, [bookingData, personalData]);
 
-  const addUserPersonalRide = useCallback(async () => {
+  const addUserPersonalRide = useCallback(async (opts?: { sendWelcome?: boolean }) => {
     if (!bookingData || !personalData || bookingData.rideType !== "personal")
       return null;
 
+    const sendWelcome = opts?.sendWelcome ?? true;
+
     const seatCount = parseInt(String(personalData.seatCount || "1"), 10);
-    const totalSeats = 6; // Standard vehicle capacity
+    // Use TOTAL_SEATS for personal rides as well to keep capacity consistent
+    const totalSeats = TOTAL_SEATS;
     const availableSeats = Math.max(0, totalSeats - seatCount);
 
     const newRide = {
@@ -747,7 +873,7 @@ export function PaymentDetailsPopup({
       const data = await res.json();
       // Send welcome/under-review email automatically (same as shared)
       try {
-        await sendWelcomeEmail(bookingData, personalData);
+        if (sendWelcome) await sendWelcomeEmail(bookingData, personalData);
       } catch {}
       // Dispatch event to notify other components
       try {
@@ -801,13 +927,15 @@ export function PaymentDetailsPopup({
         time: bookingData.time || "N/A",
         duration: bookingData.mapDuration || "TBD",
         seats: {
+          // For regular (non-join) booking flow, `passengers` is how many seats the user booked.
+          // Represent stored seats as { available: TOTAL_SEATS - bookedSeats, total: TOTAL_SEATS }
           available:
             bookingData.rideType === "shared"
-              ? parseInt(String(personalData.seatCount))
+              ? Math.max(0, TOTAL_SEATS - parseInt(String(personalData.seatCount || "1")))
               : 0,
           total:
             bookingData.rideType === "shared"
-              ? parseInt(String(personalData.seatCount))
+              ? TOTAL_SEATS
               : 1,
         },
         price: bookingData.calculatedFare ? "Calculated" : "$15.00",
@@ -918,15 +1046,18 @@ export function PaymentDetailsPopup({
     // If creation succeeds, we avoid calling saveBookedRide() later to prevent duplicates
     let createdRide: unknown | null = null;
     if (!isJoinRideFlow && bookingData?.rideType === "shared") {
-      createdRide = await addUserSharedRide();
+      // When creating a ride as part of this booking flow, avoid sending the
+      // separate welcome/under-review email here — the booking confirmation
+      // will be sent later by the centralized helper.
+      createdRide = await addUserSharedRide({ sendWelcome: false });
       if (createdRide === null) return;
     }
     if (!isJoinRideFlow && bookingData?.rideType === "personal") {
-      createdRide = await addUserPersonalRide();
+      createdRide = await addUserPersonalRide({ sendWelcome: false });
       if (createdRide === null) return;
     }
 
-    let bookingDetails = "";
+    // booking details are assembled per-flow when needed (WhatsApp/email templates)
 
     if (isJoinRideFlow) {
       // For shared rides, simulate booking success, update seats, show confirmation
@@ -944,27 +1075,30 @@ export function PaymentDetailsPopup({
           parseInt(String(personalData.seatCount || "1"), 10) ||
           1;
 
-        // Double-check availability client-side before sending request
-        const availableNow =
-          typeof (rideData.seats && rideData.seats.available) === "number"
-            ? Number(rideData.seats.available)
-            : 0;
-        if (availableNow <= 0) {
-          setValidationErrors(["No seats are available for this ride"]);
-          return;
-        }
-        if (seatsToBook > availableNow) {
-          setValidationErrors([
-            `Only ${availableNow} seat${
-              availableNow > 1 ? "s" : ""
-            } available for this ride`,
-          ]);
-          return;
+        // Fetch latest ride to get authoritative availability just before booking
+        let baselineAvailable = typeof (rideData.seats && rideData.seats.available) === "number" ? Number(rideData.seats.available) : 0;
+        let baselineTotal = typeof (rideData.seats && rideData.seats.total) === "number" ? Number(rideData.seats.total) : TOTAL_SEATS;
+        try {
+          const latestRes = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`);
+          if (latestRes.ok) {
+            const latestJson = await latestRes.json();
+            const latestSeats = (latestJson && latestJson.seats) ? latestJson.seats : undefined;
+            baselineAvailable = typeof latestSeats?.available === 'number' ? Number(latestSeats.available) : baselineAvailable;
+            baselineTotal = typeof latestSeats?.total === 'number' ? Number(latestSeats.total) : baselineTotal;
+            if (seatsToBook > baselineAvailable) {
+              setValidationErrors([`Only ${baselineAvailable} seat${baselineAvailable !== 1 ? 's' : ''} available for this ride — please reduce your request.`]);
+              return;
+            }
+          }
+        } catch {
+          // ignore and continue using rideData as baseline
         }
 
         setBookingInProgress(true);
         try {
-          // Call backend booking endpoint
+
+          // Send the requested seats (delta) to the backend. The backend
+          // transaction will validate and decrement availability atomically.
           const res = await fetch(
             `http://localhost:5000/api/shared-rides/${rideData.id}/book`,
             {
@@ -977,25 +1111,76 @@ export function PaymentDetailsPopup({
               }),
             }
           );
-
-          setBookingInProgress(false);
-
-          if (!res.ok) {
-            // Try to extract error message
-            let errText = await res.text();
-            try {
-              const json = JSON.parse(errText);
-              errText = json.message || JSON.stringify(json);
-            } catch {}
-            console.error("Booking API failed:", res.status, errText);
-            setValidationErrors([`Failed to book seat: ${errText}`]);
-            return;
+          try {
+            const latestRes = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`);
+            if (latestRes.ok) {
+              const latestJson = await latestRes.json();
+              const latestSeats = (latestJson && latestJson.seats) ? latestJson.seats : undefined;
+              const latestAvailable = typeof latestSeats?.available === 'number' ? Number(latestSeats.available) : (rideData.seats?.available || 0);
+              if (seatsToBook > latestAvailable) {
+                setValidationErrors([`Only ${latestAvailable} seat${latestAvailable !== 1 ? 's' : ''} available for this ride — please reduce your request.`]);
+                setBookingInProgress(false);
+                return;
+              }
+            }
+          } catch {
+            // ignore - proceed with current data if fetch fails
           }
-
           const result = await res.json();
 
-          // Notify parent/UI to update seats
-          if (onUpdateSeats) onUpdateSeats(rideData.id, seatsToBook);
+          // Post-booking verification: compute expectedAvailable from the
+          // baseline we fetched just before booking and reconcile if needed.
+          try {
+            const latestAfterRes = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`);
+            if (latestAfterRes.ok) {
+              const latestAfterJson = await latestAfterRes.json();
+              const serverSeats = latestAfterJson?.seats;
+              const serverAvailable = typeof serverSeats?.available === 'number' ? Number(serverSeats.available) : undefined;
+              const serverTotal = typeof serverSeats?.total === 'number' ? Number(serverSeats.total) : baselineTotal;
+              const expectedAvailable = Math.max(0, baselineAvailable - seatsToBook);
+
+              if (typeof serverAvailable === 'number' && serverAvailable !== expectedAvailable) {
+                // Attempt to correct server value (best-effort). Use PUT to update seats.
+                try {
+                  await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    // backend expects top-level availableSeats/totalSeats fields
+                    body: JSON.stringify({ availableSeats: expectedAvailable, totalSeats: serverTotal }),
+                  });
+                } catch {
+                  // ignore patch errors; proceed
+                }
+                // refresh authoritative result
+                try {
+                  const refreshed = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`);
+                  if (refreshed.ok) {
+                    const refreshedJson = await refreshed.json();
+                    if (onUpdateSeats) onUpdateSeats(rideData.id, seatsToBook);
+                    try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: refreshedJson })); } catch {}
+                  } else {
+                    if (onUpdateSeats) onUpdateSeats(rideData.id, seatsToBook);
+                    try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: latestAfterJson })); } catch {}
+                  }
+                } catch {
+                  if (onUpdateSeats) onUpdateSeats(rideData.id, seatsToBook);
+                  try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: latestAfterJson })); } catch {}
+                }
+              } else {
+                // Server value matches expectation; notify UI normally
+                if (onUpdateSeats) onUpdateSeats(rideData.id, seatsToBook);
+                try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: latestAfterJson })); } catch {}
+              }
+            } else {
+              // Couldn't fetch authoritative ride; fall back to notifying UI using result
+              if (onUpdateSeats) onUpdateSeats(rideData.id, seatsToBook);
+              try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: result })); } catch {}
+            }
+          } catch {
+            // Non-blocking: on any error, notify UI with the original result
+            if (onUpdateSeats) onUpdateSeats(rideData.id, seatsToBook);
+            try { window.dispatchEvent(new CustomEvent('rideBooked', { detail: result })); } catch {}
+          }
 
           // Dispatch event for other listeners
           try {
@@ -1078,43 +1263,20 @@ export function PaymentDetailsPopup({
                 }
               }
             }
-            const joinRideEmailDetails = `\nTaxi Booking Request\n\nRoute: ${
-              rideData?.pickup?.location || "N/A"
-            } → ${rideData?.destination?.location || "N/A"}\nDate: ${emailDisplayDate}\nTime: ${emailDisplayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
-              personalData?.fullName || "N/A"
-            }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ‪+94${
-              personalData?.phone || "N/A"
-            }‬\n• Seats: ${seatsToBook}\n\nSpecial Requests: ${
-              personalData?.specialRequests || "None"
-            }\n\nPrice: ${formattedTotal} for ${seatsToBook} persons (Per person: ${formattedPerPerson})\n\nPlease confirm this booking. Thank you!`.trim();
-            const emailSubject = `Join Shared Ride Request - ${
-              rideData?.pickup?.location || "Unknown"
-            } to ${rideData?.destination?.location || "Unknown"}`;
-            const emailLink = `mailto:Info@sharetaxisrilanka.com.com?subject=${encodeURIComponent(
-              emailSubject
-            )}&body=${encodeURIComponent(joinRideEmailDetails)}`;
-            window.open(emailLink, "_blank");
+            // Use EmailJS for notifications; no client mailto fallback here.
 
-            // Send confirmation email to customer
-            const customerEmailSubject =
-              "Thanks for choosing us — Your Booking Has Been Received";
-            const customerEmailLink = `mailto:${
-              personalData?.email
-            }?subject=${encodeURIComponent(
-              customerEmailSubject
-            )}&body=${encodeURIComponent(joinRideEmailDetails)}`;
-            window.open(customerEmailLink, "_blank");
-
-            await sendConfirmationEmail(
-              bookingData,
-              personalData,
-              rideData,
-              true,
-              seatsToBook,
-              extractedSeats,
-              formattedTotal,
-              formattedPerPerson
-            );
+            await sendBookingNotificationsOnce({
+              customerArgs: [
+                bookingData,
+                personalData,
+                rideData,
+                true,
+                seatsToBook,
+                extractedSeats,
+                formattedTotal,
+                formattedPerPerson,
+              ],
+            });
           }
 
           setConfirmationMessage(
@@ -1165,53 +1327,8 @@ export function PaymentDetailsPopup({
         priceText = formatPriceUSD(calc.total);
       }
 
-      // Dynamic ride type and trip labeling for regular (non-join) flow
-      const rideTypeText = bookingData?.rideType === "personal" ? "Personal" : "Shared";
-      const mapTripType = (t?: string) => {
-        const v = (t || "one-way").toLowerCase();
-        if (v === "round-trip") return "Round Trip";
-        if (v === "multi-city") return "Multi City";
-        return "One Way Ride";
-      };
-
-      bookingDetails = `
-Taxi Booking Request
-
-Route: ${bookingData?.from || "N/A"} → ${bookingData?.to || "N/A"}
-Date: ${bookingData?.date || "N/A"}
-Time: ${bookingData?.time || "N/A"}
-Type: ${rideTypeText}, ${mapTripType(bookingData?.tripType)}
-
-Personal Details:
-• Name: ${personalData?.fullName || "N/A"}
-• Email: ${personalData?.email || "N/A"}
-• Phone: ‪+94${personalData?.phone || "N/A"}‬
-• Seats: ${personalData?.seatCount || "N/A"}
-
-Special Requests: ${personalData?.specialRequests || "None"}
-
-Price: $${priceText.replace("$", "")} for ${personalData?.seatCount} persons
-
-Please confirm this booking. Thank you!
-      `.trim();
-
-      // Send booking request to company
-      const mailtoLink = `mailto:Info@sharetaxisrilanka.com.com?subject=${encodeURIComponent(
-        `Taxi Booking Request - ${bookingData?.from || "Unknown"} to ${
-          bookingData?.to || "Unknown"
-        }`
-      )}&body=${encodeURIComponent(bookingDetails)}`;
-      window.open(mailtoLink, "_blank");
-
-      // Send confirmation email to customer
-      const customerEmailSubject =
-        "Thanks for choosing us — Your Booking Has Been Received";
-      const customerEmailLink = `mailto:${
-        personalData?.email
-      }?subject=${encodeURIComponent(
-        customerEmailSubject
-      )}&body=${encodeURIComponent(bookingDetails)}`;
-      window.open(customerEmailLink, "_blank");
+      // Email templates will build the booking summary; no client-side
+      // bookingDetails string is required here.
 
       // Send confirmation email to customer immediately
       const regularSeats = parseInt(String(personalData?.seatCount || "1"), 10);
@@ -1231,16 +1348,20 @@ Please confirm this booking. Thank you!
         regularPerPersonFare = priceText; // For personal rides, total and per person are the same
       }
 
-      await sendConfirmationEmail(
-        bookingData,
-        personalData,
-        rideData,
-        false,
-        selectedSeats,
-        regularSeats,
-        regularTotal,
-        regularPerPersonFare
-      );
+      // await sendBookingNotifications({
+      //   customerArgs: [
+      //     bookingData,
+      //     personalData,
+      //     rideData,
+      //     false,
+      //     selectedSeats,
+      //     regularSeats,
+      //     regularTotal,
+      //     regularPerPersonFare,
+      //   ],
+      //   adminSubject: "[Admin] New Booking Request",
+      //   adminEmail: "therath2426@gmail.com",
+      // });
 
       // Persist booked ride unless we already created the ride above
       if (!createdRide) {
@@ -1284,11 +1405,11 @@ Please confirm this booking. Thank you!
 
     // Always call addUserSharedRide if this is a shared ride booking, regardless of join flow
     if (bookingData?.rideType === "shared" && !isJoinRideFlow) {
-      const created = await addUserSharedRide();
+      const created = await addUserSharedRide({ sendWelcome: false });
       if (created === null) return;
     }
     if (bookingData?.rideType === "personal" && !isJoinRideFlow) {
-      const created = await addUserPersonalRide();
+      const created = await addUserPersonalRide({ sendWelcome: false });
       if (created === null) return;
     }
 
@@ -1312,6 +1433,22 @@ Please confirm this booking. Thank you!
 
         try {
           // Call backend booking endpoint
+          // Re-check latest availability before booking to avoid races
+          try {
+            const latestRes = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`);
+            if (latestRes.ok) {
+              const latestJson = await latestRes.json();
+              const latestSeats = (latestJson && latestJson.seats) ? latestJson.seats : undefined;
+              const latestAvailable = typeof latestSeats?.available === 'number' ? Number(latestSeats.available) : (rideData.seats?.available || 0);
+              if (seatsToBook > latestAvailable) {
+                setValidationErrors([`Only ${latestAvailable} seat${latestAvailable !== 1 ? 's' : ''} available for this ride — please reduce your request.`]);
+                return;
+              }
+            }
+          } catch {
+            // ignore and proceed with current data
+          }
+
           const res = await fetch(
             `http://localhost:5000/api/shared-rides/${rideData.id}/book`,
             {
@@ -1414,13 +1551,18 @@ Please confirm this booking. Thank you!
             }
           }
 
+          const paymentMethodStr = (() => {
+            const maybe = (personalData as unknown as Record<string, unknown>)?.["paymentMethod"];
+            return typeof maybe === "string" ? maybe : "N/A";
+          })();
+
           const joinRideDetails = `\nTaxi Booking Request\n\nRoute: ${
             rideData?.pickup?.location || "N/A"
           } → ${rideData?.destination?.location || "N/A"}\nDate: ${displayDate}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
             personalData?.fullName || "N/A"
           }\n• Email: ${personalData?.email || "N/A"}\n• Phone: +94${
             personalData?.phone || "N/A"
-          }\n• Seats: ${seatsToBook}\n• Payment Method: ${(personalData as any)?.paymentMethod || "N/A"}\n\nSpecial Requests: ${
+          }\n• Seats: ${seatsToBook}\n• Payment Method: ${paymentMethodStr}\n\nSpecial Requests: ${
             personalData?.specialRequests || "None"
           }\n\nPrice: ${whatsappTotal} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim();
 
@@ -1429,26 +1571,20 @@ Please confirm this booking. Thank you!
           )}`;
           window.open(whatsappLink, "_blank");
 
-          // Send confirmation email to customer
-          const customerEmailSubject =
-            "Thanks for choosing us — Your Booking Has Been Received";
-          const customerEmailLink = `mailto:${
-            personalData?.email
-          }?subject=${encodeURIComponent(
-            customerEmailSubject
-          )}&body=${encodeURIComponent(joinRideDetails)}`;
-          window.open(customerEmailLink, "_blank");
-
-          await sendConfirmationEmail(
-            bookingData,
-            personalData,
-            rideData,
-            true,
-            seatsToBook,
-            whatsappSeats,
-            whatsappTotal,
-            whatsappPerPersonFare
-          );
+          // Emails are sent via EmailJS; no mailto fallback for customers
+            await sendBookingNotificationsOnce({
+              customerArgs: [
+                bookingData,
+                personalData,
+                rideData,
+                true,
+                seatsToBook,
+                whatsappSeats,
+                whatsappTotal,
+                whatsappPerPersonFare,
+              ],
+              adminSubject: "[Admin] New Join Ride Booking",
+            });
 
          setConfirmationMessage(
             `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"} Seats: ${seatsToBook} Thank you!`
@@ -1523,24 +1659,10 @@ Please confirm this booking. Thank you!
       )}`;
       window.open(whatsappLink, "_blank");
 
-      // Send confirmation email to customer
-      const customerEmailSubject =
-        "Thanks for choosing us — Your Booking Has Been Received";
-      const customerEmailLink = `mailto:${
-        personalData?.email
-      }?subject=${encodeURIComponent(
-        customerEmailSubject
-      )}&body=${encodeURIComponent(bookingDetails)}`;
-      window.open(customerEmailLink, "_blank");
 
-      // Send confirmation email to customer immediately
-      await sendConfirmationEmail(
-        bookingData,
-        personalData,
-        rideData,
-        false,
-        selectedSeats
-      );
+      // await sendBookingNotifications({
+      //   customerArgs: [bookingData, personalData, rideData, false, selectedSeats],
+      // });
 
       // Save the booked ride to backend
       // await saveBookedRide()
@@ -1694,7 +1816,7 @@ Please confirm this booking. Thank you!
                   </div>
                 </div>
 
-                {!(isJoinRideFlow && rideData?.frequency === 'daily') && (
+                {!(isJoinRideFlow && (rideData as unknown as Record<string, unknown>)?.["frequency"] === 'daily') && (
                   <div className="flex items-center gap-3">
                     <div className="w-6 h-6 border-2 border-blue-400 rounded-full flex items-center justify-center">
                       <Clock className="h-3 w-3 text-blue-400" />

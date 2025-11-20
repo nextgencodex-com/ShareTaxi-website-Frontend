@@ -45,7 +45,8 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
-    phone: "",
+    phoneCountry: "+94",
+    phoneNumber: "",
     specialRequests: "",
     seatCount: 1,
     paymentMethod: "",
@@ -79,7 +80,8 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
       setFormData({
         fullName: "",
         email: "",
-        phone: "",
+        phoneCountry: "+94",
+        phoneNumber: "",
         specialRequests: "",
         seatCount: 1,
         paymentMethod: "",
@@ -103,6 +105,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
 
   const handleContinueToPayment = () => {
     // Pass the ride's time as rideDate into the payment popup state
+    console.log("Continuing to payment with ride date:", rideData);
     setShowPaymentPopup({ open: true, rideDate: rideData.time })
   }
 
@@ -262,12 +265,26 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">Phone Number</label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange("phone", e.target.value)}
-                  className="bg-blue-50 border-0 h-12"
-                  placeholder="Enter full international number (e.g., +94769278958)"
-                />
+                <div className="flex items-center gap-2">
+                  <select
+                    value={formData.phoneCountry}
+                    onChange={(e) => handleInputChange("phoneCountry", e.target.value)}
+                    className="w-32 bg-blue-50 border-0 h-12 rounded-md px-3"
+                  >
+                    <option value="+94">+94 (LK)</option>
+                    <option value="+91">+91 (IN)</option>
+                    <option value="+1">+1 (US)</option>
+                    <option value="+44">+44 (UK)</option>
+                    <option value="+61">+61 (AU)</option>
+                    <option value="+86">+86 (CN)</option>
+                  </select>
+                  <Input
+                    value={formData.phoneNumber}
+                    onChange={(e) => handleInputChange("phoneNumber", e.target.value.replace(/[^0-9]/g, ''))}
+                    className="bg-blue-50 border-0 h-12 flex-1"
+                    placeholder="Enter local number (e.g., 769278958)"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">Payment Method</label>
@@ -346,7 +363,7 @@ export function JoinRidePopup({ isOpen, onClose, rideData, onUpdateSeats }: Join
         personalData={{
           fullName: formData.fullName,
           email: formData.email,
-          phone: formData.phone,
+          phone: formData.phoneNumber,
           specialRequests: formData.specialRequests,
           seatCount: formData.seatCount.toString(),
           paymentMethod: formData.paymentMethod,

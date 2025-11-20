@@ -11,12 +11,14 @@ import { JoinRidePopup } from "./join-ride-popup"
 import Slider from "react-slick"
 import "slick-carousel/slick/slick.css"
 import "slick-carousel/slick/slick-theme.css"
+import { da } from "date-fns/locale"
 
 interface Ride {
   id: number
   timeAgo: string
   postedDate: Date
   frequency: string
+  rawPayload?: Record<string, unknown>
   driver: {
     name: string
     image: string
@@ -137,7 +139,7 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
             }
           }
 
-          return Object.assign({}, r, { postedDate, pickupDate, pickupDateFormatted, frequency: frequencyVal, pickup: pickupObj, destination: destinationObj, seats: seatsObj }) as unknown as Ride
+          return Object.assign({}, r, { postedDate, pickupDate, pickupDateFormatted, frequency: frequencyVal, pickup: pickupObj, destination: destinationObj, seats: seatsObj, rawPayload: rawPayload ?? (r as Record<string, unknown>) }) as unknown as Ride
         })
 
         parsed.sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime())
@@ -205,7 +207,7 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
                   </Badge>
                 )}
                 <Badge className="bg-gray-100 text-gray-600 rounded-full px-3 py-1 text-sm">
-                  Pickup Time: {ride.time || 'N/A'}
+                  Pickup Time: {ride.time || (ride.rawPayload?.['pickupTime'] ? String((ride.rawPayload as Record<string, unknown>)['pickupTime']) : 'N/A')}
                 </Badge>
               </div>
 
@@ -354,8 +356,10 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
             {/* ✅ Mobile Swipe View */}
             <div className="block md:hidden">
               <Slider {...sliderSettings}>
-                {dailyRides.map((ride) => (
+                {
+                dailyRides.map((ride) => (
                   <div key={ride.id} className="px-3">{renderRideCards([ride])}</div>
+            
                 ))}
               </Slider>
             </div>
