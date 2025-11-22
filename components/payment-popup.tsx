@@ -425,8 +425,6 @@ interface RideData {
     name: string;
     image: string;
   };
-  
-  
   vehicle: string;
   pickup: {
     location: string;
@@ -480,92 +478,8 @@ export function PaymentDetailsPopup({
   const [confirmationMessage, setConfirmationMessage] = useState("");
   const [bookingInProgress, setBookingInProgress] = useState(false);
 
-  // Admin notification email (centralized) — avoid sending duplicate notifications
-  const ADMIN_NOTIFICATION_EMAIL = "therath2426@gmail.com";
   // Constant total seats for vehicles; entered seat count is how many seats the user is booking
   const TOTAL_SEATS = 10;
-
-  // Helper to send one customer confirmation and one optional admin notification
-  const sendBookingNotifications = async (opts: {
-    customerArgs: unknown[];
-    adminSubject?: string;
-    adminEmail?: string;
-    skipCustomer?: boolean;
-  }) => {
-    const { customerArgs, adminSubject, adminEmail, skipCustomer } = opts;
-
-    if (!skipCustomer) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (sendConfirmationEmail as any)(...customerArgs);
-      } catch (err) {
-        console.error("Failed sending customer confirmation:", err);
-      }
-    }
-
-    try {
-      const custEmail = (personalData?.email || "").toLowerCase();
-      const admin = (adminEmail || ADMIN_NOTIFICATION_EMAIL || "").toLowerCase();
-      if (admin && admin !== custEmail) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (sendConfirmationEmail as any)(
-          ...customerArgs,
-          adminSubject || "[Admin] New Booking Request",
-          admin
-        );
-      }
-    } catch (err) {
-      console.warn("Admin notification failed (non-blocking):", err);
-    }
-  };
-
-  // Wrapper that prevents duplicate customer emails for the same booking context
-  const sendBookingNotificationsOnce = async (opts: {
-    customerArgs: unknown[];
-    adminSubject?: string;
-    adminEmail?: string;
-  }) => {
-    const { customerArgs } = opts;
-    try {
-      const custEmail = (personalData?.email || "").toLowerCase();
-      const seats = (customerArgs && customerArgs.length >= 6 && typeof customerArgs[5] !== 'undefined')
-        ? String(customerArgs[5])
-        : "";
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fromLoc = bookingData?.from || (rideData as any)?.pickup?.location || "";
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const toLoc = bookingData?.to || (rideData as any)?.destination?.location || "";
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const when = bookingData?.date || (rideData as any)?.time || "";
-      const contextHash = `${fromLoc}::${toLoc}::${when}::${seats}`.toLowerCase();
-
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const w = window as any;
-        if (!w.__lastBookingEmailSent) w.__lastBookingEmailSent = {};
-        const entry = w.__lastBookingEmailSent[custEmail];
-        const now = Date.now();
-        if (entry && entry.contextHash === contextHash && now - entry.when < 15000) {
-          // recent send for same context — skip customer send, but allow admin
-          console.log("Skipping duplicate customer email; sending admin only", {
-            custEmail,
-            contextHash,
-          });
-          await sendBookingNotifications({ ...opts, skipCustomer: true });
-          return;
-        }
-        // Not a duplicate — send normally and record it
-        await sendBookingNotifications(opts);
-        w.__lastBookingEmailSent[custEmail] = { when: now, contextHash };
-      } catch (e) {
-        // Best-effort fallback: send normally
-        await sendBookingNotifications(opts);
-      }
-    } catch (err) {
-      // If anything goes wrong preparing the context, fall back to normal send
-      await sendBookingNotifications(opts);
-    }
-  };
 
   // Validation state
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -718,11 +632,9 @@ export function PaymentDetailsPopup({
     return `${PER_SEAT_RATE_USD}.00`;
   };
 
-  const addUserSharedRide = useCallback(async (opts?: { sendWelcome?: boolean } ) => {
+  const addUserSharedRide = useCallback(async () => {
     if (!bookingData || !personalData || bookingData.rideType !== "shared")
       return null;
-
-    const sendWelcome = opts?.sendWelcome ?? true;
 
     const seatCount = parseInt(String(personalData.seatCount || "1"), 10);
     // seatCount represents seats the user is booking. Use TOTAL_SEATS as vehicle capacity.
@@ -786,9 +698,9 @@ export function PaymentDetailsPopup({
       }
 
       const data = await res.json();
-      // Send welcome/under-review email automatically unless caller opted out
+      // Send welcome/under-review email automatically
       try {
-        if (sendWelcome) await sendWelcomeEmail(bookingData, personalData);
+        await sendWelcomeEmail(bookingData, personalData);
       } catch {}
       // Dispatch event to notify other components
       try {
@@ -806,11 +718,9 @@ export function PaymentDetailsPopup({
     }
   }, [bookingData, personalData]);
 
-  const addUserPersonalRide = useCallback(async (opts?: { sendWelcome?: boolean }) => {
+  const addUserPersonalRide = useCallback(async () => {
     if (!bookingData || !personalData || bookingData.rideType !== "personal")
       return null;
-
-    const sendWelcome = opts?.sendWelcome ?? true;
 
     const seatCount = parseInt(String(personalData.seatCount || "1"), 10);
     // Use TOTAL_SEATS for personal rides as well to keep capacity consistent
@@ -873,7 +783,7 @@ export function PaymentDetailsPopup({
       const data = await res.json();
       // Send welcome/under-review email automatically (same as shared)
       try {
-        if (sendWelcome) await sendWelcomeEmail(bookingData, personalData);
+        await sendWelcomeEmail(bookingData, personalData);
       } catch {}
       // Dispatch event to notify other components
       try {
@@ -1046,14 +956,11 @@ export function PaymentDetailsPopup({
     // If creation succeeds, we avoid calling saveBookedRide() later to prevent duplicates
     let createdRide: unknown | null = null;
     if (!isJoinRideFlow && bookingData?.rideType === "shared") {
-      // When creating a ride as part of this booking flow, avoid sending the
-      // separate welcome/under-review email here — the booking confirmation
-      // will be sent later by the centralized helper.
-      createdRide = await addUserSharedRide({ sendWelcome: false });
+      createdRide = await addUserSharedRide();
       if (createdRide === null) return;
     }
     if (!isJoinRideFlow && bookingData?.rideType === "personal") {
-      createdRide = await addUserPersonalRide({ sendWelcome: false });
+      createdRide = await addUserPersonalRide();
       if (createdRide === null) return;
     }
 
@@ -1145,8 +1052,7 @@ export function PaymentDetailsPopup({
                   await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    // backend expects top-level availableSeats/totalSeats fields
-                    body: JSON.stringify({ availableSeats: expectedAvailable, totalSeats: serverTotal }),
+                    body: JSON.stringify({ seats: { available: expectedAvailable, total: serverTotal } }),
                   });
                 } catch {
                   // ignore patch errors; proceed
@@ -1265,18 +1171,30 @@ export function PaymentDetailsPopup({
             }
             // Use EmailJS for notifications; no client mailto fallback here.
 
-            await sendBookingNotificationsOnce({
-              customerArgs: [
-                bookingData,
-                personalData,
-                rideData,
-                true,
-                seatsToBook,
-                extractedSeats,
-                formattedTotal,
-                formattedPerPerson,
-              ],
-            });
+            // Send confirmation to customer
+            await sendConfirmationEmail(
+              bookingData,
+              personalData,
+              rideData,
+              true,
+              seatsToBook,
+              extractedSeats,
+              formattedTotal,
+              formattedPerPerson
+            );
+            // Also notify admin
+            await sendConfirmationEmail(
+              bookingData,
+              personalData,
+              rideData,
+              true,
+              seatsToBook,
+              extractedSeats,
+              formattedTotal,
+              formattedPerPerson,
+              "[Admin] New Join Ride Booking",
+              "therath2426@gmail.com"
+            );
           }
 
           setConfirmationMessage(
@@ -1348,20 +1266,29 @@ export function PaymentDetailsPopup({
         regularPerPersonFare = priceText; // For personal rides, total and per person are the same
       }
 
-      // await sendBookingNotifications({
-      //   customerArgs: [
-      //     bookingData,
-      //     personalData,
-      //     rideData,
-      //     false,
-      //     selectedSeats,
-      //     regularSeats,
-      //     regularTotal,
-      //     regularPerPersonFare,
-      //   ],
-      //   adminSubject: "[Admin] New Booking Request",
-      //   adminEmail: "therath2426@gmail.com",
-      // });
+      await sendConfirmationEmail(
+        bookingData,
+        personalData,
+        rideData,
+        false,
+        selectedSeats,
+        regularSeats,
+        regularTotal,
+        regularPerPersonFare
+      );
+      // Also notify admin about the new booking
+      await sendConfirmationEmail(
+        bookingData,
+        personalData,
+        rideData,
+        false,
+        selectedSeats,
+        regularSeats,
+        regularTotal,
+        regularPerPersonFare,
+        "[Admin] New Booking Request",
+        "therath2426@gmail.com"
+      );
 
       // Persist booked ride unless we already created the ride above
       if (!createdRide) {
@@ -1405,11 +1332,11 @@ export function PaymentDetailsPopup({
 
     // Always call addUserSharedRide if this is a shared ride booking, regardless of join flow
     if (bookingData?.rideType === "shared" && !isJoinRideFlow) {
-      const created = await addUserSharedRide({ sendWelcome: false });
+      const created = await addUserSharedRide();
       if (created === null) return;
     }
     if (bookingData?.rideType === "personal" && !isJoinRideFlow) {
-      const created = await addUserPersonalRide({ sendWelcome: false });
+      const created = await addUserPersonalRide();
       if (created === null) return;
     }
 
@@ -1572,19 +1499,30 @@ export function PaymentDetailsPopup({
           window.open(whatsappLink, "_blank");
 
           // Emails are sent via EmailJS; no mailto fallback for customers
-            await sendBookingNotificationsOnce({
-              customerArgs: [
-                bookingData,
-                personalData,
-                rideData,
-                true,
-                seatsToBook,
-                whatsappSeats,
-                whatsappTotal,
-                whatsappPerPersonFare,
-              ],
-              adminSubject: "[Admin] New Join Ride Booking",
-            });
+            // Send confirmation to customer
+            await sendConfirmationEmail(
+              bookingData,
+              personalData,
+              rideData,
+              true,
+              seatsToBook,
+              whatsappSeats,
+              whatsappTotal,
+              whatsappPerPersonFare
+            );
+            // Also notify admin
+            await sendConfirmationEmail(
+              bookingData,
+              personalData,
+              rideData,
+              true,
+              seatsToBook,
+              whatsappSeats,
+              whatsappTotal,
+              whatsappPerPersonFare,
+              "[Admin] New Join Ride Booking",
+              "therath2426@gmail.com"
+            );
 
          setConfirmationMessage(
             `Your booking request has been sent via Email! We will contact you soon to confirm your ride. Route ${bookingData?.from || "Unknown"} to ${bookingData?.to || "Unknown"}. Date ${bookingData?.date || "Unknown"}. Time ${bookingData?.time || "Unknown"}. Type: ${bookingData?.rideType || "Unknown"}. personal Details Name: ${personalData?.fullName || "Unknown"}  Email : ${personalData?.email || "Unknown"} phone : ${personalData?.phone || "Unknown"} Seats: ${seatsToBook} Thank you!`
@@ -1659,10 +1597,16 @@ Please confirm this booking. Thank you!
       )}`;
       window.open(whatsappLink, "_blank");
 
+      // Send confirmation email to customer via EmailJS (no mailto)
 
-      // await sendBookingNotifications({
-      //   customerArgs: [bookingData, personalData, rideData, false, selectedSeats],
-      // });
+      // Send confirmation email to customer immediately
+      await sendConfirmationEmail(
+        bookingData,
+        personalData,
+        rideData,
+        false,
+        selectedSeats
+      );
 
       // Save the booked ride to backend
       // await saveBookedRide()

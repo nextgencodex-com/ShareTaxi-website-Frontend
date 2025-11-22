@@ -679,9 +679,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           // Attempt to map server response into our RideData shape
           const serverRide = json?.data?.ride as Record<string, unknown> | undefined;
           // If server persisted but stored seats differently, correct it (best-effort)
-          let idVal: unknown = null;
           try {
-            idVal = serverRide?.id ?? serverRide?._id ?? serverRide?.bookingId ?? null;
+            const idVal = serverRide?.id ?? serverRide?._id ?? serverRide?.bookingId ?? null;
             if (idVal) {
               const idStr = String(idVal);
               const fetchRes = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(idStr)}`);
@@ -692,23 +691,22 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                 const srvTotal = typeof srvSeats?.total === 'number' ? Number(srvSeats.total) : undefined;
                 if ((typeof srvAvailable === 'number' && srvAvailable !== availableSeatsNum) || (typeof srvTotal === 'number' && srvTotal !== totalSeatsNum)) {
                   // Attempt to update server-side seats to the expected values
-                    try {
+                  try {
                     await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(idStr)}`, {
                       method: 'PUT',
                       headers: { 'Content-Type': 'application/json' },
-                      // backend expects top-level availableSeats/totalSeats fields
-                      body: JSON.stringify({ availableSeats: availableSeatsNum, totalSeats: totalSeatsNum }),
+                      body: JSON.stringify({ seats: { available: availableSeatsNum, total: totalSeatsNum } }),
                     });
-                  } catch {
+                  } catch (e) {
                     // ignore patch errors; proceed with local persist
                   }
                 }
               }
             }
-          } catch (_e) {
-        const err = _e as Error | string | null;
-        console.error("Failed to seed admin demo data:", err);
-      }
+          } catch (e) {
+            // ignore verification errors
+          }
+          const idVal = serverRide?.id ?? serverRide?._id ?? serverRide?.bookingId ?? Date.now();
           const id = typeof idVal === 'number' ? idVal : Date.now();
           const bookingId = typeof serverRide?.bookingId === 'string' ? serverRide?.bookingId : (typeof idVal === 'string' ? idVal : undefined);
 
