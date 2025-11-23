@@ -131,6 +131,43 @@ const sendConfirmationEmail = async (
       }
     }
 
+    // If parsing produced $0.00 (or N/A) for per-person or total, compute a robust fallback
+    const numericFromString = (s?: string): number => {
+      if (!s) return 0;
+      const n = Number(String(s).replace(/[^0-9.]/g, ""));
+      return isNaN(n) ? 0 : n;
+    };
+
+    const parsedPerPerson = numericFromString(displayPerPerson);
+    const parsedTotalVal = numericFromString(displayTotal);
+    if ((parsedPerPerson === 0 || parsedTotalVal === 0) && (bookingData || rideData)) {
+      // try to compute a reasonable fallback using distance and pricing helpers
+      let distanceNum = 0;
+      if (isJoinRideFlow) {
+        distanceNum = typeof (rideData as any)?.distanceKm === 'number' ? (rideData as any).distanceKm : 0;
+      } else if (bookingData?.mapDistance) {
+        // attempt to parse bookingData.mapDistance which may be like '130' or '130 km'
+        const maybe = String(bookingData.mapDistance).replace(/[^0-9.]/g, "");
+        distanceNum = maybe ? Number(maybe) : 0;
+      }
+
+      const passengersNum = isJoinRideFlow
+        ? (rideData as any)?.seats?.total || 1
+        : (typeof bookingData?.passengers === "string"
+            ? parseInt(bookingData?.passengers || "1", 10)
+            : bookingData?.passengers || 1);
+
+      const seatsForCalc = seatCountForCalc || 1;
+      // compute total using pricing helper
+      try {
+        const totalNum = calculateTotalPrice(distanceNum || 0, seatsForCalc, passengersNum || 1, (bookingData?.tripType as any) || "one-way");
+        displayTotal = formatPriceUSD(totalNum);
+        if (seatsForCalc && seatsForCalc > 0) displayPerPerson = formatPriceUSD(totalNum / seatsForCalc);
+      } catch (e) {
+        // non-blocking — keep existing display values
+      }
+    }
+
     // Format booking details for email
     const from = isJoinRideFlow 
       ? rideData?.pickup.location || "N/A"
@@ -293,12 +330,13 @@ Price: ${extractedTotal} for ${extractedSeats} persons
       return typeof maybe === "string" ? maybe : "";
     })();
     const specialRequest = personalData?.specialRequests || "";
+    const toEmail = recipientEmail || customerEmail;
     const result = await emailjs.send(
       process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
       process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
       {
         // Basic recipient / subject
-        to_email: recipientEmail || customerEmail,
+        to_email: toEmail,
         subject: subjectOverride || "🚖 Pending Booking!",
 
         // Primary booking fields (match your EmailJS template placeholders)
@@ -313,7 +351,8 @@ Price: ${extractedTotal} for ${extractedSeats} persons
 
         // Customer details (for admin template we may override customer_email to ensure admin receives the email)
         customer_name: customerName,
-        customer_email: recipientEmail || customerEmail,
+        // Ensure template's {{customer_email}} matches the actual recipient (admin or customer)
+        customer_email: toEmail,
         customer_phone: customerPhone,
         passenger_count: passengerCount,
         payment_method: paymentMethod,
@@ -528,6 +567,7 @@ export function PaymentDetailsPopup({
     const { customerArgs } = opts;
     try {
       const custEmail = (personalData?.email || "").toLowerCase();
+      const adminEmail = (opts.adminEmail || ADMIN_NOTIFICATION_EMAIL || "").toLowerCase();
       const seats = (customerArgs && customerArgs.length >= 6 && typeof customerArgs[5] !== 'undefined')
         ? String(customerArgs[5])
         : "";
@@ -543,20 +583,50 @@ export function PaymentDetailsPopup({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const w = window as any;
         if (!w.__lastBookingEmailSent) w.__lastBookingEmailSent = {};
-        const entry = w.__lastBookingEmailSent[custEmail];
         const now = Date.now();
-        if (entry && entry.contextHash === contextHash && now - entry.when < 15000) {
-          // recent send for same context — skip customer send, but allow admin
-          console.log("Skipping duplicate customer email; sending admin only", {
-            custEmail,
-            contextHash,
-          });
-          await sendBookingNotifications({ ...opts, skipCustomer: true });
+
+        // Check customer duplicate
+        const custEntry = w.__lastBookingEmailSent[custEmail];
+        const skipCustomer = !!(custEntry && custEntry.contextHash === contextHash && now - custEntry.when < 15000);
+
+        // Check admin duplicate (separately) — avoid sending admin duplicate emails
+        const adminEntry = adminEmail ? w.__lastBookingEmailSent[adminEmail] : null;
+        const skipAdmin = !!(adminEntry && adminEntry.contextHash === contextHash && now - adminEntry.when < 15000);
+
+        if (skipCustomer && skipAdmin) {
+          console.log("Skipping duplicate customer & admin emails; nothing to send", { custEmail, adminEmail, contextHash });
           return;
         }
-        // Not a duplicate — send normally and record it
-        await sendBookingNotifications(opts);
-        w.__lastBookingEmailSent[custEmail] = { when: now, contextHash };
+
+        // Send customer if not skipped
+        if (!skipCustomer) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (sendConfirmationEmail as any)(...customerArgs);
+            w.__lastBookingEmailSent[custEmail] = { when: now, contextHash };
+          } catch (err) {
+            console.error("Failed sending customer confirmation (once):", err);
+          }
+        } else {
+          console.log("Skipping duplicate customer email; will still check admin", { custEmail, contextHash });
+        }
+
+        // Send admin if configured, different from customer, and not skipped
+        try {
+          const custEmailNorm = custEmail;
+          const adminNorm = adminEmail || "";
+          if (adminNorm && adminNorm !== custEmailNorm && !skipAdmin) {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              await (sendConfirmationEmail as any)(...customerArgs, opts.adminSubject || "[Admin] New Booking Request", adminNorm);
+              w.__lastBookingEmailSent[adminNorm] = { when: now, contextHash };
+            } catch (err) {
+              console.warn("Admin notification failed (once, non-blocking):", err);
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
       } catch (e) {
         // Best-effort fallback: send normally
         await sendBookingNotifications(opts);
@@ -1044,13 +1114,33 @@ export function PaymentDetailsPopup({
     if (!isJoinRideFlow && bookingData?.rideType === "shared") {
       // When creating a ride as part of this booking flow, avoid sending the
       // separate welcome/under-review email here — the booking confirmation
-      // will be sent later by the centralized helper.
+      // will be sent by the centralized helper below. Still, for first-time
+      // creates we trigger the centralized helper to ensure a confirmation
+      // is delivered to the customer/admin.
       createdRide = await addUserSharedRide({ sendWelcome: false });
       if (createdRide === null) return;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await sendBookingNotificationsOnce({
+          customerArgs: [bookingData, personalData, createdRide as any, false, selectedSeats],
+          adminSubject: "[Admin] New Booking Request",
+        });
+      } catch (e) {
+        console.warn("Post-create notification failed (non-blocking):", e);
+      }
     }
     if (!isJoinRideFlow && bookingData?.rideType === "personal") {
       createdRide = await addUserPersonalRide({ sendWelcome: false });
       if (createdRide === null) return;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await sendBookingNotificationsOnce({
+          customerArgs: [bookingData, personalData, createdRide as any, false, selectedSeats],
+          adminSubject: "[Admin] New Booking Request",
+        });
+      } catch (e) {
+        console.warn("Post-create notification failed (non-blocking):", e);
+      }
     }
 
     // booking details are assembled per-flow when needed (WhatsApp/email templates)
@@ -1403,10 +1493,30 @@ export function PaymentDetailsPopup({
     if (bookingData?.rideType === "shared" && !isJoinRideFlow) {
       const created = await addUserSharedRide({ sendWelcome: false });
       if (created === null) return;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await sendBookingNotificationsOnce({
+          customerArgs: [bookingData, personalData, created as any, false, selectedSeats],
+          adminSubject: "[Admin] New Booking Request",
+          adminEmail: ADMIN_NOTIFICATION_EMAIL,
+        });
+      } catch (e) {
+        console.warn("Post-create notification failed (non-blocking):", e);
+      }
     }
     if (bookingData?.rideType === "personal" && !isJoinRideFlow) {
       const created = await addUserPersonalRide({ sendWelcome: false });
       if (created === null) return;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await sendBookingNotificationsOnce({
+          customerArgs: [bookingData, personalData, created as any, false, selectedSeats],
+          adminSubject: "[Admin] New Booking Request",
+          adminEmail: ADMIN_NOTIFICATION_EMAIL,
+        });
+      } catch (e) {
+        console.warn("Post-create notification failed (non-blocking):", e);
+      }
     }
 
     let bookingDetails = "";
