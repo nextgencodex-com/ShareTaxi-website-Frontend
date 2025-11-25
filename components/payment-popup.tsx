@@ -382,7 +382,7 @@ Price: ${extractedTotal} for ${extractedSeats} persons
       }
     );
     console.log("Confirmation email sent successfully:", result);
-    alert("Confirmation email sent successfully!");
+    //alert("Confirmation email sent successfully!");
   } catch (error) {
     const extractErrorText = (e: unknown): string => {
       if (!e) return "Unknown error";
@@ -645,6 +645,7 @@ export function PaymentDetailsPopup({
                 vehicle_type: cIsJoinFlow ? (cRideData?.vehicle || "shared") : (cBookingData?.rideType || ""),
                 seats: seatsCandidate,
                 per_person_fare: perPersonStr,
+                // store per-person price (not multiplied) so admin templates use per-person value
                 total_price: totalStr,
                 price_html: priceHtml,
                 total_distance: distanceCandidate,
@@ -653,7 +654,6 @@ export function PaymentDetailsPopup({
                 booking_code: `BK-${Date.now()}`,
                 booking_details: JSON.stringify({ from: cBookingData?.from, to: cBookingData?.to, date: cBookingData?.date, time: cBookingData?.time }),
               };
-
               // Non-blocking admin send via EmailJS
               try {
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -838,6 +838,26 @@ export function PaymentDetailsPopup({
     return numeric || `${PER_SEAT_RATE_USD}.00`;
   };
 
+  // Helper to extract the PER-PERSON price (green) numeric value from calculatedFare HTML
+  const extractPerPersonFromCalculatedFare = (calculatedFareHtml?: string): string => {
+    if (!calculatedFareHtml) return `${PER_SEAT_RATE_USD}.00`;
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = calculatedFareHtml;
+    // per-person price is styled green in the fare HTML
+    const perPersonElement = tempDiv.querySelector('[style*="color:green"]');
+    let priceText = "";
+    if (perPersonElement) {
+      priceText = perPersonElement.textContent || "";
+    } else {
+      // fallback: if total only present, try to return total (caller may divide by seats as needed)
+      const totalElement = tempDiv.querySelector('[style*="color:blue"]');
+      priceText = totalElement ? (totalElement.textContent || "") : "";
+    }
+    if (!priceText) return `${PER_SEAT_RATE_USD}.00`;
+    const numeric = priceText.replace(/[^0-9.]/g, "");
+    return numeric || `${PER_SEAT_RATE_USD}.00`;
+  };
+
   const addUserSharedRide = useCallback(async (opts?: { sendWelcome?: boolean } ) => {
     if (!bookingData || !personalData || bookingData.rideType !== "shared")
       return null;
@@ -875,7 +895,7 @@ export function PaymentDetailsPopup({
         available: availableSeats,
         total: totalSeats,
       },
-      price: extractTotalFromCalculatedFare(bookingData.calculatedFare),
+      price: extractPerPersonFromCalculatedFare(bookingData.calculatedFare),
       // persist contact info so admin can contact the user who created the ride
       customerEmail: personalData.email,
       customerPhone: personalData.phone,
@@ -962,7 +982,7 @@ export function PaymentDetailsPopup({
         available: availableSeats,
         total: totalSeats,
       },
-      price: extractTotalFromCalculatedFare(bookingData.calculatedFare),
+      price: extractPerPersonFromCalculatedFare(bookingData.calculatedFare),
       customerEmail: personalData.email,
       customerPhone: personalData.phone,
       customerName: personalData.fullName,
@@ -1058,13 +1078,13 @@ export function PaymentDetailsPopup({
               ? TOTAL_SEATS
               : 1,
         },
-        price: bookingData.calculatedFare ? extractTotalFromCalculatedFare(bookingData.calculatedFare) : "$15.00",
+        price: bookingData.calculatedFare ? extractPerPersonFromCalculatedFare(bookingData.calculatedFare) : `${PER_SEAT_RATE_USD}.00`,
         bookingId: `Ref-${Date.now()}`,
         customerEmail: personalData.email,
         customerPhone: personalData.phone,
         specialRequests: personalData.specialRequests || "None",
         // include both booking and personal data so admin can inspect contact info
-        rawPayload: { bookingData: { ...bookingData, calculatedFare: bookingData.calculatedFare ? extractTotalFromCalculatedFare(bookingData.calculatedFare) : bookingData.calculatedFare }, personalData },
+        rawPayload: { bookingData: { ...bookingData, calculatedFare: bookingData.calculatedFare ? extractPerPersonFromCalculatedFare(bookingData.calculatedFare) : bookingData.calculatedFare }, personalData },
       };
     } else if (rideData) {
       // join-ride flow: construct from rideData + personalData + selectedSeats
