@@ -73,7 +73,7 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Email</p>
-                  <p className="text-sm">therath2426@gmail.com</p>
+                  <p className="text-sm">info@sharetaxisrilanka.com</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 text-gray-300 hover:text-white transition-colors duration-200 cursor-pointer group">
