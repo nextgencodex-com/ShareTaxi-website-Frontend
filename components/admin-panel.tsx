@@ -1091,7 +1091,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
         const dateStr = dateObj ? dateObj.toLocaleDateString() : (typeof rec.postedDate === 'string' ? new Date(rec.postedDate as string).toLocaleDateString() : 'N/A');
         const timeStr = (ride.time && String(ride.time).trim() !== '') ? String(ride.time) : (dateObj ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD');
-
+      const passengerCount = rec.passengers ?? ride.passengers ?? ride.seats?.total ?? '';
         const taxiType = ride.type || 'ride';
 
         // personal details: prefer nested rawPayload.personalData then top-level customer
@@ -1115,8 +1115,17 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         // special requests and price
         const specialRequests = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.specialRequests) ?? (rec.specialRequests) ?? (rec.notes) ?? '';
         const price = (rec.price ?? ride.price ?? '') as string | number;
+        // If the API embeds bookingData in rawPayload, prefer its passengers and calculatedFare
+        const bookingDataInRaw = (rp && typeof rp.bookingData === 'object') ? (rp.bookingData as Record<string, unknown>) : undefined;
+        const passengersFromBookingData = bookingDataInRaw?.passengers ?? bookingDataInRaw?.seats ?? undefined;
+        const priceFromBookingData = bookingDataInRaw?.calculatedFare ?? bookingDataInRaw?.price ?? undefined;
 
         const bookingIdStr = (rec.bookingId && typeof rec.bookingId === 'string') ? rec.bookingId as string : ((rec.readableId && typeof rec.readableId === 'string') ? rec.readableId as string : (typeof rec.id === 'string' ? rec.id : (ride.bookingId ?? 'N/A')));
+
+        const passengerDisplay = passengersFromBookingData !== undefined
+          ? String((passengersFromBookingData as any))
+          : personalName;
+        const priceDisplay = priceFromBookingData !== undefined ? String(priceFromBookingData) : (price ? String(price) : '');
 
         const bookingDetails = [
           `Booking ID: ${bookingIdStr}`,
@@ -1124,10 +1133,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           `Date: ${dateStr}`,
           `Time: ${timeStr}`,
           `Type: ${taxiType}`,
-          `Passenger: ${personalName}`,
+          `Passenger: ${passengerDisplay}`,
           `Contact: ${personalPhone}${personalEmail ? ` / ${personalEmail}` : ''}`,
           specialRequests ? `Special requests: ${String(specialRequests)}` : null,
-          price ? `Price: ${String(price)}` : null,
+          priceDisplay ? `Price: ${priceDisplay}` : null,
         ].filter(Boolean).join('\n');
 
         // Append booking details to the status message so template variable 'status_message' contains both
