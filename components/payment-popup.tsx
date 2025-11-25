@@ -614,14 +614,61 @@ export function PaymentDetailsPopup({
         // Send admin if configured, different from customer, and not skipped
         try {
           const custEmailNorm = custEmail;
+          
           const adminNorm = adminEmail || "";
           if (adminNorm && adminNorm !== custEmailNorm && !skipAdmin) {
             try {
+              // Build admin payload directly for EmailJS so template's {{customer_email}} becomes the admin address
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              await (sendConfirmationEmail as any)(...customerArgs, opts.adminSubject || "[Admin] New Booking Request", adminNorm);
-              w.__lastBookingEmailSent[adminNorm] = { when: now, contextHash };
+              const [cBookingData, cPersonalData, cRideData, cIsJoinFlow, cSelectedSeats, cSeatsCount, cTotalPrice, cPerPersonFare] = (customerArgs as any[]);
+
+              const perPersonStr = cPerPersonFare || (typeof cRideData?.price === 'string' ? String(cRideData.price) : "");
+              const totalStr = cTotalPrice || (cBookingData?.calculatedFare ? extractTotalFromCalculatedFare(cBookingData.calculatedFare) : "");
+              const distanceCandidate = cIsJoinFlow
+                ? ((cRideData && ((cRideData as any).distanceKm !== undefined)) ? `${(cRideData as any).distanceKm} km` : (cBookingData?.mapDistance || ""))
+                : (cBookingData?.mapDistance || "");
+              const seatsCandidate = cSeatsCount ?? cSelectedSeats ?? (cPersonalData?.seatCount || "1");
+
+              const priceHtml = `USD 🚗 Distance: ${distanceCandidate}<br>📍 Seats: ${seatsCandidate}<br>💰 Per Person: <span style="color:green; font-size: 16px; font-weight: bold;">${perPersonStr}</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">${totalStr}</span>`;
+
+              const adminPayload: Record<string, unknown> = {
+                to_email: adminNorm,
+                subject: opts?.adminSubject || "[Admin] New Booking Request",
+                // Ensure template's {{customer_email}} equals admin address for admin notifications
+                customer_email: adminNorm,
+                customer_name: cPersonalData?.fullName || "",
+                customer_phone: cPersonalData?.phone ? `+94${cPersonalData.phone}` : "",
+                from_location: cIsJoinFlow ? (cRideData?.pickup?.location || cBookingData?.from || "") : (cBookingData?.from || ""),
+                to_location: cIsJoinFlow ? (cRideData?.destination?.location || cBookingData?.to || "") : (cBookingData?.to || ""),
+                pickup_date: cIsJoinFlow ? (cRideData?.pickupDateFormatted || cBookingData?.date || "") : (cBookingData?.date || ""),
+                pickup_time: cIsJoinFlow ? (cRideData?.time || cBookingData?.time || "") : (cBookingData?.time || ""),
+                vehicle_type: cIsJoinFlow ? (cRideData?.vehicle || "shared") : (cBookingData?.rideType || ""),
+                seats: seatsCandidate,
+                per_person_fare: perPersonStr,
+                total_price: totalStr,
+                price_html: priceHtml,
+                total_distance: distanceCandidate,
+                passenger_count: seatsCandidate,
+                payment_method: (cPersonalData as any)?.paymentMethod || "",
+                booking_code: `BK-${Date.now()}`,
+                booking_details: JSON.stringify({ from: cBookingData?.from, to: cBookingData?.to, date: cBookingData?.date, time: cBookingData?.time }),
+              };
+
+              // Non-blocking admin send via EmailJS
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                await emailjs.send(
+                  process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
+                  process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+                  adminPayload,
+                  { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
+                );
+                w.__lastBookingEmailSent[adminNorm] = { when: now, contextHash };
+              } catch (err) {
+                console.warn("Admin EmailJS send failed (once, non-blocking):", err);
+              }
             } catch (err) {
-              console.warn("Admin notification failed (once, non-blocking):", err);
+              console.warn("Admin notification construction failed (non-blocking):", err);
             }
           }
         } catch (e) {
@@ -768,24 +815,27 @@ export function PaymentDetailsPopup({
 
   // Assigned driver data could be provided later by backend
 
-  // Helper function to extract numeric price from calculatedFare HTML
-  const extractNumericPrice = (calculatedFareHtml?: string): string => {
+  
+
+  // Helper to extract the TOTAL price (blue) numeric value from calculatedFare HTML
+  const extractTotalFromCalculatedFare = (calculatedFareHtml?: string): string => {
     if (!calculatedFareHtml) return `${PER_SEAT_RATE_USD}.00`;
-    
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = calculatedFareHtml;
-    
-    // Extract the per-person fare (green text) - this is what we want for PER_SEAT_RATE_USD
+    // total price is styled blue in the fare HTML
+    const totalElement = tempDiv.querySelector('[style*="color:blue"]');
     const perPersonElement = tempDiv.querySelector('[style*="color:green"]');
-    if (perPersonElement) {
-      const priceText = perPersonElement.textContent || "";
-      // Remove $ and any extra whitespace, keep only the numeric value
-      const numericPrice = priceText.replace(/[$\s]/g, "");
-      return numericPrice || `${PER_SEAT_RATE_USD}.00`;
+    let priceText = "";
+    if (totalElement) {
+      priceText = totalElement.textContent || "";
+    } else if (perPersonElement) {
+      // fallback to per-person if total not present
+      priceText = perPersonElement.textContent || "";
     }
-    
-    // If no per-person fare found, return default
-    return `${PER_SEAT_RATE_USD}.00`;
+    if (!priceText) return `${PER_SEAT_RATE_USD}.00`;
+    // strip $ and non-numeric chars, keep decimals
+    const numeric = priceText.replace(/[^0-9.]/g, "");
+    return numeric || `${PER_SEAT_RATE_USD}.00`;
   };
 
   const addUserSharedRide = useCallback(async (opts?: { sendWelcome?: boolean } ) => {
@@ -825,13 +875,13 @@ export function PaymentDetailsPopup({
         available: availableSeats,
         total: totalSeats,
       },
-      price: extractNumericPrice(bookingData.calculatedFare),
+      price: extractTotalFromCalculatedFare(bookingData.calculatedFare),
       // persist contact info so admin can contact the user who created the ride
       customerEmail: personalData.email,
       customerPhone: personalData.phone,
       customerName: personalData.fullName,
       // keep original booking + personal data for admin inspection
-      rawPayload: { bookingData, personalData },
+      rawPayload: { bookingData: { ...bookingData, calculatedFare: extractTotalFromCalculatedFare(bookingData.calculatedFare) }, personalData },
     };
 
     // POST new shared ride to backend instead of localStorage
@@ -912,11 +962,11 @@ export function PaymentDetailsPopup({
         available: availableSeats,
         total: totalSeats,
       },
-      price: extractNumericPrice(bookingData.calculatedFare),
+      price: extractTotalFromCalculatedFare(bookingData.calculatedFare),
       customerEmail: personalData.email,
       customerPhone: personalData.phone,
       customerName: personalData.fullName,
-      rawPayload: { bookingData, personalData },
+      rawPayload: { bookingData: { ...bookingData, calculatedFare: extractTotalFromCalculatedFare(bookingData.calculatedFare) }, personalData },
     };
 
     // POST new personal ride to backend instead of localStorage
@@ -1008,13 +1058,13 @@ export function PaymentDetailsPopup({
               ? TOTAL_SEATS
               : 1,
         },
-        price: bookingData.calculatedFare ? "Calculated" : "$15.00",
+        price: bookingData.calculatedFare ? extractTotalFromCalculatedFare(bookingData.calculatedFare) : "$15.00",
         bookingId: `Ref-${Date.now()}`,
         customerEmail: personalData.email,
         customerPhone: personalData.phone,
         specialRequests: personalData.specialRequests || "None",
         // include both booking and personal data so admin can inspect contact info
-        rawPayload: { bookingData, personalData },
+        rawPayload: { bookingData: { ...bookingData, calculatedFare: bookingData.calculatedFare ? extractTotalFromCalculatedFare(bookingData.calculatedFare) : bookingData.calculatedFare }, personalData },
       };
     } else if (rideData) {
       // join-ride flow: construct from rideData + personalData + selectedSeats
