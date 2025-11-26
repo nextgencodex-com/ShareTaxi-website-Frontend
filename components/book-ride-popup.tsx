@@ -183,11 +183,14 @@ Vehicle: ${vehicle.name}`;
             <div className="grid md:grid-cols-2 gap-6">
               {/* Vehicle Image */}
               <div className="rounded-xl overflow-hidden">
-                <img
-                  src={vehicle.image || "/placeholder.svg?height=200&width=300&query=white Toyota MPV car"}
-                  alt={vehicle.name}
-                  className="w-full h-48 object-cover"
-                />
+                {/* 
+<img
+  src={vehicle.image || "/placeholder.svg?height=200&width=300&query=white Toyota MPV car"}
+  alt={vehicle.name}
+  className="w-full h-48 object-cover"
+/>
+*/}
+
               </div>
 
               {/* Vehicle Info */}
@@ -259,7 +262,7 @@ Vehicle: ${vehicle.name}`;
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
                 <div className="flex gap-2">
-                  <div className="bg-blue-50 rounded-lg px-3 py-3 text-gray-700 font-medium"></div>
+                  
                   <Input
                     type="tel"
                     placeholder="769278958"
