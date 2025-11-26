@@ -1733,12 +1733,23 @@ export function PaymentDetailsPopup({
             return typeof maybe === "string" ? maybe : "N/A";
           })();
 
+          // Sanitize phone for WhatsApp: if user pasted a full international number
+          // (e.g. "+61...") and the stored value contains a default prefix like "+94+61...",
+          // prefer the last +... segment so we don't send duplicated country codes.
+          const sanitizedPhone = (() => {
+            const raw = String(personalData?.phone || "").trim();
+            if (!raw) return "N/A";
+            const lastPlus = raw.lastIndexOf("+");
+            if (lastPlus > 0) return raw.slice(lastPlus);
+            return raw;
+          })();
+
           const joinRideDetails = `\nTaxi Booking Request\n\nRoute: ${
             rideData?.pickup?.location || "N/A"
           } → ${rideData?.destination?.location || "N/A"}\nDate: ${displayDate}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
             personalData?.fullName || "N/A"
           }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ${
-            personalData?.phone || "N/A"
+            sanitizedPhone
           }\n• Seats: ${seatsToBook}\n• Payment Method: ${paymentMethodStr}\n\nSpecial Requests: ${
             personalData?.specialRequests || "None"
           }\n\nPrice: ${whatsappTotal} for ${seatsToBook} persons\n\nPlease confirm this booking. Thank you!`.trim();
@@ -1809,6 +1820,14 @@ export function PaymentDetailsPopup({
         priceText = formatPriceUSD(calc.total);
       }
 
+      const sanitizedPhone = (() => {
+        const raw = String(personalData?.phone || "").trim();
+        if (!raw) return "N/A";
+        const lastPlus = raw.lastIndexOf("+");
+        if (lastPlus > 0) return raw.slice(lastPlus);
+        return raw;
+      })();
+
       bookingDetails = `
 Taxi Booking Request
 
@@ -1820,7 +1839,7 @@ Type: Shared, One Way Ride
 Personal Details:
 • Name: ${personalData?.fullName || "N/A"}
 • Email: ${personalData?.email || "N/A"}
-• Phone: ‪${personalData?.phone || "N/A"}‬
+• Phone: ${sanitizedPhone}
 • Seats: ${personalData?.seatCount || "N/A"}
 
 Special Requests: ${personalData?.specialRequests || "None"}
