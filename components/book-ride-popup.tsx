@@ -114,7 +114,7 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
             vehicle_type: 'personal',
             customer_name: formData.name,
             customer_email: formData.email,
-            customer_phone: `+94${formData.phone}`,
+            customer_phone: `${formData.phone}`,
             passenger_count: 1,
             payment_method: '',
             special_request: specialRequest,
@@ -131,7 +131,7 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
       const whatsappMessage = `🚖 *Vehicle Request*  
 Name: ${formData.name}  
 Email: ${formData.email}  
-Phone: +94${formData.phone}  
+Phone: ${formData.phone}  
 Booking Date: ${formData.bookingDate}  
 Pickup: ${formData.pickupAddress}  
 Dropoff: ${formData.dropoffAddress}  
@@ -259,7 +259,7 @@ Vehicle: ${vehicle.name}`;
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
                 <div className="flex gap-2">
-                  <div className="bg-blue-50 rounded-lg px-3 py-3 text-gray-700 font-medium">+94</div>
+                  <div className="bg-blue-50 rounded-lg px-3 py-3 text-gray-700 font-medium"></div>
                   <Input
                     type="tel"
                     placeholder="769278958"
