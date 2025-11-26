@@ -103,8 +103,8 @@ export function BookingDetailsPopup({
         break;
       case "phoneNumber":
         if (!trimmedValue) error = "Phone number is required";
-        else if (!/^\d{7,15}$/.test(trimmedValue))
-          error = "Please enter a valid phone number (digits only, 7-15 characters)";
+        else if (!/^\d{8,10}$/.test(trimmedValue))
+          error = "Phone number must be 8-10 digits";
         break;
       case "phoneCountry":
         if (!trimmedValue) error = "Country code is required";
@@ -124,6 +124,22 @@ export function BookingDetailsPopup({
   };
 
   const handleInputChange = (field: string, value: string) => {
+    // Special handling for phoneNumber: strip non-digits and any leading country code
+    if (field === "phoneNumber") {
+      // remove all non-digit characters
+      let cleaned = (value || "").replace(/[^0-9]/g, "");
+      // If the user pasted a full international number including the country code,
+      // remove the country code prefix so phoneNumber stores only local digits.
+      const cc = (formData.phoneCountry || "").replace("+", "");
+      if (cc && cleaned.startsWith(cc)) {
+        cleaned = cleaned.slice(cc.length);
+      }
+      setFormData((prev) => ({ ...prev, phoneNumber: cleaned }));
+      validateField("phoneNumber", cleaned);
+      return;
+    }
+
+    // When changing phoneCountry, keep the local phoneNumber as-is (already digits-only)
     setFormData((prev) => ({ ...prev, [field]: value }));
     validateField(field, value);
   };
@@ -166,7 +182,7 @@ export function BookingDetailsPopup({
       errors.push("Valid email is required");
     // Compose full phone and validate country + number
     const fullPhone = `${formData.phoneCountry || ""}${formData.phoneNumber || ""}`;
-    if (!formData.phoneNumber.trim() || !/^\d{7,15}$/.test(formData.phoneNumber))
+    if (!formData.phoneNumber.trim() || !/^\+?\d{7,15}$/.test(formData.phoneNumber))
       errors.push("Valid phone number required (7-15 digits)");
     else if (!/^(\+\d{8,15})$/.test(fullPhone))
       errors.push("Valid phone with country code required (e.g., +94769278958)");
