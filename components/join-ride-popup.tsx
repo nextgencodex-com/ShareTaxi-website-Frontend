@@ -734,7 +734,7 @@ export function JoinRidePopup({
         personalData={{
           fullName: formData.fullName,
           email: formData.email,
-          phone: formData.phoneNumber,
+          phone: `${formData.phoneCountry || ""}${formData.phoneNumber || ""}`,
           specialRequests: formData.specialRequests,
           seatCount: formData.seatCount.toString(),
           paymentMethod: formData.paymentMethod,
