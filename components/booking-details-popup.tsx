@@ -201,7 +201,7 @@ export function BookingDetailsPopup({
     fullName: formData.fullName,
     email: formData.email,
     // keep phone as local number only (other components prepend +94 or use country separately)
-    phone: `${formData.phoneNumber || ""}`,
+     phone: `${formData.phoneCountry || ""}${formData.phoneNumber || ""}`,
     specialRequests: formData.specialRequests,
     seatCount: formData.seatCount,
     paymentMethod: formData.paymentMethod,

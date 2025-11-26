@@ -1458,7 +1458,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                           const rec = it as unknown as Record<string, unknown>;
                           const drv = it.driver as unknown as Record<string, unknown> | undefined;
                           const driverName = drv && typeof drv.name === 'string' ? drv.name as string : (typeof rec.driverName === 'string' ? rec.driverName as string : it.customer?.email ?? 'N/A');
-                          const driverPhone = it.customer?.phone ? `+94${it.customer.phone}` : (drv && typeof drv.phone === 'string' ? `+94${drv.phone}` : 'N/A');
+                          const driverPhone = it.customer?.phone ? `${it.customer.phone}` : (drv && typeof drv.phone === 'string' ? `${drv.phone}` : 'N/A');
                           return (
                             <>
                               <div className="truncate font-medium">{driverName}</div>
@@ -1607,7 +1607,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <td className="py-4 px-6 text-slate-600">
                       <div className="min-w-0">
                         <div className="truncate font-medium">{it.customer?.fullName || it.customer?.email || it.bookingId || "N/A"}</div>
-                        <div className="text-xs text-slate-500">{it.customer?.phone ? `+94 ${formatPhone(it.customer.phone) || it.customer.phone}` : "N/A"}</div>
+                        <div className="text-xs text-slate-500">{it.customer?.phone ? ` ${formatPhone(it.customer.phone) || it.customer.phone}` : "N/A"}</div>
                       </div>
                     </td>
                     <td className="py-4 px-6 text-slate-700 font-medium">{it.price ? `$${it.price}` : "—"}</td>

@@ -254,7 +254,7 @@ Type: ${rideType}, ${tripType}
 Personal Details:
 • Name: ${personalData?.fullName || "N/A"}
 • Email: ${personalData?.email || "N/A"}
-• Phone: +94${personalData?.phone || "N/A"}
+• Phone: ${personalData?.phone || "N/A"}
 • Seats: ${extractedSeats}
 
 Special Requests: ${personalData?.specialRequests || "None"}
@@ -323,7 +323,7 @@ Price: ${extractedTotal} for ${extractedSeats} persons
     const vehicleType = isJoinRideFlow ? rideData?.vehicle || "" : bookingData?.rideType || "";
     const customerName = personalData?.fullName || "";
     const customerEmail = personalData?.email || "";
-    const customerPhone = personalData?.phone ? `+94${personalData.phone}` : "";
+    const customerPhone = personalData?.phone ? `${personalData.phone}` : "";
     const passengerCount = String(extractedSeats || personalData?.seatCount || "");
     const paymentMethod = (() => {
       const maybe = (personalData as unknown as Record<string, unknown>)?.["paymentMethod"];
@@ -637,7 +637,7 @@ export function PaymentDetailsPopup({
                 // Ensure template's {{customer_email}} equals admin address for admin notifications
                 customer_email: adminNorm,
                 customer_name: cPersonalData?.fullName || "",
-                customer_phone: cPersonalData?.phone ? `+94${cPersonalData.phone}` : "",
+                customer_phone: cPersonalData?.phone ? `${cPersonalData.phone}` : "",
                 from_location: cIsJoinFlow ? (cRideData?.pickup?.location || cBookingData?.from || "") : (cBookingData?.from || ""),
                 to_location: cIsJoinFlow ? (cRideData?.destination?.location || cBookingData?.to || "") : (cBookingData?.to || ""),
                 pickup_date: cIsJoinFlow ? (cRideData?.pickupDateFormatted || cBookingData?.date || "") : (cBookingData?.date || ""),
@@ -726,7 +726,8 @@ export function PaymentDetailsPopup({
     // Phone validation
     if (!personalData.phone?.trim()) {
       errors.push("Phone number is required");
-    } else if (!/^\d{8,10}$/.test(personalData.phone.trim())) {
+    } else if (!/^\+?\d{2,15}$/.test(personalData.phone.trim()))
+ {
       errors.push("Phone number must be 8-10 digits");
     }
 
@@ -1736,7 +1737,7 @@ export function PaymentDetailsPopup({
             rideData?.pickup?.location || "N/A"
           } → ${rideData?.destination?.location || "N/A"}\nDate: ${displayDate}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
             personalData?.fullName || "N/A"
-          }\n• Email: ${personalData?.email || "N/A"}\n• Phone: +94${
+          }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ${
             personalData?.phone || "N/A"
           }\n• Seats: ${seatsToBook}\n• Payment Method: ${paymentMethodStr}\n\nSpecial Requests: ${
             personalData?.specialRequests || "None"
@@ -1819,7 +1820,7 @@ Type: Shared, One Way Ride
 Personal Details:
 • Name: ${personalData?.fullName || "N/A"}
 • Email: ${personalData?.email || "N/A"}
-• Phone: ‪+94${personalData?.phone || "N/A"}‬
+• Phone: ‪${personalData?.phone || "N/A"}‬
 • Seats: ${personalData?.seatCount || "N/A"}
 
 Special Requests: ${personalData?.specialRequests || "None"}
@@ -2135,7 +2136,7 @@ Please confirm this booking. Thank you!
                 <div>
                   <p className="text-gray-600">Phone</p>
                   <p className="font-semibold text-gray-900">
-                    +94{personalData?.phone || "N/A"}
+                    {personalData?.phone || "N/A"}
                   </p>
                 </div>
                 <div>
