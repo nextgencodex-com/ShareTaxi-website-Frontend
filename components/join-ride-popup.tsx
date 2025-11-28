@@ -314,7 +314,7 @@ export function JoinRidePopup({
                     onChange={(e) =>
                       handleInputChange("phoneCountry", e.target.value)
                     }
-                    className="w-32 bg-blue-50 border-0 h-12 rounded-md px-3"
+                    className="w-13 bg-blue-50 border-0 h-12 rounded-md px-0"
                   >
                     <option value="+93">+93 (AF - Afghanistan)</option>
                     <option value="+355">+355 (AL - Albania)</option>
