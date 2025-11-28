@@ -265,7 +265,7 @@ Price: ${extractedTotal} for ${extractedSeats} persons
   // Generate a booking code and helpful URLs for confirm/cancel (client-side)
   const bookingCode = `BK-${Date.now()}`;
   // Create mailto links so clicking Confirm/Cancel in the email opens an email to the admin
-  const adminNotificationEmail = "bookingsharetaxisrilanka@gmail.com";
+  const adminNotificationEmail = "therath2426@gmail.com";
   const nameForBody = personalData?.fullName ? String(personalData.fullName) : "N/A";
   const baseBody = `Booking ID: ${bookingCode}\nName: ${nameForBody}\n`;
   const confirmSubject = encodeURIComponent(`Booking ${bookingCode} - Confirm`);
@@ -353,6 +353,7 @@ Price: ${extractedTotal} for ${extractedSeats} persons
         customer_name: customerName,
         // Ensure template's {{customer_email}} matches the actual recipient (admin or customer)
         customer_email: toEmail,
+        personal_email: toEmail,
         customer_phone: customerPhone,
         passenger_count: passengerCount,
         payment_method: paymentMethod,
@@ -520,7 +521,7 @@ export function PaymentDetailsPopup({
   const [bookingInProgress, setBookingInProgress] = useState(false);
 
   // Admin notification email (centralized) — avoid sending duplicate notifications
-  const ADMIN_NOTIFICATION_EMAIL = "bookingsharetaxisrilanka@gmail.com";
+  const ADMIN_NOTIFICATION_EMAIL = "therath2426@gmail.com";
   // Constant total seats for vehicles; entered seat count is how many seats the user is booking
   const TOTAL_SEATS = 10;
 
@@ -636,6 +637,7 @@ export function PaymentDetailsPopup({
                 subject: opts?.adminSubject || "[Admin] New Booking Request",
                 // Ensure template's {{customer_email}} equals admin address for admin notifications
                 customer_email: adminNorm,
+                personal_email: cPersonalData?.email || "",
                 customer_name: cPersonalData?.fullName || "",
                 customer_phone: cPersonalData?.phone ? `${cPersonalData.phone}` : "",
                 from_location: cIsJoinFlow ? (cRideData?.pickup?.location || cBookingData?.from || "") : (cBookingData?.from || ""),
@@ -1517,7 +1519,7 @@ export function PaymentDetailsPopup({
       //     regularPerPersonFare,
       //   ],
       //   adminSubject: "[Admin] New Booking Request",
-      //   adminEmail: "bookingsharetaxisrilanka@gmail.com",
+      //   adminEmail: "therath2426@gmail.com",
       // });
 
       // Persist booked ride unless we already created the ride above
