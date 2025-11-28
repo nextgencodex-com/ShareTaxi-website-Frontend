@@ -265,7 +265,7 @@ Price: ${extractedTotal} for ${extractedSeats} persons
   // Generate a booking code and helpful URLs for confirm/cancel (client-side)
   const bookingCode = `BK-${Date.now()}`;
   // Create mailto links so clicking Confirm/Cancel in the email opens an email to the admin
-  const adminNotificationEmail = "therath2426@gmail.com";
+  const adminNotificationEmail = "bookingsharetaxisrilanka@gmail.com";
   const nameForBody = personalData?.fullName ? String(personalData.fullName) : "N/A";
   const baseBody = `Booking ID: ${bookingCode}\nName: ${nameForBody}\n`;
   const confirmSubject = encodeURIComponent(`Booking ${bookingCode} - Confirm`);
@@ -521,7 +521,7 @@ export function PaymentDetailsPopup({
   const [bookingInProgress, setBookingInProgress] = useState(false);
 
   // Admin notification email (centralized) — avoid sending duplicate notifications
-  const ADMIN_NOTIFICATION_EMAIL = "therath2426@gmail.com";
+  const ADMIN_NOTIFICATION_EMAIL = "bookingsharetaxisrilanka@gmail.com";
   // Constant total seats for vehicles; entered seat count is how many seats the user is booking
   const TOTAL_SEATS = 10;
 
@@ -1519,7 +1519,7 @@ export function PaymentDetailsPopup({
       //     regularPerPersonFare,
       //   ],
       //   adminSubject: "[Admin] New Booking Request",
-      //   adminEmail: "therath2426@gmail.com",
+      //   adminEmail: "bookingsharetaxisrilanka@gmail.com",
       // });
 
       // Persist booked ride unless we already created the ride above
