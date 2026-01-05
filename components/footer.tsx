@@ -55,7 +55,7 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Hotline</p>
-                  <p className="text-sm">+94 11 234 5678</p>
+                  <p className="text-sm">+94 77 401 8001 </p>
                 </div>
               </div>
               <div className="flex items-start gap-3 text-gray-300 hover:text-white transition-colors duration-200 cursor-pointer group">
@@ -64,7 +64,7 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium">WhatsApp</p>
-                  <p className="text-sm">+94 75 962 7589</p>
+                  <p className="text-sm">+94 78 7018 001</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 text-gray-300 hover:text-white transition-colors duration-200 cursor-pointer group">
@@ -73,7 +73,7 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Email</p>
-                  <p className="text-sm">info@ridesharelanka.com</p>
+                  <p className="text-sm">info@sharetaxisrilanka.com</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 text-gray-300 hover:text-white transition-colors duration-200 cursor-pointer group">
@@ -82,12 +82,27 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Location</p>
-                  <p className="text-sm">123 Galle Road, Colombo 03, Sri Lanka</p>
+                  <p className="text-sm">Kandy, Sri Lanka</p>
                 </div>
               </div>
             </div>
           </div>
 
+          {/* Payment Methods Section */}
+          <div className="mt-8 pt-8 border-t border-gray-600/50">
+            <div className="text-center">
+              <p className="text-gray-400 text-sm mb-4">Accepted Payment Methods & Certifications</p>
+              <div className="flex justify-center">
+                <img 
+                  src="/images/icons.png" 
+                  alt="Payment Methods and Certifications" 
+                  className="h-15 object-contain max-w-full"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Copyright Section */}
           <div className="border-t border-gray-600/50 mt-12 pt-8">
             <div className="flex flex-col md:flex-row items-center justify-center gap-4 text-center">
               <p className="text-gray-400 text-sm">
@@ -101,7 +116,7 @@ export function Footer({ onAdminLoginClick }: FooterProps) {
                   onClick={() => onAdminLoginClick?.()}
                 >
                   <Shield className="h-4 w-4 mr-2" />
-                  Admin
+               
                 </Button>
               </div>
             </div>
