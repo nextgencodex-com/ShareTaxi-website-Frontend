@@ -791,7 +791,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                       {/* Fare Calculator for One-Way/Round-Trip - MOBILE RESPONSIVE FIX */}
                       <div className="space-y-3 bg-gray-50 p-3 sm:p-4 rounded-lg border">
                         <h4 className="flex items-center gap-2 font-semibold text-sm sm:text-base">
-                          <span className="text-lg">📍</span> Fare Calculator
+                          <span className="text-lg"> Per-person price</span> 
                         </h4>
                         <div className="flex gap-2">
                           {/*<Input
@@ -841,7 +841,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                     className="w-full bg-blue-500 text-white hover:bg-blue-600 py-3 text-base sm:text-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     size="lg"
                   >
-                    {!fareResults[tripType] || fareResults[tripType].includes("⚠️") ? "Calculate Fare First →" : "Next →"}
+                    {!fareResults[tripType] || fareResults[tripType].includes("⚠️") ? "Continue Ride →" : "Next →"}
                   </Button>
                 </div>
               </CardContent>
