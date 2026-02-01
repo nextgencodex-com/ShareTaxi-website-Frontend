@@ -640,7 +640,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                   </div>
 
                   <div className="space-y-6">
-                    <h3 className="text-lg font-semibold text-gray-800">Tour Details</h3>
+                    <h3 className="text-lg font-semibold text-gray-800">Ride Details</h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="from" className="text-gray-700 font-medium">

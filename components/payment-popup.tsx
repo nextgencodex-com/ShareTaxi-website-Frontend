@@ -1986,7 +1986,7 @@ Please confirm this booking. Thank you!
               </div>
               <div className="flex-1 h-1 bg-gray-300 rounded"></div>
               <div className="bg-yellow-500 text-white px-6 py-2 rounded-full font-semibold">
-                Payment
+              Check Availability
               </div>
             </div>
           </div>

@@ -152,7 +152,7 @@ export function JoinRidePopup({
             </div>
             <div className="flex-1 h-1 bg-gray-300 rounded"></div>
             <div className="bg-yellow-200 text-gray-600 px-6 py-2 rounded-full font-semibold">
-              Payment
+              Check Availability
             </div>
           </div>
         </div>
