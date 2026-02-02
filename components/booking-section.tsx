@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Calendar as CalendarIcon, ChevronDown, MapPin, ChevronUp, AlertTriangle } from "lucide-react"
 import dynamic from 'next/dynamic'
 import { BookingDetailsPopup } from "./booking-details-popup"
+import { PersonalDetailsPopup } from "./personal-rides/personal-details-popup"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -1019,6 +1020,28 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           from: tripType === 'multi-city' ? startingPoint : from,
           to,
           rideType,
+          date,
+          time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
+          passengers,
+          tripType,
+          destinations: tripType === 'multi-city' ? destinations : undefined,
+          startingPoint: tripType === 'multi-city' ? startingPoint : undefined,
+          mapDistance,
+          mapDuration,
+          calculatedFare: fareResults[tripType],
+        } : null}
+      />
+
+      <PersonalDetailsPopup
+        isOpen={showPersonalRidesPopup}
+        onClose={() => {
+          setShowPersonalRidesPopup(false)
+          resetForm()
+        }}
+        bookingData={showPersonalRidesPopup ? {
+          from: tripType === 'multi-city' ? startingPoint : from,
+          to,
+          rideType: "personal",
           date,
           time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
           passengers,

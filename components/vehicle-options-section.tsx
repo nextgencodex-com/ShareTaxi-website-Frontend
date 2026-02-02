@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Users, Briefcase, ShoppingBag, Filter, ChevronLeft, ChevronRight } from "lucide-react"
-import { BookRidePopup } from "./book-ride-popup"
+import { PersonalRidePopup } from "./personal-rides/personal-ride-popup"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useIsMobile } from "@/components/ui/use-mobile"
 
@@ -385,7 +385,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
         </div>
       </section>
 
-      <BookRidePopup isOpen={isPopupOpen} onClose={closePopup} vehicle={convertVehicleForBooking(selectedVehicle)} />
+      <PersonalRidePopup isOpen={isPopupOpen} onClose={closePopup} vehicle={convertVehicleForBooking(selectedVehicle)} />
     </>
   )
 }
