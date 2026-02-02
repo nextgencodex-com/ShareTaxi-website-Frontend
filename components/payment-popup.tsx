@@ -353,6 +353,7 @@ Price: ${extractedTotal} for ${extractedSeats} persons
         customer_name: customerName,
         // Ensure template's {{customer_email}} matches the actual recipient (admin or customer)
         customer_email: toEmail,
+        personal_email: toEmail,
         customer_phone: customerPhone,
         passenger_count: passengerCount,
         payment_method: paymentMethod,
@@ -636,6 +637,7 @@ export function PaymentDetailsPopup({
                 subject: opts?.adminSubject || "[Admin] New Booking Request",
                 // Ensure template's {{customer_email}} equals admin address for admin notifications
                 customer_email: adminNorm,
+                personal_email: cPersonalData?.email || "",
                 customer_name: cPersonalData?.fullName || "",
                 customer_phone: cPersonalData?.phone ? `${cPersonalData.phone}` : "",
                 from_location: cIsJoinFlow ? (cRideData?.pickup?.location || cBookingData?.from || "") : (cBookingData?.from || ""),

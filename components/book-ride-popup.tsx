@@ -114,6 +114,7 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
             vehicle_type: 'personal',
             customer_name: formData.name,
             customer_email: formData.email,
+            personal_email: formData.email,
             customer_phone: `${formData.phone}`,
             passenger_count: 1,
             payment_method: '',
