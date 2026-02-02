@@ -713,8 +713,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                   </div>
 
                   <div className="space-y-6">
-                    <h3 className="text-lg font-semibold text-gray-800">Tour Details</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <h3 className="text-lg font-semibold text-gray-800">Ride Details</h3>
+                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="from" className="text-gray-700 font-medium">
                             From
@@ -875,26 +875,9 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
                       {/* Fare Calculator for One-Way/Round-Trip - MOBILE RESPONSIVE FIX */}
                       <div className="space-y-3 bg-gray-50 p-3 sm:p-4 rounded-lg border">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <h4 className="flex items-center gap-2 font-semibold text-sm sm:text-base">
-                            <span className="text-lg">📍</span> Fare Calculator
-                          </h4>
-                          <Button 
-                            type="button"
-                            variant="outline" 
-                            size="sm"
-                            onClick={async () => {
-                              await refreshRates()
-                              // Force recalculation after refresh if we have distance
-                              if (mapDistance && parseFloat(mapDistance) > 0) {
-                                calculateFareForType(tripType, parseFloat(mapDistance))
-                              }
-                            }}
-                            className="text-xs h-7"
-                          >
-                            🔄 Refresh
-                          </Button>
-                        </div>
+                        <h4 className="flex items-center gap-2 font-semibold text-sm sm:text-base">
+                          <span className="text-lg"> Per-person price</span> 
+                        </h4>
                         <div className="flex gap-2">
                           {/*<Input
                             type="number"
@@ -941,7 +924,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                     className="w-full bg-blue-500 text-white hover:bg-blue-600 py-3 text-base sm:text-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     size="lg"
                   >
-                    {!fareResults[tripType] || fareResults[tripType].includes("⚠️") ? "Calculate Fare First →" : "Next →"}
+                    {!fareResults[tripType] || fareResults[tripType].includes("⚠️") ? "Continue Ride →" : "Next →"}
                   </Button>
                 </div>
               </CardContent>
