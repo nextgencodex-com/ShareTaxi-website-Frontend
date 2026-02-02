@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Calendar as CalendarIcon, ChevronDown, MapPin, ChevronUp, AlertTriangle } from "lucide-react"
 import dynamic from 'next/dynamic'
 import { BookingDetailsPopup } from "./booking-details-popup"
+import { PersonalRidesPopup } from "./personal-rides-popup"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -79,6 +80,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const [startingPoint, setStartingPoint] = useState("")
 
   const [showBookingPopup, setShowBookingPopup] = useState(false)
+  const [showPersonalRidesPopup, setShowPersonalRidesPopup] = useState(false)
   const [calendarOpen, setCalendarOpen] = useState(false)
 
   // Fare calculator state for each trip type
@@ -93,20 +95,30 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
 
-  // Auto-calculate fare when relevant values change
-  // calculateFareForType is declared below; move its declaration up so effect can reference it
+  
   const calculateFareForType = useCallback((tripType: string, distance: number) => {
     if (!distance || distance <= 0) {
       setFareResults(prev => ({ ...prev, [tripType]: "⚠️ Please enter a valid distance." }))
       return
     }
 
-    // Prefer backend rate if available, otherwise fall back to localStorage
-    const ratePerKm = typeof backendRatePerKm === 'number' && !isNaN(backendRatePerKm)
+   
+    const localRate = parseFloat(localStorage.getItem("ratePerKm") || "0")
+    const ratePerKmRaw = typeof backendRatePerKm === 'number' && !isNaN(backendRatePerKm) && backendRatePerKm > 0
       ? backendRatePerKm
-      : parseFloat(localStorage.getItem("ratePerKm") || "0")
+      : (localRate > 0 ? localRate : 0)
+    
+    // Don't calculate if we don't have a valid rate yet
+    if (ratePerKmRaw <= 0) {
+      const currentRate = localStorage.getItem("ratePerKm")
+      const rateInfo = currentRate ? ` (localStorage: ${currentRate})` : ""
+      setFareResults(prev => ({ ...prev, [tripType]: `⚠️ No rate configured. Please set a rate in admin panel first.${rateInfo}` }))
+      return
+    }
+    
+    const ratePerKm = ratePerKmRaw
 
-    // Apply trip multiplier for return trips and other trip types
+    
     const tripMultiplier = getTripMultiplier(tripType as "one-way" | "round-trip" | "multi-city")
 
     let fareDisplay = ""
@@ -119,11 +131,10 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
         fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
       }
     } else {
-      const baseFullFare = calculateIndividualFare(distance, ratePerKm)
-      const fullFare = baseFullFare * tripMultiplier
-      const totalFare = fullFare * passengers
-      const perPersonFare = totalFare / passengers
-      fareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${passengers}<br>💰 Per Person: <span style="color:green; font-size: 16px; font-weight: bold;">$${perPersonFare.toFixed(2)}</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
+      // Personal ride - distance-based using admin rate per km
+      const totalFare = distance * ratePerKm * tripMultiplier
+      const formattedDistance = Number.isFinite(distance) ? distance.toFixed(1) : distance
+      fareDisplay = `🚗 Distance: ${formattedDistance} km<br>💰 Rate: <span style="color:green; font-size: 16px; font-weight: bold;">$${ratePerKm.toFixed(2)}/km</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
       if (tripMultiplier > 1) {
         fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
       }
@@ -132,24 +143,80 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     setFareResults(prev => ({ ...prev, [tripType]: fareDisplay }))
   }, [rideType, backendRatePerKm, passengers])
 
+  // Function to refresh rates from backend and localStorage
+  const refreshRates = useCallback(async () => {
+    console.log("🔄 Refreshing rates...")
+    // Always seed from any locally saved rate so UI is responsive even if backend is down
+    const storedRateStr = localStorage.getItem("ratePerKm")
+    const storedRate = storedRateStr ? parseFloat(storedRateStr) : NaN
+    console.log("📦 localStorage rate:", storedRateStr, "→", storedRate)
+    
+    // Clean up invalid rates from localStorage (0 or negative)
+    if (!isNaN(storedRate) && storedRate <= 0) {
+      console.log("❌ Removing invalid rate from localStorage")
+      localStorage.removeItem("ratePerKm")
+      setBackendRatePerKm(null)
+    }
+    
+    // Use stored rate immediately if valid
+    if (!isNaN(storedRate) && storedRate > 0) {
+      console.log("✅ Using localStorage rate:", storedRate)
+      setBackendRatePerKm(storedRate)
+    }
+
+    try {
+      const res = await fetch('http://localhost:5000/api/rates')
+      if (!res.ok) throw new Error(`API ${res.status}`)
+      const json = await res.json()
+      const rates = json?.data?.rates
+      console.log("🌐 Backend rates:", rates)
+
+      const nextRatePerKm = typeof rates?.ratePerKm === 'number' && rates.ratePerKm > 0
+        ? rates.ratePerKm
+        : (!isNaN(storedRate) && storedRate > 0 ? storedRate : null)
+
+      if (typeof nextRatePerKm === 'number' && !isNaN(nextRatePerKm) && nextRatePerKm > 0) {
+        console.log("✅ Setting rate to:", nextRatePerKm)
+        setBackendRatePerKm(nextRatePerKm)
+        // Also update localStorage to keep it in sync
+        localStorage.setItem("ratePerKm", nextRatePerKm.toString())
+      } else {
+        console.log("⚠️ No valid rate available")
+      }
+    } catch (err) {
+      console.log("❌ Failed to fetch rates from backend:", err)
+      if (!isNaN(storedRate) && storedRate > 0) {
+        setBackendRatePerKm(storedRate)
+      }
+    }
+  }, [])
+
   // load rates from backend on mount
   useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const res = await fetch('http://localhost:5000/api/rates')
-        if (!res.ok) throw new Error(`API ${res.status}`)
-        const json = await res.json()
-        const rates = json?.data?.rates
-        if (mounted && rates && typeof rates.ratePerKm === 'number') {
-          setBackendRatePerKm(rates.ratePerKm)
-        }
-      } catch {
-        // ignore - we'll use localStorage fallback
+    refreshRates()
+  }, [refreshRates])
+
+  // Listen for localStorage changes (from admin panel in same or different tab)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'ratePerKm') {
+        refreshRates()
       }
-    })()
-    return () => { mounted = false }
-  }, [])
+    }
+    
+    // Listen for custom event (same-page updates)
+    const handleCustomRateUpdate = () => {
+      refreshRates()
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('ratesUpdated', handleCustomRateUpdate)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('ratesUpdated', handleCustomRateUpdate)
+    }
+  }, [refreshRates])
 
   // --- Google Places Autocomplete for the "From" input ---
   // Lightweight typing for the subset of google.maps we use here
@@ -355,7 +422,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     if (distance > 0) {
       calculateFareForType(tripType, distance)
     }
-  }, [tripType, rideType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance, calculateFareForType, backendRatePerKm, passengers])
+  }, [tripType, rideType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance, calculateFareForType, backendRatePerKm])
 
   // helper states removed: selectedTimeSlot, customTime
   // helper functions for dynamically adding/removing destinations and passenger change
@@ -455,7 +522,14 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
     // Get the calculated fare for current trip type
   const currentFare = fareResults[tripType]
-  setShowBookingPopup(true)
+  
+  // For personal rides, show the personal rides popup first to review fare
+  // For shared rides, show booking details popup directly
+  if (rideType === "personal") {
+    setShowPersonalRidesPopup(true)
+  } else {
+    setShowBookingPopup(true)
+  }
 
     // Prepare booking payload to send to backend if onAddSharedRide not provided
     const bookingPayload = {
@@ -582,7 +656,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           <div className="space-y-8">
             <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:space-y-0 space-y-8">
               <Card className="bg-white border-gray-200 shadow-lg">
-                <CardContent className="p-8">
+                <CardContent className="p-6 sm:p-8">
                 <div className="space-y-6">
                   <div className="flex items-center justify-center mb-8">
                     <div className="flex items-center space-x-4">
@@ -641,7 +715,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
                   <div className="space-y-6">
                     <h3 className="text-lg font-semibold text-gray-800">Tour Details</h3>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="from" className="text-gray-700 font-medium">
                             From
@@ -671,7 +745,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           />
                         </div>
                       </div>
-                      <div className="flex items-center space-x-6">
+                      <div className="flex flex-wrap items-center gap-3 sm:gap-6">
                         <div className="flex items-center space-x-2">
                           <input
                             type="radio"
@@ -686,8 +760,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                             Shared
                           </Label>
                         </div>
-                        {/* Personal ride option commented out */}
-                        {/* <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2">
                           <input
                             type="radio"
                             id="personal"
@@ -700,7 +773,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           <Label htmlFor="personal" className="text-gray-700 font-medium">
                             Personal
                           </Label>
-                        </div> */}
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="pickup-date" className="text-gray-700 font-medium">
@@ -740,7 +813,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                       </div>
                       <div className="space-y-2">
                         <Label className="text-gray-700 font-medium">Pickup Time</Label>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
                           <div className="relative flex-1">
                             <Input
                               type="time"
@@ -762,37 +835,67 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                         </div>
                         <p className="text-xs text-gray-500">Enter start and end time (will be saved as e.g. 12.30 - 2.00)</p>
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-gray-700 font-medium">Seats to Book</Label>
-                        <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
-                          <button
-                            type="button"
-                            onClick={() => setPassengers(Math.max(1, passengers - 1))}
-                            disabled={passengers <= 1}
-                            className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
-                          >
-                            -
-                          </button>
-                          <span className="flex-1 text-center font-semibold text-gray-900">
-                            {passengers}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setPassengers(Math.min(TOTAL_SEATS, passengers + 1))}
-                            disabled={passengers >= TOTAL_SEATS}
-                            className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
-                          >
-                            +
-                          </button>
+                      
+                      {rideType === "shared" ? (
+                        <div className="space-y-2">
+                          <Label className="text-gray-700 font-medium">Seats to Book</Label>
+                          <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
+                            <button
+                              type="button"
+                              onClick={() => setPassengers(Math.max(1, passengers - 1))}
+                              disabled={passengers <= 1}
+                              className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
+                            >
+                              -
+                            </button>
+                            <span className="flex-1 text-center font-semibold text-gray-900">
+                              {passengers}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPassengers(Math.min(TOTAL_SEATS, passengers + 1))}
+                              disabled={passengers >= TOTAL_SEATS}
+                              className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <p className="text-sm text-gray-600">Available seats: <span className="font-semibold">{Math.max(0, TOTAL_SEATS - passengers)}/{TOTAL_SEATS}</span></p>
                         </div>
-                        <p className="text-sm text-gray-600">Available seats: <span className="font-semibold">{Math.max(0, TOTAL_SEATS - passengers)}/{TOTAL_SEATS}</span></p>
-                      </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label className="text-gray-700 font-medium">Vehicle Information</Label>
+                          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                            <p className="text-sm text-gray-700">
+                              <span className="font-semibold">Available Seats:</span> <span className="font-bold text-blue-600">{TOTAL_SEATS}</span>
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">Full vehicle at your service</p>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Fare Calculator for One-Way/Round-Trip - MOBILE RESPONSIVE FIX */}
                       <div className="space-y-3 bg-gray-50 p-3 sm:p-4 rounded-lg border">
-                        <h4 className="flex items-center gap-2 font-semibold text-sm sm:text-base">
-                          <span className="text-lg">📍</span> Fare Calculator
-                        </h4>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h4 className="flex items-center gap-2 font-semibold text-sm sm:text-base">
+                            <span className="text-lg">📍</span> Fare Calculator
+                          </h4>
+                          <Button 
+                            type="button"
+                            variant="outline" 
+                            size="sm"
+                            onClick={async () => {
+                              await refreshRates()
+                              // Force recalculation after refresh if we have distance
+                              if (mapDistance && parseFloat(mapDistance) > 0) {
+                                calculateFareForType(tripType, parseFloat(mapDistance))
+                              }
+                            }}
+                            className="text-xs h-7"
+                          >
+                            🔄 Refresh
+                          </Button>
+                        </div>
                         <div className="flex gap-2">
                           {/*<Input
                             type="number"
@@ -817,17 +920,15 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           </Button> */}
                         </div>
                         {(fareResults["one-way"] || fareResults["round-trip"]) && (
-                          <div className="p-2 sm:p-3 bg-white border rounded text-xs sm:text-sm overflow-x-auto">
-                            <div className="min-w-[250px]">
-                              <div className="space-y-1.5 sm:space-y-2">
-                                {fareResults[tripType]?.split('<br>').map((line, idx) => (
-                                  <div 
-                                    key={idx} 
-                                    dangerouslySetInnerHTML={{ __html: line }}
-                                    className="break-words"
-                                  />
-                                ))}
-                              </div>
+                          <div className="p-2 sm:p-3 bg-white border rounded text-xs sm:text-sm">
+                            <div className="space-y-1.5 sm:space-y-2 break-words">
+                              {fareResults[tripType]?.split('<br>').map((line, idx) => (
+                                <div
+                                  key={idx}
+                                  dangerouslySetInnerHTML={{ __html: line }}
+                                  className="break-words"
+                                />
+                              ))}
                             </div>
                           </div>
                         )}
@@ -933,6 +1034,28 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
         }}
         onAddSharedRide={onAddSharedRide}
         bookingData={showBookingPopup ? {
+          from: tripType === 'multi-city' ? startingPoint : from,
+          to,
+          rideType,
+          date,
+          time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
+          passengers,
+          tripType,
+          destinations: tripType === 'multi-city' ? destinations : undefined,
+          startingPoint: tripType === 'multi-city' ? startingPoint : undefined,
+          mapDistance,
+          mapDuration,
+          calculatedFare: fareResults[tripType],
+        } : null}
+      />
+
+      <PersonalRidesPopup
+        isOpen={showPersonalRidesPopup}
+        onClose={() => {
+          setShowPersonalRidesPopup(false)
+          resetForm()
+        }}
+        bookingData={showPersonalRidesPopup ? {
           from: tripType === 'multi-city' ? startingPoint : from,
           to,
           rideType,

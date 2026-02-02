@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { X, MapPin, Clock, Users, ArrowLeft, AlertTriangle } from "lucide-react";
 import { PaymentDetailsPopup } from "./payment-popup";
+import { PersonalRideConfirmationPopup } from "./personal-ride-confirmation-popup";
 
 interface Destination {
   id: string;
@@ -55,11 +56,40 @@ export function BookingDetailsPopup({
   });
 
   const [showPaymentPopup, setShowPaymentPopup] = useState(false);
+  const [showPersonalConfirmation, setShowPersonalConfirmation] = useState(false);
   const [currentBookingData, setCurrentBookingData] = useState<BookingData | null>(bookingData);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
+
+  // Hoisted to avoid temporal dead zone when effects run on mount
+  function recalculateFareWithNewSeats(seats: number) {
+    if (!currentBookingData?.calculatedFare) return;
+    const rateMatch = currentBookingData.calculatedFare.match(/Rate:\s*\$([0-9.]+)/);
+    const distanceMatch = currentBookingData.calculatedFare.match(/Distance:\s*([0-9.]+)/);
+    if (!rateMatch || !distanceMatch) return;
+    const rate = parseFloat(rateMatch[1]);
+    const distance = parseFloat(distanceMatch[1]);
+    let newFareDisplay = "";
+
+    if (currentBookingData.rideType === "shared") {
+      const perPersonFare = (distance * rate) / 4;
+      const totalPrice = perPersonFare * seats;
+      newFareDisplay = `🚗 Distance: ${distance} km<br>👥 Persons: ${seats}<br><span style="color:blue; font-size:18px; font-weight:bold;">Total Price: $${totalPrice.toFixed(
+        2
+      )}</span>`;
+    } else {
+      const totalFare = distance * rate;
+      newFareDisplay = `🚗 Distance: ${distance} km<br>💰 Rate: <span style="color:green; font-size:16px; font-weight:bold;">$${rate.toFixed(
+        2
+      )}/km</span><br>👥 Persons: ${seats}<br><span style="color:blue; font-size:18px; font-weight:bold;">Total Price: $${totalFare.toFixed(
+        2
+      )}</span>`;
+    }
+
+    setCurrentBookingData((prev) => (prev ? { ...prev, calculatedFare: newFareDisplay } : null));
+  }
 
   // ✅ keep seatCount synced when parent updates passengers
   useEffect(() => {
@@ -150,31 +180,6 @@ export function BookingDetailsPopup({
     recalculateFareWithNewSeats(newSeatCount);
   };
 
-  const recalculateFareWithNewSeats = (seats: number) => {
-    if (!currentBookingData?.calculatedFare) return;
-    const rateMatch = currentBookingData.calculatedFare.match(/Rate:\s*\$([0-9.]+)/);
-    const distanceMatch = currentBookingData.calculatedFare.match(/Distance:\s*([0-9.]+)/);
-    if (!rateMatch || !distanceMatch) return;
-    const rate = parseFloat(rateMatch[1]);
-    const distance = parseFloat(distanceMatch[1]);
-    let newFareDisplay = "";
-
-    if (currentBookingData.rideType === "shared") {
-      const perPersonFare = (distance * rate) / 4;
-      const totalPrice = perPersonFare * seats;
-      newFareDisplay = `🚗 Distance: ${distance} km<br>👥 Persons: ${seats}<br><span style="color:blue; font-size:18px; font-weight:bold;">Total Price: $${totalPrice.toFixed(
-        2
-      )}</span>`;
-    } else {
-      const totalFare = distance * rate * seats;
-      newFareDisplay = `🚗 Distance: ${distance} km<br>👥 Persons: ${seats}<br><span style="color:blue; font-size:18px; font-weight:bold;">Total Price: $${totalFare.toFixed(
-        2
-      )}</span>`;
-    }
-
-    setCurrentBookingData((prev) => (prev ? { ...prev, calculatedFare: newFareDisplay } : null));
-  };
-
   const validateFormData = () => {
     const errors: string[] = [];
     if (!formData.fullName.trim()) errors.push("Full name is required");
@@ -202,8 +207,15 @@ export function BookingDetailsPopup({
       return;
     }
     setValidationErrors([]);
-    if (bookingData.rideType === "shared") onAddSharedRide?.(bookingData);
-    setShowPaymentPopup(true);
+    
+    // For personal rides, show confirmation directly instead of payment popup
+    if (bookingData.rideType === "personal") {
+      setShowPersonalConfirmation(true);
+    } else {
+      // For shared rides, proceed with payment popup
+      if (bookingData.rideType === "shared") onAddSharedRide?.(bookingData);
+      setShowPaymentPopup(true);
+    }
   };
 
   const clearValidationErrors = () => {
@@ -211,6 +223,11 @@ export function BookingDetailsPopup({
   };
 
   const handleClosePaymentPopup = () => setShowPaymentPopup(false);
+  
+  const handleClosePersonalConfirmation = () => {
+    setShowPersonalConfirmation(false);
+    onClose(); // Close the booking details popup as well
+  };
 
   // Compose personalData object expected by PaymentDetailsPopup
   const personalDataForPopup = {
@@ -738,6 +755,13 @@ export function BookingDetailsPopup({
         isOpen={showPaymentPopup}
         onClose={handleClosePaymentPopup}
         onBack={handleClosePaymentPopup}
+        bookingData={currentBookingData || bookingData}
+        personalData={personalDataForPopup}
+      />
+
+      <PersonalRideConfirmationPopup
+        isOpen={showPersonalConfirmation}
+        onClose={handleClosePersonalConfirmation}
         bookingData={currentBookingData || bookingData}
         personalData={personalDataForPopup}
       />
