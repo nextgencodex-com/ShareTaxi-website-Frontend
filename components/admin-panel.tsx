@@ -263,8 +263,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           if (!res.ok) throw new Error(`API ${res.status}`);
           const json = await res.json();
           const rates = json?.data?.rates;
-          if (rates) {
-            setRatePerKm(String(rates.ratePerKm ?? ''));
+          if (rates && typeof rates.ratePerKm === 'number' && rates.ratePerKm > 0) {
+            setRatePerKm(String(rates.ratePerKm));
             setRateLKRPerKm(String(rates.rateLKRPerKm ?? ''));
             setExchangeRate(String(rates.exchangeRate ?? ''));
             setCurrentSavedRate(`Current Rate: $${Number(rates.ratePerKm).toFixed(2)} per KM (Rs.${Number(rates.rateLKRPerKm).toFixed(2)})`);
@@ -276,13 +276,16 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           const savedExchangeRate = localStorage.getItem("exchangeRate");
           if (savedRate) {
             const usdRate = parseFloat(savedRate);
-            setRatePerKm(usdRate.toString());
-            if (savedLKRRate && savedExchangeRate) {
-              setRateLKRPerKm(savedLKRRate);
-              setExchangeRate(savedExchangeRate);
-              setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM (Rs.${parseFloat(savedLKRRate).toFixed(2)})`);
-            } else {
-              setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM`);
+            // Only use saved rate if it's valid and positive
+            if (!isNaN(usdRate) && usdRate > 0) {
+              setRatePerKm(usdRate.toString());
+              if (savedLKRRate && savedExchangeRate) {
+                setRateLKRPerKm(savedLKRRate);
+                setExchangeRate(savedExchangeRate);
+                setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM (Rs.${parseFloat(savedLKRRate).toFixed(2)})`);
+              } else {
+                setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM`);
+              }
             }
           }
         }
@@ -955,7 +958,17 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     const usdRate = parseFloat(ratePerKm);
     const currentExchangeRate = parseFloat(exchangeRate) || 330;
     const lkrRate = parseFloat(rateLKRPerKm) || usdRate * currentExchangeRate;
-    // Persist to backend and then update local display
+    
+    // Always save to localStorage first for immediate use
+    localStorage.setItem("ratePerKm", usdRate.toString());
+    localStorage.setItem("rateLKRPerKm", lkrRate.toFixed(2));
+    localStorage.setItem("exchangeRate", currentExchangeRate.toString());
+    setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM (Rs.${lkrRate.toFixed(2)})`);
+    
+    // Notify other components that rates have been updated
+    window.dispatchEvent(new Event('ratesUpdated'));
+    
+    // Try to persist to backend as well
     (async () => {
       try {
         const res = await fetch('http://localhost:5000/api/rates', {
@@ -966,23 +979,32 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         if (!res.ok) throw new Error(`API ${res.status}`);
         const json = await res.json();
         const saved = json?.data?.rates;
-        if (saved) {
-          setRatePerKm(String(saved.ratePerKm ?? ''));
+        if (saved && typeof saved.ratePerKm === 'number' && saved.ratePerKm > 0) {
+          setRatePerKm(String(saved.ratePerKm));
           setRateLKRPerKm(String(saved.rateLKRPerKm ?? ''));
           setExchangeRate(String(saved.exchangeRate ?? ''));
           setCurrentSavedRate(`Current Rate: $${Number(saved.ratePerKm).toFixed(2)} per KM (Rs.${Number(saved.rateLKRPerKm).toFixed(2)})`);
-          setRateStatus('✅ Rate saved successfully!');
+
+          // Update localStorage with server values
+          if (typeof saved.ratePerKm === 'number') {
+            localStorage.setItem('ratePerKm', saved.ratePerKm.toString());
+          }
+          if (typeof saved.rateLKRPerKm === 'number') {
+            localStorage.setItem('rateLKRPerKm', saved.rateLKRPerKm.toString());
+          }
+          if (typeof saved.exchangeRate === 'number') {
+            localStorage.setItem('exchangeRate', saved.exchangeRate.toString());
+          }
+
+          setRateStatus('✅ Rate saved successfully (backend + local)!');
+          window.dispatchEvent(new Event('ratesUpdated'));
           setTimeout(() => setRateStatus(''), 3000);
           return;
         }
         throw new Error('Invalid response');
       } catch (err) {
-        console.error('Failed to save rate to server, falling back to localStorage:', err);
-        localStorage.setItem("ratePerKm", usdRate.toString());
-        localStorage.setItem("rateLKRPerKm", lkrRate.toFixed(2));
-        localStorage.setItem("exchangeRate", currentExchangeRate.toString());
-        setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM (Rs.${lkrRate.toFixed(2)})`);
-        setRateStatus("✅ Rate saved locally (server unavailable)");
+        console.error('Backend not available, using local storage only:', err);
+        setRateStatus("✅ Rate saved locally (backend unavailable)");
         setTimeout(() => setRateStatus(""), 3000);
       }
     })();
