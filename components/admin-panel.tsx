@@ -17,16 +17,13 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogClose,
 } from "@/components/ui/dialog";
 import {
   ArrowLeft,
-  X,
   MapPin,
   Users,
   Car,
   DollarSign,
-  TrendingUp,
   Menu,
   Search,
   Eye,
@@ -38,6 +35,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { Footer } from "@/components/footer";
+import emailjs from "@emailjs/browser";
 
 /**
  * AdminPanel
@@ -83,7 +81,9 @@ interface RideData {
   };
   passengers?: string;
   handCarry?: string;
+  luggage?: string;
   price?: string;
+  notes?: string;
   customer?: {
     fullName?: string;
     email?: string;
@@ -98,6 +98,7 @@ interface VehicleData {
   name: string;
   price: string;
   passengers: string;
+  luggage?: string;
   handCarry: string;
   image: string;
   features: string[];
@@ -114,7 +115,7 @@ interface AdminPanelProps {
 /* ---------- Helper utilities ---------- */
 
 const generateBookingId = () =>
-  "BK-" + Date.now().toString(36).toUpperCase().slice(-8);
+  "Ref-" + Date.now().toString(36).toUpperCase().slice(-8);
 
 const localKeys = {
   SHARED_RIDES: "admin_shared_rides_v1",
@@ -144,12 +145,95 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   // ---- Dialog states ---
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<RideData | null>(null);
+  const [passengersDialogOpen, setPassengersDialogOpen] = useState(false);
+  const [selectedRideForPassengers, setSelectedRideForPassengers] = useState<RideData | null>(null);
+  // Helper to safely extract a location string from either a string or an object like {location: string}
+  const formatLocation = (v: unknown) => {
+    if (!v && v !== 0) return 'N/A'
+    if (typeof v === 'string') return v
+    try {
+      const rec = v as Record<string, unknown>
+      if (rec && typeof rec.location === 'string') return rec.location
+      // Fallback to stringify simple objects
+      if (typeof rec === 'object') return String((rec.location as unknown) ?? JSON.stringify(rec))
+    } catch {
+      // ignore and fallback
+    }
+    return String(v)
+  }
 
   // ---- persisted lists (localStorage-backed) ----
   const [sharedRides, setSharedRides] = useState<RideData[]>([]);
   const [vehicleBookings, setVehicleBookings] = useState<RideData[]>([]);
   const [personalRides, setPersonalRides] = useState<RideData[]>([]);
   const [vehicleCatalog, setVehicleCatalog] = useState<VehicleData[]>([]);
+
+  // vehicle bookings API state
+  const [vehicleBookingsLoading, setVehicleBookingsLoading] = useState<boolean>(false);
+  const [vehicleBookingsError, setVehicleBookingsError] = useState<string | null>(null);
+
+  // helper: convert possible Firestore Timestamp / string / Date-like value to ISO string
+  const toISOStringSafe = (v: unknown) => {
+    if (typeof v === 'string') return v;
+    if (v instanceof Date) return v.toISOString();
+    if (v && typeof (v as Record<string, unknown>).toDate === 'function') {
+      try {
+        return (v as { toDate: () => Date }).toDate().toISOString();
+      } catch {
+        return new Date().toISOString();
+      }
+    }
+    return new Date().toISOString();
+  };
+
+  // helper: format a value into a string suitable for <input type="datetime-local" /> (local timezone)
+  const formatToLocalDateTimeInput = (v: unknown) => {
+    try {
+      let d: Date;
+      if (typeof v === 'string' || v instanceof String) d = new Date(String(v));
+      else if (v instanceof Date) d = v;
+      else if (v && typeof (v as Record<string, unknown>).toDate === 'function') {
+        const asRec = v as { toDate?: () => Date };
+        d = typeof asRec.toDate === 'function' ? asRec.toDate() : new Date(String(v ?? ''));
+      } else d = new Date(String(v ?? ''));
+
+      if (isNaN(d.getTime())) return '';
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const year = d.getFullYear();
+      const month = pad(d.getMonth() + 1);
+      const day = pad(d.getDate());
+      const hours = pad(d.getHours());
+      const minutes = pad(d.getMinutes());
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
+  }
+
+  // format phone (basic): accepts strings like '2222222222' and returns '222 222 2222' or with +94 if needed
+  const formatPhone = (phone?: string | null) => {
+    if (!phone) return null;
+    const digits = phone.replace(/[^0-9]/g, '');
+    // if length looks like local (9-10) assume local and format groups
+    if (digits.length === 10) return `${digits.slice(0,3)} ${digits.slice(3,6)} ${digits.slice(6)}`;
+    if (digits.length === 9) return `${digits.slice(0,2)} ${digits.slice(2,5)} ${digits.slice(5)}`;
+    return digits;
+  };
+
+  // Helper: pick first meaningful (non-placeholder) string value
+  const pickNonPlaceholder = (...vals: unknown[]) => {
+    for (const v of vals) {
+      if (typeof v !== 'string') continue;
+      const t = v.trim();
+      if (!t) continue;
+      const lower = t.toLowerCase();
+      // Common placeholders to ignore
+      if (lower === 'n/a' || lower === 'na' || lower === 'not available' || lower === 'private customer') continue;
+      if (/^77x{3,}/i.test(t)) continue; // ignore masked example phone like 77XXXXXXX
+      return t;
+    }
+    return '';
+  };
 
   // ---- Rate state (reused from your original) ----
   const [ratePerKm, setRatePerKm] = useState("");
@@ -172,23 +256,43 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       if (p) setPersonalRides(JSON.parse(p));
       if (vc) setVehicleCatalog(JSON.parse(vc));
 
-      const savedRate = localStorage.getItem("ratePerKm");
-      const savedLKRRate = localStorage.getItem("rateLKRPerKm");
-      const savedExchangeRate = localStorage.getItem("exchangeRate");
-
-      if (savedRate) {
-        const usdRate = parseFloat(savedRate);
-        setRatePerKm(usdRate.toString());
-        if (savedLKRRate && savedExchangeRate) {
-          setRateLKRPerKm(savedLKRRate);
-          setExchangeRate(savedExchangeRate);
-          setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM (Rs.${parseFloat(savedLKRRate).toFixed(2)})`);
-        } else {
-          setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM`);
+      // Load rates from backend if available
+      (async () => {
+        try {
+          const res = await fetch('http://localhost:5000/api/rates');
+          if (!res.ok) throw new Error(`API ${res.status}`);
+          const json = await res.json();
+          const rates = json?.data?.rates;
+          if (rates && typeof rates.ratePerKm === 'number' && rates.ratePerKm > 0) {
+            setRatePerKm(String(rates.ratePerKm));
+            setRateLKRPerKm(String(rates.rateLKRPerKm ?? ''));
+            setExchangeRate(String(rates.exchangeRate ?? ''));
+            setCurrentSavedRate(`Current Rate: $${Number(rates.ratePerKm).toFixed(2)} per KM (Rs.${Number(rates.rateLKRPerKm).toFixed(2)})`);
+          }
+        } catch {
+          // fall back to any stored local values if backend isn't available
+          const savedRate = localStorage.getItem("ratePerKm");
+          const savedLKRRate = localStorage.getItem("rateLKRPerKm");
+          const savedExchangeRate = localStorage.getItem("exchangeRate");
+          if (savedRate) {
+            const usdRate = parseFloat(savedRate);
+            // Only use saved rate if it's valid and positive
+            if (!isNaN(usdRate) && usdRate > 0) {
+              setRatePerKm(usdRate.toString());
+              if (savedLKRRate && savedExchangeRate) {
+                setRateLKRPerKm(savedLKRRate);
+                setExchangeRate(savedExchangeRate);
+                setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM (Rs.${parseFloat(savedLKRRate).toFixed(2)})`);
+              } else {
+                setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM`);
+              }
+            }
+          }
         }
-      }
-    } catch (e) {
-      console.error("Failed to load admin data:", e);
+      })();
+    } catch (_e) {
+      const err = _e as Error | string | null;
+      console.error("Failed to load admin data:", err);
     }
   }, []);
 
@@ -212,58 +316,285 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
   /* ---------- small demo seed (if empty) ---------- */
   useEffect(() => {
-    if (sharedRides.length === 0) {
-      const seed: RideData[] = [
-        {
-          id: Date.now(),
-          bookingId: generateBookingId(),
-          timeAgo: "2 min ago",
-          postedDate: new Date().toISOString(),
-          frequency: "one-time",
-          status: "Pending",
-          driver: { name: "Alice", image: "/professional-driver-headshot.jpg" },
-          vehicle: "Toyota Innova",
-          pickup: { location: "Galle", type: "Pickup" },
-          destination: { location: "Colombo", type: "Destination" },
-          time: "8:00 AM",
-          duration: "2h",
-          seats: { available: 3, total: 6 },
-          passengers: "3",
-          handCarry: "2",
-          price: "25.00",
-          customer: { fullName: "Alice Customer", email: "alice@example.com", phone: "711234567" },
-          type: "shared",
-        },
-      ];
-      persistSharedRides(seed);
-    }
-    if (vehicleCatalog.length === 0) {
-      const seedV: VehicleData[] = [
-        { id: 1, name: "Toyota Innova", price: "50", passengers: "6", handCarry: "4", image: "/images/toyota-innova.jpg", features: ["A/C", "GPS"], gradient: "bg-gradient-to-br from-blue-400 to-blue-600", buttonColor: "bg-blue-600 hover:bg-blue-700" },
-      ];
-      persistVehicleCatalog(seedV);
+    try {
+      // allow explicit demo seeding via localStorage flag 'admin_enable_demo' === '1'
+      const allowDemoSeed = localStorage.getItem('admin_enable_demo') === '1'
+      // if there is no persisted data and demo seeding is allowed, seed defaults
+      if (allowDemoSeed && !localStorage.getItem(localKeys.SHARED_RIDES)) {
+        const seed: RideData[] = [
+          {
+            id: Date.now(),
+            bookingId: generateBookingId(),
+            timeAgo: "2 min ago",
+            postedDate: new Date().toISOString(),
+            frequency: "one-time",
+            status: "Pending",
+            driver: { name: "Alice", image: "/professional-driver-headshot.jpg" },
+            vehicle: "Toyota Innova",
+            pickup: { location: "Galle", type: "Pickup" },
+            destination: { location: "Colombo", type: "Destination" },
+            time: "8:00 AM",
+            duration: "2h",
+            seats: { available: 3, total: 6 },
+            passengers: "3",
+            handCarry: "2",
+            luggage: "0",
+            price: "25.00",
+            customer: { fullName: "Alice Customer", email: "alice@example.com", phone: "711234567" },
+            type: "shared",
+          },
+        ];
+        persistSharedRides(seed);
+      }
+      if (allowDemoSeed && !localStorage.getItem(localKeys.VEHICLE_CATALOG)) {
+        const seedV: VehicleData[] = [
+          { id: 1, name: "Toyota Innova", price: "50", passengers: "6", luggage: "2", handCarry: "4", image: "/images/toyota-innova.jpg", features: ["A/C", "GPS"], gradient: "bg-gradient-to-br from-blue-400 to-blue-600", buttonColor: "bg-blue-600 hover:bg-blue-700" },
+        ];
+        persistVehicleCatalog(seedV);
+      }
+    } catch (_e) {
+      const err = _e as Error | string | null;
+      console.error("Failed to seed admin demo data:", err);
     }
   }, []); // run once
+
+  // Fetch live shared rides from API and map to RideData; keep local storage as fallback
+  const [sharedLoading, setSharedLoading] = useState<boolean>(false)
+  const [sharedError, setSharedError] = useState<string | null>(null)
+  const [personalLoading, setPersonalLoading] = useState<boolean>(false)
+  const [personalError, setPersonalError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    const fetchShared = async () => {
+      setSharedLoading(true)
+      setSharedError(null)
+      try {
+        const res = await fetch("http://localhost:5000/api/shared-rides")
+        if (!res.ok) throw new Error(`API ${res.status}`)
+        const json = await res.json()
+        const apiRides = json?.data?.rides as unknown
+        if (Array.isArray(apiRides) && mounted) {
+          const mapped: RideData[] = apiRides.map((raw) => {
+            const r = raw as Record<string, unknown>
+            const idVal = r.id
+            const id = typeof idVal === 'number' ? idVal : Date.now() + Math.floor(Math.random() * 1000)
+            // Prefer explicit bookingId or readableId from the API (SMST-...), fall back to doc id if available
+            const bookingId = typeof r.bookingId === 'string' ? r.bookingId : (typeof r.readableId === 'string' ? r.readableId : (typeof idVal === 'string' ? idVal : undefined))
+            // posted date may come as ISO string or Firestore timestamp-like object; normalize to ISO string
+            const postedRaw = r.postedDate ?? r.createdAt ?? r.time;
+            let postedDateIso: string;
+            if (typeof postedRaw === 'string') postedDateIso = postedRaw;
+            else if (postedRaw && typeof postedRaw === 'object') {
+              const p = postedRaw as Record<string, unknown>;
+              const secs = typeof p._seconds === 'number' ? p._seconds : (typeof p.seconds === 'number' ? p.seconds : undefined);
+              postedDateIso = typeof secs === 'number' ? new Date(secs * 1000).toISOString() : new Date().toISOString();
+            } else postedDateIso = new Date().toISOString();
+            const seatsObj = (r.seats as Record<string, unknown>) || undefined
+            const available = typeof r.availableSeats === 'number' ? r.availableSeats : (seatsObj && typeof seatsObj.available === 'number' ? (seatsObj.available as number) : 0)
+            const total = typeof r.totalSeats === 'number' ? r.totalSeats : (seatsObj && typeof seatsObj.total === 'number' ? (seatsObj.total as number) : 0)
+            const priceVal = typeof r.price === 'number' ? (r.price as number).toFixed(2) : (typeof r.price === 'string' ? r.price : undefined)
+            const driverObj = (r.driver as Record<string, unknown>) || undefined
+            const pickupObj = (r.pickup as Record<string, unknown>) || undefined
+            const destObj = (r.destination as Record<string, unknown>) || undefined
+
+            // Create the RideData object with bookings preserved
+            const rideData = {
+              id,
+              bookingId,
+              timeAgo: "just now",
+              postedDate: postedDateIso,
+              frequency: typeof r.frequency === 'string' ? r.frequency : "one-time",
+              status: typeof r.status === 'string' ? r.status : "Pending",
+              driver: { name: typeof r.driverName === 'string' ? r.driverName : (driverObj && typeof driverObj.name === 'string' ? (driverObj.name as string) : "Unknown"), image: typeof r.driverImage === 'string' ? r.driverImage : (driverObj && typeof driverObj.image === 'string' ? (driverObj.image as string) : "/professional-driver-headspot.jpg") },
+              vehicle: typeof r.vehicle === 'string' ? r.vehicle : "",
+              pickup: { location: typeof r.pickupLocation === 'string' ? r.pickupLocation : (pickupObj && typeof pickupObj.location === 'string' ? (pickupObj.location as string) : ""), type: "Pickup point" },
+              destination: { location: typeof r.destinationLocation === 'string' ? r.destinationLocation : (destObj && typeof destObj.location === 'string' ? (destObj.location as string) : ""), type: "Destination" },
+              // Prefer explicit time string from API (e.g. "12-2 AM"); otherwise derive from postedDate
+              time: typeof r.time === 'string' && String(r.time).trim() !== '' ? String(r.time) : new Date(postedDateIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              duration: typeof r.duration === 'string' ? r.duration : "",
+              // Preserve rawPayload so the View Details dialog can surface original frontend payload fields - include bookings in rawPayload
+              rawPayload: (r.rawPayload ?? r) as Record<string, unknown>,
+              seats: { available, total },
+              passengers: typeof r.passengers === 'string' ? r.passengers : String(total || ""),
+              handCarry: typeof r.handCarry === 'string' ? r.handCarry : "",
+              price: priceVal,
+              customer: { fullName: "N/A", email: "N/A", phone: "N/A" },
+              type: "shared" as const,
+            } as RideData;
+
+            // Preserve bookings array at the top level if it exists in the API response
+            if (Array.isArray(r.bookings)) {
+              (rideData as unknown as Record<string, unknown>).bookings = r.bookings;
+            }
+
+            return rideData
+          })
+
+          // Persist and replace shared rides
+          persistSharedRides(mapped)
+        }
+      } catch (_e) {
+        const err = _e as Error | string | null;
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('Failed to load vehicle bookings from API:', msg);
+        if (mounted) setVehicleBookingsError(msg);
+      } finally {
+        if (mounted) setSharedLoading(false)
+      }
+    }
+
+    fetchShared()
+    return () => { mounted = false }
+  }, [])
+
+  // Fetch live private (vehicle) bookings from API and map to RideData; keep local storage as fallback
+  useEffect(() => {
+    let mounted = true;
+    const fetchBookings = async () => {
+      setVehicleBookingsLoading(true);
+      setVehicleBookingsError(null);
+      try {
+        const res = await fetch('http://localhost:5000/api/private-rides');
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const json = await res.json();
+        const apiRides = json?.data?.rides as unknown;
+        if (Array.isArray(apiRides) && mounted) {
+          const mapped: RideData[] = apiRides.map((raw) => {
+            const r = raw as Record<string, unknown>;
+            const idVal = r.id ?? r._id ?? r.bookingId ?? Date.now() + Math.floor(Math.random() * 1000);
+            const id = typeof idVal === 'number' ? idVal : Date.now() + Math.floor(Math.random() * 1000);
+            const bookingId = typeof r.bookingId === 'string' ? r.bookingId : (typeof r.id === 'string' ? r.id : undefined);
+            const posted = r.postedDate ?? r.createdAt ?? r.time ?? new Date().toISOString();
+            const postedDate = toISOStringSafe(posted);
+            const priceVal = typeof r.price === 'number' ? (r.price as number).toFixed(2) : (typeof r.price === 'string' ? r.price : undefined);
+            const customerObj = (r.customer as Record<string, unknown>) || undefined;
+            const pickupObj = (r.pickup as Record<string, unknown>) || undefined;
+            const destObj = (r.destination as Record<string, unknown>) || undefined;
+            const driverObj = (r.driver as Record<string, unknown>) || undefined;
+            const seatsObj = (r.seats as Record<string, unknown>) || undefined;
+
+            return {
+              id,
+              bookingId,
+              timeAgo: 'just now',
+              postedDate,
+              frequency: typeof r.frequency === 'string' ? r.frequency : 'one-time',
+              status: typeof r.status === 'string' ? r.status : 'Pending',
+              driver: { name: typeof r.driverName === 'string' ? r.driverName : (driverObj && typeof driverObj.name === 'string' ? (driverObj.name as string) : 'Company Driver'), image: driverObj && typeof driverObj.image === 'string' ? (driverObj.image as string) : '/professional-driver-headshot.jpg' },
+              vehicle: typeof r.vehicle === 'string' ? r.vehicle : (typeof r.vehicleName === 'string' ? r.vehicleName : ''),
+              notes: typeof r.notes === 'string' ? r.notes : (typeof r.notes === 'string' ? r.notes : undefined),
+              pickup: { location: typeof r.pickupLocation === 'string' ? r.pickupLocation : (pickupObj && typeof pickupObj.location === 'string' ? (pickupObj.location as string) : ''), type: 'Pickup point' },
+              destination: { location: typeof r.destinationLocation === 'string' ? r.destinationLocation : (destObj && typeof destObj.location === 'string' ? (destObj.location as string) : ''), type: 'Destination' },
+              time: typeof r.time === 'string' ? r.time : new Date(postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              duration: typeof r.duration === 'string' ? r.duration : '',
+              seats: { available: typeof r.availableSeats === 'number' ? (r.availableSeats as number) : (seatsObj && typeof seatsObj.available === 'number' ? (seatsObj.available as number) : 0), total: typeof r.totalSeats === 'number' ? (r.totalSeats as number) : (seatsObj && typeof seatsObj.total === 'number' ? (seatsObj.total as number) : 0) },
+              passengers: typeof r.passengers === 'string' ? r.passengers : String((seatsObj && seatsObj.total) || ''),
+              handCarry: typeof r.handCarry === 'string' ? r.handCarry : '',
+              price: priceVal,
+              customer: { fullName: typeof customerObj?.fullName === 'string' ? (customerObj.fullName as string) : (typeof r.customerName === 'string' ? r.customerName : 'Private Customer'), email: typeof customerObj?.email === 'string' ? (customerObj.email as string) : (typeof r.customerEmail === 'string' ? r.customerEmail : 'N/A'), phone: typeof customerObj?.phone === 'string' ? (customerObj.phone as string) : (typeof r.customerPhone === 'string' ? r.customerPhone : 'N/A') },
+              type: 'private',
+            } as RideData;
+          });
+
+          persistVehicleBookings(mapped);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('Failed to load vehicle bookings from API:', msg);
+        if (mounted) setVehicleBookingsError(msg);
+      } finally {
+        if (mounted) setVehicleBookingsLoading(false);
+      }
+    };
+
+    fetchBookings();
+    return () => { mounted = false };
+  }, []);
+
+  // Fetch personal bookings from API and map to RideData; keep local storage as fallback
+  useEffect(() => {
+    let mounted = true;
+    const fetchPersonal = async () => {
+      setPersonalLoading(true);
+      setPersonalError(null);
+      try {
+        const res = await fetch('http://localhost:5000/api/personal-rides');
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const json = await res.json();
+        const apiBookings = json?.data?.bookings as unknown;
+        if (Array.isArray(apiBookings) && mounted) {
+          const mapped: RideData[] = (apiBookings as Record<string, unknown>[]).map((raw) => {
+            const r = raw as Record<string, unknown>;
+            const idVal = r.id ?? r._id ?? r.bookingId ?? Date.now() + Math.floor(Math.random() * 1000);
+            const id = typeof idVal === 'number' ? idVal : Date.now() + Math.floor(Math.random() * 1000);
+            const bookingId = typeof r.bookingId === 'string' ? r.bookingId : (typeof r.id === 'string' ? r.id : undefined);
+            const posted = r.postedDate ?? r.createdAt ?? r.time ?? new Date().toISOString();
+            const postedDate = toISOStringSafe(posted);
+            const customerObj = (r.customer as Record<string, unknown>) || undefined;
+            const pickupObj = (r.pickup as Record<string, unknown>) || undefined;
+            const destObj = (r.destination as Record<string, unknown>) || undefined;
+            const driverObj = (r.driver as Record<string, unknown>) || undefined;
+            const seatsObj = (r.seats as Record<string, unknown>) || undefined;
+
+            const priceVal = typeof r.price === 'number' ? (r.price as number).toFixed(2) : (typeof r.price === 'string' ? r.price : undefined);
+
+            return {
+              id,
+              bookingId,
+              timeAgo: 'just now',
+              postedDate,
+              frequency: typeof r.frequency === 'string' ? r.frequency : 'one-time',
+              status: typeof r.status === 'string' ? r.status : 'Pending',
+              driver: { name: typeof r.driverName === 'string' ? r.driverName : (driverObj && typeof driverObj.name === 'string' ? (driverObj.name as string) : 'Company Driver'), image: driverObj && typeof driverObj.image === 'string' ? (driverObj.image as string) : '/professional-driver-headshot.jpg' },
+              vehicle: typeof r.vehicle === 'string' ? r.vehicle : (typeof r.vehicleName === 'string' ? r.vehicleName : ''),
+              notes: typeof r.notes === 'string' ? r.notes : undefined,
+              pickup: { location: typeof r.pickupLocation === 'string' ? r.pickupLocation : (pickupObj && typeof pickupObj.location === 'string' ? (pickupObj.location as string) : ''), type: 'Pickup point' },
+              destination: { location: typeof r.destinationLocation === 'string' ? r.destinationLocation : (destObj && typeof destObj.location === 'string' ? (destObj.location as string) : ''), type: 'Destination' },
+              time: typeof r.time === 'string' ? r.time : new Date(postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              duration: typeof r.duration === 'string' ? r.duration : '',
+              // Preserve rawPayload so the View Details dialog can surface original frontend payload fields
+              rawPayload: (r.rawPayload ?? r) as Record<string, unknown>,
+              seats: { available: typeof r.availableSeats === 'number' ? (r.availableSeats as number) : (seatsObj && typeof seatsObj.available === 'number' ? (seatsObj.available as number) : 0), total: typeof r.totalSeats === 'number' ? (r.totalSeats as number) : (seatsObj && typeof seatsObj.total === 'number' ? (seatsObj.total as number) : 0) },
+              passengers: typeof r.passengers === 'string' ? r.passengers : String((seatsObj && seatsObj.total) || ''),
+              handCarry: typeof r.handCarry === 'string' ? r.handCarry : '',
+              price: priceVal,
+              customer: { fullName: typeof customerObj?.fullName === 'string' ? (customerObj.fullName as string) : (typeof r.customerName === 'string' ? r.customerName : 'Private Customer'), email: typeof customerObj?.email === 'string' ? (customerObj.email as string) : (typeof r.customerEmail === 'string' ? r.customerEmail : 'N/A'), phone: typeof customerObj?.phone === 'string' ? (customerObj.phone as string) : (typeof r.customerPhone === 'string' ? r.customerPhone : 'N/A') },
+              type: 'personal',
+            } as RideData;
+          });
+
+          persistPersonalRides(mapped);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('Failed to load personal bookings from API:', msg);
+        if (mounted) setPersonalError(msg);
+      } finally {
+        if (mounted) setPersonalLoading(false);
+      }
+    };
+
+    fetchPersonal();
+    return () => { mounted = false };
+  }, []);
 
   /* ---------- Shared Ride / Vehicle Add handlers (reuse your original logic) ---------- */
   // For brevity we maintain simplified forms internal to this file but reuse validation spirit.
 
   // Shared ride form state
   const [rideForm, setRideForm] = useState({
-    driverName: "",
-    driverImage: "",
-    vehicle: "",
     pickupLocation: "",
     destinationLocation: "",
-    time: "",
-    duration: "",
-    passengers: "1",
+    rideDate: "",
+    pickupTime: "",
+    ampm: "AM",
+    luggage: "0",
     handCarry: "0",
     availableSeats: "",
     totalSeats: "",
     price: "",
     frequency: "one-time",
-    postedDate: new Date().toISOString().slice(0, 16), // Default to current date/time
   });
 
   const [rideErrors, setRideErrors] = useState<Record<string, string>>({});
@@ -274,6 +605,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     name: "",
     price: "",
     passengers: "4",
+    luggage: "2",
     handCarry: "2",
     image: "",
     imageFile: null as File | null,
@@ -287,12 +619,11 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   /* ---------- Validation (kept similar to your original) ---------- */
   const validateRideForm = (form: typeof rideForm) => {
     const errors: Record<string, string> = {};
-    if (!form.driverName.trim()) errors.driverName = "Driver name is required";
-    if (!form.vehicle.trim()) errors.vehicle = "Vehicle is required";
     if (!form.pickupLocation.trim()) errors.pickupLocation = "Pickup location is required";
     if (!form.destinationLocation.trim()) errors.destinationLocation = "Destination is required";
-    if (!form.time) errors.time = "Time is required";
-    if (!form.duration.trim()) errors.duration = "Duration is required";
+    // Date is only required for one-time rides
+    if (form.frequency === "one-time" && !form.rideDate) errors.rideDate = "Date is required";
+    if (!form.pickupTime) errors.pickupTime = "Pickup time is required";
     const availableSeats = Number.parseInt(form.availableSeats || "0");
     const totalSeats = Number.parseInt(form.totalSeats || "0");
     if (isNaN(availableSeats) || availableSeats < 0) errors.availableSeats = "Available seats must be a positive number";
@@ -317,57 +648,167 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     setRideErrors(errors);
     if (Object.keys(errors).length > 0) return;
     setIsRideSubmitting(true);
-
-    setTimeout(() => {
-      const newRide: RideData = {
-        id: Date.now(),
-        bookingId: generateBookingId(),
-        timeAgo: "Just now",
-        postedDate: new Date(rideForm.postedDate).toISOString(),
-        frequency: rideForm.frequency,
-        driver: { name: rideForm.driverName.trim(), image: rideForm.driverImage || "/professional-driver-headshot.jpg" },
-        vehicle: rideForm.vehicle.trim(),
-        pickup: { location: rideForm.pickupLocation.trim(), type: "Pickup point" },
-        destination: { location: rideForm.destinationLocation.trim(), type: "Destination" },
-        time: rideForm.time,
-        duration: rideForm.duration.trim(),
-        seats: { available: Number.parseInt(rideForm.availableSeats || "0"), total: Number.parseInt(rideForm.totalSeats || "0") },
-        passengers: rideForm.passengers,
+    (async () => {
+      // Construct payload for API
+      const availableSeatsNum = Number.parseInt(rideForm.availableSeats || '0');
+      const totalSeatsNum = Number.parseInt(rideForm.totalSeats || '0');
+      const payload = {
+        pickupLocation: rideForm.pickupLocation.trim(),
+        destinationLocation: rideForm.destinationLocation.trim(),
+        ...(rideForm.frequency === "one-time" && { rideDate: rideForm.rideDate }),
+        pickupTime: rideForm.pickupTime,
+        ampm: rideForm.ampm,
+        luggage: rideForm.luggage,
         handCarry: rideForm.handCarry,
+        // include both legacy flat fields and a seats object to ensure backend compatibility
+        availableSeats: availableSeatsNum,
+        totalSeats: totalSeatsNum,
+        seats: { available: availableSeatsNum, total: totalSeatsNum },
         price: rideForm.price,
-        customer: { fullName: "N/A", email: `user${Date.now()}@example.com`, phone: "N/A" },
-        type: "shared",
-      };
+        frequency: rideForm.frequency,
+        source: 'admin',
+      } as Record<string, unknown>;
+    console.log('Submitting shared ride payload:', payload);
 
-      // Persist locally
-      const updated = [newRide, ...sharedRides];
-      persistSharedRides(updated);
+      try {
+        const res = await fetch('http://localhost:5000/api/shared-rides', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
 
-      // call prop if given
-      onAddRide?.(newRide);
+        if (res.ok) {
+          const json = await res.json();
+          // Attempt to map server response into our RideData shape
+          const serverRide = json?.data?.ride as Record<string, unknown> | undefined;
+          // If server persisted but stored seats differently, correct it (best-effort)
+          try {
+            const idVal = serverRide?.id ?? serverRide?._id ?? serverRide?.bookingId ?? null;
+            if (idVal) {
+              const idStr = String(idVal);
+              const fetchRes = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(idStr)}`);
+              if (fetchRes.ok) {
+                const fetched = await fetchRes.json();
+                const srvSeats = fetched?.seats ?? { available: fetched?.availableSeats, total: fetched?.totalSeats };
+                const srvAvailable = typeof srvSeats?.available === 'number' ? Number(srvSeats.available) : undefined;
+                const srvTotal = typeof srvSeats?.total === 'number' ? Number(srvSeats.total) : undefined;
+                if ((typeof srvAvailable === 'number' && srvAvailable !== availableSeatsNum) || (typeof srvTotal === 'number' && srvTotal !== totalSeatsNum)) {
+                  // Attempt to update server-side seats to the expected values
+                  try {
+                    await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(idStr)}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ seats: { available: availableSeatsNum, total: totalSeatsNum } }),
+                    });
+                  } catch (e) {
+                    // ignore patch errors; proceed with local persist
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // ignore verification errors
+          }
+          const idVal = serverRide?.id ?? serverRide?._id ?? serverRide?.bookingId ?? Date.now();
+          const id = typeof idVal === 'number' ? idVal : Date.now();
+          const bookingId = typeof serverRide?.bookingId === 'string' ? serverRide?.bookingId : (typeof idVal === 'string' ? idVal : undefined);
 
-      // reset
-      setRideForm({
-        driverName: "",
-        driverImage: "",
-        vehicle: "",
-        pickupLocation: "",
-        destinationLocation: "",
-        time: "",
-        duration: "",
-        passengers: "1",
-        handCarry: "0",
-        availableSeats: "",
-        totalSeats: "",
-        price: "",
-        frequency: "one-time",
-        postedDate: new Date().toISOString().slice(0, 16),
-      });
-      setIsRideSubmitting(false);
-      setActivePage("sharedRequests");
-      setRateStatus("✅ Shared ride added");
-      setTimeout(() => setRateStatus(""), 2500);
-    }, 600);
+          const persisted: RideData = {
+            id,
+            bookingId,
+            timeAgo: 'Just now',
+            postedDate: new Date().toISOString(),
+            frequency: rideForm.frequency,
+            driver: { name: 'Admin Added', image: '/professional-driver-headshot.jpg' },
+            vehicle: 'To be assigned',
+            pickup: { location: rideForm.pickupLocation.trim(), type: 'Pickup point' },
+            destination: { location: rideForm.destinationLocation.trim(), type: 'Destination' },
+            time: rideForm.frequency === "daily" ? `${rideForm.pickupTime} ${rideForm.ampm}` : `${rideForm.rideDate} ${rideForm.pickupTime} ${rideForm.ampm}`,
+            duration: 'TBD',
+            seats: { available: Number.parseInt(String(payload.availableSeats || '0')), total: Number.parseInt(String(payload.totalSeats || '0')) },
+            passengers: '1',
+            luggage: rideForm.luggage,
+            handCarry: rideForm.handCarry,
+            price: rideForm.price,
+            customer: { fullName: 'N/A', email: `user${Date.now()}@example.com`, phone: 'N/A' },
+            type: 'shared',
+          };
+
+          // Persist the server-provided ride
+          persistSharedRides([persisted, ...sharedRides]);
+          onAddRide?.(persisted);
+        } else {
+          // On server error, fallback to local persist
+          console.warn('Server failed to create shared ride', res.status);
+          const fallback: RideData = {
+            id: Date.now(),
+            bookingId: generateBookingId(),
+            timeAgo: 'Just now',
+            postedDate: new Date().toISOString(),
+            frequency: rideForm.frequency,
+            driver: { name: 'Admin Added', image: '/professional-driver-headshot.jpg' },
+            vehicle: 'To be assigned',
+            pickup: { location: rideForm.pickupLocation.trim(), type: 'Pickup point' },
+            destination: { location: rideForm.destinationLocation.trim(), type: 'Destination' },
+            time: rideForm.frequency === "daily" ? `${rideForm.pickupTime} ${rideForm.ampm}` : `${rideForm.rideDate} ${rideForm.pickupTime} ${rideForm.ampm}`,
+            duration: 'TBD',
+            seats: { available: Number.parseInt(rideForm.availableSeats || '0'), total: Number.parseInt(rideForm.totalSeats || '0') },
+            passengers: '1',
+            luggage: rideForm.luggage,
+            handCarry: rideForm.handCarry,
+            price: rideForm.price,
+            customer: { fullName: 'N/A', email: `user${Date.now()}@example.com`, phone: 'N/A' },
+            type: 'shared',
+          };
+          persistSharedRides([fallback, ...sharedRides]);
+          onAddRide?.(fallback);
+        }
+      } catch (err) {
+        console.error('Failed to POST shared ride to API:', err);
+        // Fallback to local persist
+        const fallback: RideData = {
+          id: Date.now(),
+          bookingId: generateBookingId(),
+          timeAgo: 'Just now',
+          postedDate: new Date().toISOString(),
+          frequency: rideForm.frequency,
+          driver: { name: 'Admin Added', image: '/professional-driver-headshot.jpg' },
+          vehicle: 'To be assigned',
+          pickup: { location: rideForm.pickupLocation.trim(), type: 'Pickup point' },
+          destination: { location: rideForm.destinationLocation.trim(), type: 'Destination' },
+          time: `${rideForm.rideDate} ${rideForm.pickupTime} ${rideForm.ampm}`,
+          duration: 'TBD',
+          seats: { available: Number.parseInt(rideForm.availableSeats || '0'), total: Number.parseInt(rideForm.totalSeats || '0') },
+          passengers: '1',
+          luggage: rideForm.luggage,
+          handCarry: rideForm.handCarry,
+          price: rideForm.price,
+          customer: { fullName: 'N/A', email: `user${Date.now()}@example.com`, phone: 'N/A' },
+          type: 'shared',
+        };
+        persistSharedRides([fallback, ...sharedRides]);
+        onAddRide?.(fallback);
+      } finally {
+        // reset form and UI state
+        setRideForm({
+          pickupLocation: '',
+          destinationLocation: '',
+          rideDate: '',
+          pickupTime: '',
+          ampm: 'AM',
+          luggage: '0',
+          handCarry: '0',
+          availableSeats: '',
+          totalSeats: '',
+          price: '',
+          frequency: 'one-time',
+        });
+        setIsRideSubmitting(false);
+        setActivePage('sharedRequests');
+        setRateStatus('✅ Shared ride added');
+        setTimeout(() => setRateStatus(''), 2500);
+      }
+    })();
   };
 
   /* ---------- Add Vehicle ---------- */
@@ -383,28 +824,55 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       ? `/images/${vehicleForm.imageFile.name}`
       : vehicleForm.image || "/images/toyota-innova.jpg";
 
-    setTimeout(() => {
-      const newVehicle: VehicleData = {
-        id: Date.now(),
-        name: vehicleForm.name.trim(),
-        price: vehicleForm.price,
-        passengers: vehicleForm.passengers,
-        handCarry: vehicleForm.handCarry,
-        image: imagePath,
-        features: [vehicleForm.feature1, vehicleForm.feature2, vehicleForm.feature3].filter((f) => f.trim()),
-        gradient: "bg-gradient-to-br from-blue-400 to-blue-600",
-        buttonColor: "bg-blue-600 hover:bg-blue-700",
-      };
-      const updated = [newVehicle, ...vehicleCatalog];
-      persistVehicleCatalog(updated);
-      onAddVehicle?.(newVehicle);
+    (async () => {
+      try {
+        const payload = {
+          name: vehicleForm.name.trim(),
+          price: vehicleForm.price,
+          passengers: vehicleForm.passengers,
+          luggage: vehicleForm.luggage,
+          handCarry: vehicleForm.handCarry,
+          image: imagePath,
+          features: [vehicleForm.feature1, vehicleForm.feature2, vehicleForm.feature3].filter((f) => f && f.trim()),
+          // visual-only styling is optional for server; include for parity
+          gradient: "bg-gradient-to-br from-blue-400 to-blue-600",
+          buttonColor: "bg-blue-600 hover:bg-blue-700",
+        } as Record<string, unknown>;
 
-      setVehicleForm({ name: "", price: "", passengers: "4", handCarry: "2", image: "", imageFile: null, feature1: "", feature2: "", feature3: "" });
-      setIsVehicleSubmitting(false);
-      setActivePage("vehicleBookings");
-      setRateStatus("✅ Vehicle added");
-      setTimeout(() => setRateStatus(""), 2500);
-    }, 600);
+        const res = await fetch('http://localhost:5000/api/vehicles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(`Server responded ${res.status}: ${txt}`);
+        }
+
+        const json = await res.json();
+        const serverVehicle = json?.data?.vehicle;
+
+        if (!serverVehicle) {
+          throw new Error('Invalid server response when creating vehicle');
+        }
+
+        // Update local UI state only (do not persist to localStorage)
+        setVehicleCatalog([serverVehicle as VehicleData, ...vehicleCatalog]);
+        onAddVehicle?.(serverVehicle as VehicleData);
+
+        setVehicleForm({ name: "", price: "", passengers: "4", luggage: "", handCarry: "2", image: "", imageFile: null, feature1: "", feature2: "", feature3: "" });
+        setRateStatus("✅ Vehicle added");
+        setTimeout(() => setRateStatus(""), 2500);
+        setActivePage("vehicleBookings");
+      } catch (err) {
+        console.error('Failed to create vehicle on server:', err);
+        setRateStatus(`❌ Failed to add vehicle: ${err instanceof Error ? err.message : String(err)}`);
+        setTimeout(() => setRateStatus(''), 4000);
+      } finally {
+        setIsVehicleSubmitting(false);
+      }
+    })();
   };
 
   /* ---------- Create a private vehicle booking record (simulate booking) ---------- */
@@ -490,40 +958,418 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     const usdRate = parseFloat(ratePerKm);
     const currentExchangeRate = parseFloat(exchangeRate) || 330;
     const lkrRate = parseFloat(rateLKRPerKm) || usdRate * currentExchangeRate;
+    
+    // Always save to localStorage first for immediate use
     localStorage.setItem("ratePerKm", usdRate.toString());
     localStorage.setItem("rateLKRPerKm", lkrRate.toFixed(2));
     localStorage.setItem("exchangeRate", currentExchangeRate.toString());
     setCurrentSavedRate(`Current Rate: $${usdRate.toFixed(2)} per KM (Rs.${lkrRate.toFixed(2)})`);
-    setRateStatus("✅ Rate saved successfully!");
-    setTimeout(() => setRateStatus(""), 3000);
+    
+    // Notify other components that rates have been updated
+    window.dispatchEvent(new Event('ratesUpdated'));
+    
+    // Try to persist to backend as well
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/rates', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ ratePerKm: usdRate, rateLKRPerKm: lkrRate, exchangeRate: currentExchangeRate }),
+        });
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const json = await res.json();
+        const saved = json?.data?.rates;
+        if (saved && typeof saved.ratePerKm === 'number' && saved.ratePerKm > 0) {
+          setRatePerKm(String(saved.ratePerKm));
+          setRateLKRPerKm(String(saved.rateLKRPerKm ?? ''));
+          setExchangeRate(String(saved.exchangeRate ?? ''));
+          setCurrentSavedRate(`Current Rate: $${Number(saved.ratePerKm).toFixed(2)} per KM (Rs.${Number(saved.rateLKRPerKm).toFixed(2)})`);
+
+          // Update localStorage with server values
+          if (typeof saved.ratePerKm === 'number') {
+            localStorage.setItem('ratePerKm', saved.ratePerKm.toString());
+          }
+          if (typeof saved.rateLKRPerKm === 'number') {
+            localStorage.setItem('rateLKRPerKm', saved.rateLKRPerKm.toString());
+          }
+          if (typeof saved.exchangeRate === 'number') {
+            localStorage.setItem('exchangeRate', saved.exchangeRate.toString());
+          }
+
+          setRateStatus('✅ Rate saved successfully (backend + local)!');
+          window.dispatchEvent(new Event('ratesUpdated'));
+          setTimeout(() => setRateStatus(''), 3000);
+          return;
+        }
+        throw new Error('Invalid response');
+      } catch (err) {
+        console.error('Backend not available, using local storage only:', err);
+        setRateStatus("✅ Rate saved locally (backend unavailable)");
+        setTimeout(() => setRateStatus(""), 3000);
+      }
+    })();
   };
 
   const removeRate = () => {
-    localStorage.removeItem("ratePerKm");
-    localStorage.removeItem("rateLKRPerKm");
-    localStorage.removeItem("exchangeRate");
-    setRatePerKm("");
-    setRateLKRPerKm("");
-    setExchangeRate("");
-    setCurrentSavedRate("");
-    setRateStatus("❌ Rate removed! Users cannot calculate rates until you set a new one.");
-    setTimeout(() => setRateStatus(""), 5000);
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/rates', { method: 'DELETE' });
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        // clear local UI
+        setRatePerKm('');
+        setRateLKRPerKm('');
+        setExchangeRate('');
+        setCurrentSavedRate('');
+        setRateStatus('❌ Rate removed');
+        setTimeout(() => setRateStatus(''), 3000);
+        return;
+      } catch (err) {
+        console.error('Failed to delete rate on server, clearing local storage as fallback:', err);
+        localStorage.removeItem("ratePerKm");
+        localStorage.removeItem("rateLKRPerKm");
+        localStorage.removeItem("exchangeRate");
+        setRatePerKm("");
+        setRateLKRPerKm("");
+        setExchangeRate("");
+        setCurrentSavedRate("");
+        setRateStatus("❌ Rate removed locally (server unavailable)");
+        setTimeout(() => setRateStatus(""), 3000);
+      }
+    })();
   };
 
   /* ---------- Status update helpers ---------- */
+  
+  // Send status change notification email to customer
+  const sendStatusChangeEmail = async (ride: RideData, newStatus: string) => {
+    try {
+      // Extract customer email/name robustly from nested rawPayload, ignoring placeholders
+      const rec = ride as unknown as Record<string, unknown>;
+      const rp = (typeof ride === 'object' && ride !== null && 'rawPayload' in (ride as unknown as Record<string, unknown>) && typeof (ride as unknown as Record<string, unknown>).rawPayload === 'object' && (ride as unknown as Record<string, unknown>).rawPayload !== null)
+        ? (ride as unknown as { rawPayload: Record<string, unknown> }).rawPayload
+        : {} as Record<string, unknown>;
+
+      // Try nested rawPayload.rawPayload.personalData
+      let nestedPD: Record<string, unknown> | undefined;
+      if ('rawPayload' in rp && typeof (rp as Record<string, unknown>).rawPayload === 'object' && (rp as Record<string, unknown>).rawPayload !== null) {
+        const nested = (rp as Record<string, unknown>).rawPayload as Record<string, unknown>;
+        if ('personalData' in nested && typeof nested.personalData === 'object' && nested.personalData !== null) {
+          nestedPD = nested.personalData as Record<string, unknown>;
+        }
+      }
+
+      // Also consider direct rawPayload.personalData
+      const pd = (typeof rp === 'object' && rp !== null && 'personalData' in rp && typeof (rp as { personalData?: unknown }).personalData === 'object' && (rp as { personalData?: unknown }).personalData !== null)
+        ? (rp as { personalData: Record<string, unknown> }).personalData
+        : {} as Record<string, unknown>;
+
+      const customerEmail = pickNonPlaceholder(
+        nestedPD && typeof nestedPD.email === 'string' ? nestedPD.email as string : undefined,
+        typeof (pd as Record<string, unknown>).email === 'string' ? (pd as Record<string, unknown>).email as string : undefined,
+        typeof rp.customerEmail === 'string' ? rp.customerEmail as string : undefined,
+        typeof rec.customerEmail === 'string' ? rec.customerEmail as string : undefined,
+        ride.customer && typeof ride.customer === 'object' && 'email' in ride.customer && typeof ride.customer.email === 'string' ? ride.customer.email : undefined
+      );
+
+      if (!customerEmail) {
+        console.warn('No valid customer email found for status notification');
+        return;
+      }
+
+      const customerName = pickNonPlaceholder(
+        nestedPD && typeof nestedPD.fullName === 'string' ? nestedPD.fullName as string : undefined,
+        typeof (pd as Record<string, unknown>).fullName === 'string' ? (pd as Record<string, unknown>).fullName as string : undefined,
+        typeof rp.customerName === 'string' ? rp.customerName as string : undefined,
+        typeof rec.customerName === 'string' ? rec.customerName as string : undefined,
+        ride.customer && typeof ride.customer === 'object' && 'fullName' in ride.customer && typeof ride.customer.fullName === 'string' ? ride.customer.fullName : undefined
+      ) || 'Valued Customer';
+
+      const statusMessages: Record<string, string> = {
+        'Confirmed': 'Great news! Your ride has been confirmed. We will contact you shortly with further details.',
+        'Cancelled': 'Your ride has been cancelled. If you have any questions, please contact us.',
+        'Completed': 'Thank you for riding with us! Your ride has been completed. We hope to serve you again soon.',
+        'In Progress': 'Your ride is now in progress. Your driver is on the way!',
+        'Pending': 'Your ride is pending confirmation. We will update you soon.'
+      };
+
+      const statusMessage = statusMessages[newStatus] || `Your ride status has been updated to: ${newStatus}`;
+
+      // Build a readable booking details block to include in the email
+      try {
+        const rec = ride as unknown as Record<string, unknown>;
+        const pickupStr = formatLocation(ride.pickup);
+        const destStr = formatLocation(ride.destination);
+
+        // determine date/time
+        let dateObj: Date | null = null;
+        const pdRaw = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.pickupDate) ?? rec.pickupDate ?? rec.postedDate;
+        if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
+        else if (pdRaw && typeof pdRaw === 'object') {
+          const pRec = pdRaw as Record<string, unknown>;
+          const secs = typeof pRec._seconds === 'number' ? pRec._seconds : (typeof pRec.seconds === 'number' ? pRec.seconds : undefined);
+          if (typeof secs === 'number') dateObj = new Date(secs * 1000);
+        } else if (pdRaw instanceof Date) dateObj = pdRaw;
+        if (!dateObj && typeof rec.postedDate === 'string') dateObj = new Date(rec.postedDate as string);
+
+        const dateStr = dateObj ? dateObj.toLocaleDateString() : (typeof rec.postedDate === 'string' ? new Date(rec.postedDate as string).toLocaleDateString() : 'N/A');
+        const timeStr = (ride.time && String(ride.time).trim() !== '') ? String(ride.time) : (dateObj ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD');
+      const passengerCount = rec.passengers ?? ride.passengers ?? ride.seats?.total ?? '';
+        const taxiType = ride.type || 'ride';
+
+        // personal details: prefer nested rawPayload.personalData then top-level customer
+        let personal: Record<string, unknown> = {};
+        if (rec.rawPayload && typeof rec.rawPayload === 'object') {
+          const rp = rec.rawPayload as Record<string, unknown>;
+          if (rp.rawPayload && typeof rp.rawPayload === 'object' && (rp.rawPayload as Record<string, unknown>).personalData) {
+            personal = (rp.rawPayload as Record<string, unknown>).personalData as Record<string, unknown>;
+          } else if (rp.personalData && typeof rp.personalData === 'object') {
+            personal = rp.personalData as Record<string, unknown>;
+          }
+        }
+        if (!personal || Object.keys(personal).length === 0) {
+          if (ride.customer && typeof ride.customer === 'object') personal = ride.customer as Record<string, unknown>;
+        }
+
+        const personalName = (personal && typeof personal.fullName === 'string') ? personal.fullName : (ride.customer?.fullName ?? 'N/A');
+        const personalPhone = (personal && typeof personal.phone === 'string') ? personal.phone : (ride.customer?.phone ?? 'N/A');
+        const personalEmail = (personal && typeof personal.email === 'string') ? personal.email : (ride.customer?.email ?? 'N/A');
+
+        // special requests and price
+        const specialRequests = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.specialRequests) ?? (rec.specialRequests) ?? (rec.notes) ?? '';
+        const price = (rec.price ?? ride.price ?? '') as string | number;
+        // If the API embeds bookingData in rawPayload, prefer its passengers and calculatedFare
+        const bookingDataInRaw = (rp && typeof rp.bookingData === 'object') ? (rp.bookingData as Record<string, unknown>) : undefined;
+        const passengersFromBookingData = bookingDataInRaw?.passengers ?? bookingDataInRaw?.seats ?? undefined;
+        const priceFromBookingData = bookingDataInRaw?.calculatedFare ?? bookingDataInRaw?.price ?? undefined;
+
+        const bookingIdStr = (rec.bookingId && typeof rec.bookingId === 'string') ? rec.bookingId as string : ((rec.readableId && typeof rec.readableId === 'string') ? rec.readableId as string : (typeof rec.id === 'string' ? rec.id : (ride.bookingId ?? 'N/A')));
+
+        const passengerDisplay = passengersFromBookingData !== undefined
+          ? String((passengersFromBookingData as any))
+          : personalName;
+        const priceDisplay = priceFromBookingData !== undefined ? String(priceFromBookingData) : (price ? String(price) : '');
+
+        const bookingDetails = [
+          `Booking ID: ${bookingIdStr}`,
+          `Route: ${pickupStr} → ${destStr}`,
+          `Date: ${dateStr}`,
+          `Time: ${timeStr}`,
+          `Type: ${taxiType}`,
+          `Passenger: ${passengerDisplay}`,
+          `Contact: ${personalPhone}${personalEmail ? ` / ${personalEmail}` : ''}`,
+          specialRequests ? `Special requests: ${String(specialRequests)}` : null,
+          priceDisplay ? `Price: ${priceDisplay}` : null,
+        ].filter(Boolean).join('\n');
+
+        // Append booking details to the status message so template variable 'status_message' contains both
+        const fullStatusMessage = `${statusMessage}\n\nBooking details:\n${bookingDetails}`;
+        const bookingCode = `BK-${Date.now()}`;
+        // Pre-fill mailto links that admins can click to notify the customer directly
+        const subjectConfirm = encodeURIComponent(`Booking ${bookingCode} - Confirmed`);
+        const subjectCancel = encodeURIComponent(`Booking ${bookingCode} - Cancelled`);
+        const bodyConfirm = encodeURIComponent([
+          `Booking ID: ${bookingCode}`,
+          `Name: ${customerName}`,
+          `Route: ${pickupStr} → ${destStr}`,
+          `Status: Confirmed`,
+        ].join('\n'));
+        const bodyCancel = encodeURIComponent([
+          `Booking ID: ${bookingCode}`,
+          `Name: ${customerName}`,
+          `Route: ${pickupStr} → ${destStr}`,
+          `Status: Cancelled`,
+        ].join('\n'));
+
+        const confirmUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectConfirm}&body=${bodyConfirm}`;
+        const cancelUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectCancel}&body=${bodyCancel}`;
+
+        await emailjs.send(
+          process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID2!,
+          {
+            to_email: customerEmail,
+            subject: `🚖 Ride Status Update: ${newStatus}`,
+            name: customerName,
+            from: pickupStr,
+            to: destStr,
+            taxi_type: taxiType,
+            date: dateStr,
+            time: timeStr,
+            passengers: ride.passengers || ride.seats?.total || '',
+            status_message: fullStatusMessage,
+            confirm_url: confirmUrl,
+        cancel_url: cancelUrl,
+          },
+          { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
+        );
+      } catch (innerErr) {
+        // If building booking details fails for any reason, fall back to sending the basic status message
+        console.warn('Failed to build booking details for status email, sending basic message instead.', innerErr);
+        const bookingCode = `BK-${Date.now()}`;
+        const subjectConfirmFallback = encodeURIComponent(`Booking ${bookingCode} - Confirmed`);
+        const subjectCancelFallback = encodeURIComponent(`Booking ${bookingCode} - Cancelled`);
+        const bodyConfirmFallback = encodeURIComponent([
+          `Booking ID: ${bookingCode}`,
+          `Name: ${customerName}`,
+          `Route: ${formatLocation(ride.pickup)} → ${formatLocation(ride.destination)}`,
+          `Status: Confirmed`,
+        ].join('\n'));
+        const bodyCancelFallback = encodeURIComponent([
+          `Booking ID: ${bookingCode}`,
+          `Name: ${customerName}`,
+          `Route: ${formatLocation(ride.pickup)} → ${formatLocation(ride.destination)}`,
+          `Status: Cancelled`,
+        ].join('\n'));
+        const confirmUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectConfirmFallback}&body=${bodyConfirmFallback}`;
+        const cancelUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectCancelFallback}&body=${bodyCancelFallback}`;
+        await emailjs.send(
+          process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID2!,
+          {
+            to_email: customerEmail,
+            subject: `🚖 Ride Status Update: ${newStatus}`,
+            name: customerName,
+            from: formatLocation(ride.pickup),
+            to: formatLocation(ride.destination),
+            taxi_type: ride.type || 'ride',
+            date: typeof ride.postedDate === 'string' ? new Date(ride.postedDate).toLocaleDateString() : '',
+            time: ride.time || '',
+            passengers: ride.passengers || ride.seats?.total || '',
+            status_message: statusMessage,
+            confirm_url: confirmUrl,
+            cancel_url: cancelUrl,
+          },
+          { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
+        );
+      }
+
+      console.log(`Status change email sent to ${customerEmail} for status: ${newStatus}`);
+    } catch (error) {
+      console.error('Failed to send status change email:', error);
+      // Non-blocking: continue even if email fails
+    }
+  };
+
   const updateSharedRideStatus = (id: number, status: string) => {
+    const ride = sharedRides.find((r) => r.id === id)
     const updated = sharedRides.map((ride) => ride.id === id ? { ...ride, status } : ride);
+    // Persist local change optimistically
     persistSharedRides(updated);
+
+    // Send status change email to customer
+    if (ride) {
+      sendStatusChangeEmail(ride, status).catch(err => 
+        console.error('Email notification failed (non-blocking):', err)
+      );
+    }
+
+    // If the ride maps to a remote API id, attempt to update the remote resource
+    const remoteId = ride?.bookingId
+    if (remoteId) {
+      (async () => {
+        try {
+          const body = {
+            status,
+            // Optionally send some useful fields so API can reconcile state
+            driverName: ride?.driver?.name,
+            vehicle: ride?.vehicle,
+            pickupLocation: ride?.pickup?.location,
+            destinationLocation: ride?.destination?.location,
+          }
+          const res = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(remoteId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          if (!res.ok) {
+            console.warn('Remote update failed', res.status)
+            // Optionally: surface an admin notification. For now, log and continue.
+          }
+        } catch (err) {
+          console.error('Failed to update remote shared ride status:', err)
+        }
+      })()
+    }
   };
 
   const updateVehicleBookingStatus = (id: number, status: string) => {
+    // Optimistically update local state
+    const previous = vehicleBookings;
+    const bookingItem = vehicleBookings.find((b) => b.id === id);
     const updated = vehicleBookings.map((booking) => booking.id === id ? { ...booking, status } : booking);
     persistVehicleBookings(updated);
+
+    // Send status change email to customer
+    if (bookingItem) {
+      sendStatusChangeEmail(bookingItem, status).catch(err => 
+        console.error('Email notification failed (non-blocking):', err)
+      );
+    }
+
+    // If this booking maps to a remote private-ride id, attempt remote update
+    const remoteId = bookingItem?.bookingId;
+    if (remoteId) {
+      (async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/api/private-rides/${encodeURIComponent(remoteId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ status }),
+          });
+
+          if (!res.ok) {
+            console.warn('Remote status update failed', res.status);
+            // revert optimistic change
+            persistVehicleBookings(previous);
+          }
+        } catch (err) {
+          console.error('Failed to update remote private ride status:', err);
+          // revert optimistic change
+          persistVehicleBookings(previous);
+        }
+      })();
+    }
   };
 
   const updatePersonalRideStatus = (id: number, status: string) => {
+    const previous = personalRides;
+    const rideItem = personalRides.find((r) => r.id === id);
     const updated = personalRides.map((ride) => ride.id === id ? { ...ride, status } : ride);
+
+    // Optimistically persist the change locally
     persistPersonalRides(updated);
+
+    // Send status change email to customer
+    if (rideItem) {
+      sendStatusChangeEmail(rideItem, status).catch(err => 
+        console.error('Email notification failed (non-blocking):', err)
+      );
+    }
+
+    // Find the ride so we can determine remote id (prefer bookingId)
+    const remoteId = rideItem && (rideItem.bookingId || (typeof rideItem.id === 'string' ? rideItem.id : undefined));
+
+    if (!remoteId) return; // nothing to update remotely
+
+    (async () => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/personal-rides/${encodeURIComponent(remoteId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ status }),
+        });
+
+        if (!res.ok) {
+          console.warn('Remote personal ride status update failed', res.status);
+          // revert optimistic change
+          persistPersonalRides(previous);
+        }
+      } catch (err) {
+        console.error('Failed to update remote personal ride status:', err);
+        // revert optimistic change
+        persistPersonalRides(previous);
+      }
+    })();
   };
 
   const getStatusBadge = (status?: string) => {
@@ -549,14 +1395,17 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     items: RideData[];
     onDelete?: (id: number) => void;
     onOpen?: (item: RideData) => void;
-  }> = ({ items, onDelete, onOpen }) => {
+    onViewPassengers?: (item: RideData) => void;
+  }> = ({ items, onDelete, onOpen, onViewPassengers }) => {
     return (
       <Card className="bg-white/80 backdrop-blur-sm border border-white/50 shadow-xl w-full">
-        <CardHeader className="border-b border-slate-200/50">
+          <CardHeader className="border-b border-slate-200/50">
           <CardTitle className="flex items-center justify-between text-lg">
             <span className="flex items-center gap-2">
               <Users className="h-5 w-5 text-blue-600" />
               Shared Rides Requests ({items.length})
+              {sharedLoading && <span className="ml-3 text-xs text-slate-500">Loading…</span>}
+              {sharedError && <span className="ml-3 text-xs text-red-500">API error</span>}
             </span>
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -587,23 +1436,58 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <td className="py-4 px-6 text-slate-600 font-mono text-xs">{it.bookingId}</td>
                     <td className="py-4 px-6 text-slate-700">
                       <div className="flex flex-col">
-                        <span className="font-medium">{it.postedDate ? new Date(it.postedDate).toLocaleDateString() : "N/A"}</span>
-                        <span className="text-xs text-slate-500">{it.postedDate ? new Date(it.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
+                        {/* Prefer server-provided pickupDate when available; it may be an ISO string or a Firestore Timestamp-like object */}
+                        {(() => {
+                          const rec = it as unknown as Record<string, unknown>;
+                          // Prefer rawPayload.pickupDate (string) first, then top-level pickupDate (timestamp), then postedDate
+                          const pdRaw = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.pickupDate) ?? rec.pickupDate ?? rec.postedDate;
+                          // normalize Firestore timestamp-like objects
+                          let dateObj: Date | null = null;
+                          if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
+                          else if (pdRaw && typeof pdRaw === 'object') {
+                            const pRec = pdRaw as Record<string, unknown>;
+                            const secs = typeof pRec._seconds === 'number' ? pRec._seconds : (typeof pRec.seconds === 'number' ? pRec.seconds : undefined);
+                            if (typeof secs === 'number') dateObj = new Date(secs * 1000);
+                          } else if (pdRaw instanceof Date) dateObj = pdRaw;
+                          // Fallback to postedDate if nothing else
+                          if (!dateObj && typeof rec.postedDate === 'string') dateObj = new Date(rec.postedDate as string);
+
+                          const dateStr = dateObj ? dateObj.toLocaleDateString() : 'N/A';
+                          // time: prefer explicit ride time field then fallback to pickupDate time
+                          const timeStr = (it.time && String(it.time).trim() !== '') ? String(it.time) : (dateObj ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
+                          return (
+                            <>
+                              <span className="font-medium">{dateStr}</span>
+                              <span className="text-xs text-slate-500">{timeStr}</span>
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2 min-w-0">
                         <MapPin className="h-3 w-3 text-green-500 flex-shrink-0" />
-                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{it.pickup.location}</span>
+                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.pickup)}</span>
                         <span className="text-slate-400 mx-1">→</span>
                         <MapPin className="h-3 w-3 text-red-500 flex-shrink-0" />
-                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{it.destination.location}</span>
+                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.destination)}</span>
                       </div>
                     </td>
                     <td className="py-4 px-6 hidden md:table-cell text-slate-600">
                       <div className="min-w-0">
-                        <div className="truncate font-medium">{it.customer?.email || "N/A"}</div>
-                        <div className="text-xs text-slate-500">+94{it.customer?.phone || "N/A"}</div>
+                        {(() => {
+                          const rec = it as unknown as Record<string, unknown>;
+                          const drv = it.driver as unknown as Record<string, unknown> | undefined;
+                          const driverName = drv && typeof drv.name === 'string' ? drv.name as string : (typeof rec.driverName === 'string' ? rec.driverName as string : it.customer?.email ?? 'N/A');
+                          const driverPhone = it.customer?.phone ? `${it.customer.phone}` : (drv && typeof drv.phone === 'string' ? `${drv.phone}` : 'N/A');
+                          return (
+                            <>
+                              <div className="truncate font-medium">{driverName}</div>
+                              <div className="text-xs text-slate-500">{driverPhone}</div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="py-4 px-6 hidden lg:table-cell">
@@ -614,21 +1498,23 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                       </div>
                     </td>
                     <td className="py-4 px-6">
-                      <Select
-                        value={it.status || "Pending"}
-                        onValueChange={(value) => updateSharedRideStatus(it.id, value)}
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Pending">Pending</SelectItem>
-                          <SelectItem value="Confirmed">Confirmed</SelectItem>
-                          <SelectItem value="In Progress">In Progress</SelectItem>
-                          <SelectItem value="Completed">Completed</SelectItem>
-                          <SelectItem value="Cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-3">
+                        {getStatusBadge(it.status)}
+                        <Select
+                          value={it.status || "Pending"}
+                          onValueChange={(value) => updateSharedRideStatus(it.id, value)}
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Pending">Pending</SelectItem>
+                            <SelectItem value="Confirmed">Confirmed</SelectItem>
+                            <SelectItem value="Completed">Completed</SelectItem>
+                            <SelectItem value="Cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex gap-2 flex-wrap">
@@ -636,6 +1522,47 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                           <Eye className="h-3 w-3 mr-1" />
                           View
                         </Button>
+                        {(() => {
+                          // Check if this ride has bookings from multiple possible locations
+                          const rec = it as unknown as Record<string, unknown>;
+                          
+                          // Try to get bookings from:
+                          // 1. Direct property on ride object
+                          // 2. Inside rawPayload
+                          // 3. Inside rawPayload.rawPayload (nested)
+                          let bookingsArray: unknown[] = [];
+                          
+                          if (Array.isArray(rec.bookings)) {
+                            bookingsArray = rec.bookings;
+                          } else if (rec.rawPayload && typeof rec.rawPayload === 'object') {
+                            const rp = rec.rawPayload as Record<string, unknown>;
+                            if (Array.isArray(rp.bookings)) {
+                              bookingsArray = rp.bookings;
+                            } else if (rp.rawPayload && typeof rp.rawPayload === 'object') {
+                              const nestedRp = rp.rawPayload as Record<string, unknown>;
+                              if (Array.isArray(nestedRp.bookings)) {
+                                bookingsArray = nestedRp.bookings;
+                              }
+                            }
+                          }
+                          
+                          const hasBookings = bookingsArray.length > 0;
+                          
+                          // For debugging - log when we find bookings
+                          if (hasBookings) {
+                            console.log(`Ride ${it.bookingId} has ${bookingsArray.length} passenger(s)`);
+                          }
+                          
+                          if (hasBookings) {
+                            return (
+                              <Button size="sm" onClick={() => onViewPassengers?.(it)} className="bg-green-500 hover:bg-green-600 text-white">
+                                <Users className="h-3 w-3 mr-1" />
+                                Passengers ({bookingsArray.length})
+                              </Button>
+                            );
+                          }
+                          return null;
+                        })()}
                         <Button size="sm" variant="ghost" onClick={() => onDelete?.(it.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
                           <Trash2 className="h-3 w-3 mr-1" />
                           Delete
@@ -669,6 +1596,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           <span className="flex items-center gap-2">
             <Car className="h-5 w-5 text-blue-600" />
             Vehicle Bookings ({items.length})
+            {vehicleBookingsLoading && <span className="ml-3 text-xs text-slate-500">Loading…</span>}
+            {vehicleBookingsError && <span className="ml-3 text-xs text-red-500">API error</span>}
           </span>
         </CardTitle>
       </CardHeader>
@@ -696,11 +1625,11 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         <span className="text-xs text-slate-500">{it.postedDate ? new Date(it.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
                       </div>
                     </td>
-                    <td className="py-4 px-6 text-slate-700 font-medium">{it.vehicle}</td>
+                    <td className="py-4 px-6 text-slate-700 font-medium">{it.notes || it.vehicle}</td>
                     <td className="py-4 px-6 text-slate-600">
                       <div className="min-w-0">
-                        <div className="truncate font-medium">{it.customer?.email || "N/A"}</div>
-                        <div className="text-xs text-slate-500">{it.customer?.phone ? `+94${it.customer.phone}` : "N/A"}</div>
+                        <div className="truncate font-medium">{it.customer?.fullName || it.customer?.email || it.bookingId || "N/A"}</div>
+                        <div className="text-xs text-slate-500">{it.customer?.phone ? ` ${formatPhone(it.customer.phone) || it.customer.phone}` : "N/A"}</div>
                       </div>
                     </td>
                     <td className="py-4 px-6 text-slate-700 font-medium">{it.price ? `$${it.price}` : "—"}</td>
@@ -759,6 +1688,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           <span className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-blue-600" />
             Personal Rides ({items.length})
+            {personalLoading && <span className="ml-3 text-xs text-slate-500">Loading…</span>}
+            {personalError && <span className="ml-3 text-xs text-red-500">API error</span>}
           </span>
         </CardTitle>
       </CardHeader>
@@ -771,64 +1702,113 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                 <th className="text-left py-4 px-6 font-semibold text-slate-700">Date & Time</th>
                 <th className="text-left py-4 px-6 font-semibold text-slate-700">Route</th>
                 <th className="text-left py-4 px-6 font-semibold text-slate-700">Time</th>
+                <th className="text-left py-4 px-6 font-semibold text-slate-700">Customer Name</th>
+                <th className="text-left py-4 px-6 font-semibold text-slate-700">Customer Email</th>
+                <th className="text-left py-4 px-6 font-semibold text-slate-700">Customer Phone</th>
                 <th className="text-left py-4 px-6 font-semibold text-slate-700">Status</th>
                 <th className="text-left py-4 px-6 font-semibold text-slate-700">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((it) => (
-                <tr key={it.id} className="border-b border-slate-100 hover:bg-blue-50/20 transition-colors">
-                  <td className="py-4 px-6 text-slate-600 font-mono text-xs">{it.bookingId}</td>
-                  <td className="py-4 px-6 text-slate-700">
-                    <div className="flex flex-col">
-                      <span className="font-medium">{it.postedDate ? new Date(it.postedDate).toLocaleDateString() : "N/A"}</span>
-                      <span className="text-xs text-slate-500">{it.postedDate ? new Date(it.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <MapPin className="h-3 w-3 text-green-500 flex-shrink-0" />
-                      <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{it.pickup.location}</span>
-                      <span className="text-slate-400 mx-1">→</span>
-                      <MapPin className="h-3 w-3 text-red-500 flex-shrink-0" />
-                      <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{it.destination.location}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 text-slate-700 font-medium">{it.time}</td>
-                  <td className="py-4 px-6">
-                    <Select
-                      value={it.status || "Pending"}
-                      onValueChange={(value) => updatePersonalRideStatus(it.id, value)}
-                    >
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Pending">Pending</SelectItem>
-                        <SelectItem value="Confirmed">Confirmed</SelectItem>
-                        <SelectItem value="In Progress">In Progress</SelectItem>
-                        <SelectItem value="Completed">Completed</SelectItem>
-                        <SelectItem value="Cancelled">Cancelled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex gap-2 flex-wrap">
-                      <Button size="sm" onClick={() => openViewDialog(it)} className="bg-blue-500 hover:bg-blue-600">
-                        <Eye className="h-3 w-3 mr-1" />
-                        View
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => onDelete?.(it.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Delete
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {items.map((it) => {
+                // Extract customer details from nested structures and ignore placeholders
+                // rawPayload from API
+                const rawPayload = (typeof it === 'object' && it !== null && 'rawPayload' in it && typeof (it as { rawPayload?: unknown }).rawPayload === 'object' && (it as { rawPayload?: unknown }).rawPayload !== null)
+                  ? (it as { rawPayload: Record<string, unknown> }).rawPayload
+                  : {};
+                // nested rawPayload.rawPayload.personalData
+                let nestedPersonalData: Record<string, unknown> | undefined;
+                if ('rawPayload' in rawPayload && typeof (rawPayload as Record<string, unknown>).rawPayload === 'object' && (rawPayload as Record<string, unknown>).rawPayload !== null) {
+                  const nested = (rawPayload as Record<string, unknown>).rawPayload as Record<string, unknown>;
+                  if ('personalData' in nested && typeof nested.personalData === 'object' && nested.personalData !== null) {
+                    nestedPersonalData = nested.personalData as Record<string, unknown>;
+                  }
+                }
+                const personalData = (typeof rawPayload === 'object' && rawPayload !== null && 'personalData' in rawPayload && typeof (rawPayload as { personalData?: unknown }).personalData === 'object' && (rawPayload as { personalData?: unknown }).personalData !== null)
+                  ? (rawPayload as { personalData: Record<string, unknown> }).personalData
+                  : {};
+
+                const itRec = it as unknown as Record<string, unknown>;
+
+                const customerName = pickNonPlaceholder(
+                  nestedPersonalData && typeof nestedPersonalData.fullName === 'string' ? (nestedPersonalData.fullName as string) : undefined,
+                  typeof (personalData as Record<string, unknown>).fullName === 'string' ? ((personalData as Record<string, unknown>).fullName as string) : undefined,
+                  typeof (rawPayload as Record<string, unknown>).customerName === 'string' ? ((rawPayload as Record<string, unknown>).customerName as string) : undefined,
+                  typeof itRec.customerName === 'string' ? (itRec.customerName as string) : undefined,
+                  it.customer && typeof it.customer === 'object' && 'fullName' in it.customer && typeof it.customer.fullName === 'string' ? it.customer.fullName : undefined
+                );
+                const customerEmail = pickNonPlaceholder(
+                  nestedPersonalData && typeof nestedPersonalData.email === 'string' ? (nestedPersonalData.email as string) : undefined,
+                  typeof (personalData as Record<string, unknown>).email === 'string' ? ((personalData as Record<string, unknown>).email as string) : undefined,
+                  typeof (rawPayload as Record<string, unknown>).customerEmail === 'string' ? ((rawPayload as Record<string, unknown>).customerEmail as string) : undefined,
+                  typeof itRec.customerEmail === 'string' ? (itRec.customerEmail as string) : undefined,
+                  it.customer && typeof it.customer === 'object' && 'email' in it.customer && typeof it.customer.email === 'string' ? it.customer.email : undefined
+                );
+                const customerPhone = pickNonPlaceholder(
+                  nestedPersonalData && typeof nestedPersonalData.phone === 'string' ? (nestedPersonalData.phone as string) : undefined,
+                  typeof (personalData as Record<string, unknown>).phone === 'string' ? ((personalData as Record<string, unknown>).phone as string) : undefined,
+                  typeof (rawPayload as Record<string, unknown>).customerPhone === 'string' ? ((rawPayload as Record<string, unknown>).customerPhone as string) : undefined,
+                  typeof itRec.customerPhone === 'string' ? (itRec.customerPhone as string) : undefined,
+                  it.customer && typeof it.customer === 'object' && 'phone' in it.customer && typeof it.customer.phone === 'string' ? it.customer.phone : undefined
+                );
+
+                return (
+                  <tr key={it.id} className="border-b border-slate-100 hover:bg-blue-50/20 transition-colors">
+                    <td className="py-4 px-6 text-slate-600 font-mono text-xs">{it.bookingId}</td>
+                    <td className="py-4 px-6 text-slate-700">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{it.postedDate ? new Date(it.postedDate).toLocaleDateString() : "N/A"}</span>
+                        <span className="text-xs text-slate-500">{it.postedDate ? new Date(it.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <MapPin className="h-3 w-3 text-green-500 flex-shrink-0" />
+                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.pickup)}</span>
+                        <span className="text-slate-400 mx-1">→</span>
+                        <MapPin className="h-3 w-3 text-red-500 flex-shrink-0" />
+                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.destination)}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-slate-700 font-medium">{it.time}</td>
+                    <td className="py-4 px-6">{customerName}</td>
+                    <td className="py-4 px-6">{customerEmail}</td>
+                    <td className="py-4 px-6">{customerPhone}</td>
+                    <td className="py-4 px-6">
+                      <Select
+                        value={it.status || "Pending"}
+                        onValueChange={(value) => updatePersonalRideStatus(it.id, value)}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Pending">Pending</SelectItem>
+                          <SelectItem value="Confirmed">Confirmed</SelectItem>
+                          <SelectItem value="In Progress">In Progress</SelectItem>
+                          <SelectItem value="Completed">Completed</SelectItem>
+                          <SelectItem value="Cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex gap-2 flex-wrap">
+                        <Button size="sm" onClick={() => openViewDialog(it)} className="bg-blue-500 hover:bg-blue-600">
+                          <Eye className="h-3 w-3 mr-1" />
+                          View
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => onDelete?.(it.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-12 px-6 text-center">
+                  <td colSpan={9} className="py-12 px-6 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Clock className="h-12 w-12 text-slate-300" />
                       <p className="text-slate-500">No personal rides found.</p>
@@ -845,8 +1825,28 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
   /* ---------- Action handlers for tables ---------- */
   const handleDeleteShared = (id: number) => {
+    const ride = sharedRides.find((r) => r.id === id)
     const updated = sharedRides.filter((r) => r.id !== id);
+    // Optimistically remove locally
     persistSharedRides(updated);
+
+    // If the ride has a bookingId that likely maps to the API id, attempt remote delete
+    const remoteId = ride?.bookingId
+    if (remoteId) {
+      (async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(remoteId)}`, {
+            method: 'DELETE',
+          })
+          if (!res.ok) {
+            console.warn('Remote delete failed', res.status)
+            // Optionally: re-add locally or show message. For now, notify in console.
+          }
+        } catch (err) {
+          console.error('Failed to delete remote shared ride:', err)
+        }
+      })()
+    }
   };
 
   const updateRideDate = (rideId: number, newDate: string) => {
@@ -858,16 +1858,59 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
   /* ---------- Manage Dates Component ---------- */
   const ManageDateItem: React.FC<{ ride: RideData; onUpdate: (id: number, date: string) => void }> = ({ ride, onUpdate }) => {
-    const [editMode, setEditMode] = useState(false);
-    const [tempDate, setTempDate] = useState(new Date(ride.postedDate).toISOString().slice(0, 16));
+  const [editMode, setEditMode] = useState(false);
+  const [tempDate, setTempDate] = useState(() => formatToLocalDateTimeInput(ride.postedDate));
 
-    const handleSave = () => {
-      onUpdate(ride.id, tempDate);
-      setEditMode(false);
+  // Keep tempDate in sync when parent updates ride.postedDate
+  useEffect(() => {
+    setTempDate(formatToLocalDateTimeInput(ride.postedDate));
+  }, [ride.postedDate]);
+
+    const [saving, setSaving] = useState(false);
+
+    const handleSave = async () => {
+      // validate tempDate
+      if (!tempDate) return;
+      let d: Date;
+      try {
+        d = new Date(tempDate);
+        if (isNaN(d.getTime())) return;
+      } catch {
+        return;
+      }
+
+      const iso = d.toISOString();
+      setSaving(true);
+      try {
+        // Prefer bookingId for remote id if present, else use numeric id
+        const remoteId = ride.bookingId ?? ride.id;
+        const idForUrl = encodeURIComponent(String(remoteId));
+        const res = await fetch(`http://localhost:5000/api/shared-rides/${idForUrl}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ postedDate: iso }),
+        });
+
+        if (!res.ok) {
+          // Remote failed — persist locally as a fallback and log
+          console.warn('Remote update failed', res.status);
+          onUpdate(ride.id, iso);
+        } else {
+          // Remote succeeded — update local view. If server returns updated ride, we could merge it.
+          onUpdate(ride.id, iso);
+        }
+      } catch (err) {
+        console.error('Failed to update remote shared ride:', err);
+        // Fallback to local persist so admin sees the change offline
+        onUpdate(ride.id, iso);
+      } finally {
+        setSaving(false);
+        setEditMode(false);
+      }
     };
 
     const handleCancel = () => {
-      setTempDate(new Date(ride.postedDate).toISOString().slice(0, 16));
+      setTempDate(formatToLocalDateTimeInput(ride.postedDate));
       setEditMode(false);
     };
 
@@ -875,12 +1918,12 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       <div className="border rounded-lg p-4 bg-white shadow-sm">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2">
               <MapPin className="h-4 w-4 text-green-500" />
-              <span className="font-medium text-sm truncate">{ride.pickup.location}</span>
+              <span className="font-medium text-sm truncate">{formatLocation(ride.pickup)}</span>
               <span className="text-gray-500">→</span>
               <MapPin className="h-4 w-4 text-red-500" />
-              <span className="font-medium text-sm truncate">{ride.destination.location}</span>
+              <span className="font-medium text-sm truncate">{formatLocation(ride.destination)}</span>
             </div>
             <p className="text-sm text-gray-600">
               {ride.bookingId} • {ride.driver.name} • {ride.vehicle}
@@ -899,8 +1942,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                   className="w-48"
                 />
                 <div className="flex gap-1">
-                  <Button size="sm" onClick={handleSave} className="bg-green-500">
-                    Save
+                  <Button size="sm" onClick={handleSave} className="bg-green-500" disabled={saving}>
+                    {saving ? 'Saving...' : 'Save'}
                   </Button>
                   <Button size="sm" variant="outline" onClick={handleCancel}>
                     Cancel
@@ -926,12 +1969,59 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     );
   };
   const handleDeleteVehicleBooking = (id: number) => {
+    const booking = vehicleBookings.find((r) => r.id === id);
     const updated = vehicleBookings.filter((r) => r.id !== id);
+    // Optimistically remove locally
     persistVehicleBookings(updated);
+
+    // If this booking maps to a remote private-ride id, attempt remote delete
+    const remoteId = booking?.bookingId;
+    if (remoteId) {
+      (async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/api/private-rides/${encodeURIComponent(remoteId)}`, {
+            method: 'DELETE',
+            headers: { 'Accept': 'application/json' },
+          });
+          if (!res.ok) {
+            console.warn('Remote delete failed', res.status);
+            // Optionally: re-add locally or show a notification. For now just log.
+          }
+        } catch (err) {
+          console.error('Failed to delete remote private ride:', err);
+        }
+      })();
+    }
   };
   const handleDeletePersonal = (id: number) => {
+    const ride = personalRides.find((r) => r.id === id);
+    const previous = personalRides;
     const updated = personalRides.filter((r) => r.id !== id);
+
+    // Optimistically remove locally
     persistPersonalRides(updated);
+
+    // Determine remote id: prefer bookingId (string from API) then fallback to id
+    const remoteId = (ride && (ride.bookingId || (typeof ride.id === 'string' ? ride.id : undefined))) as string | undefined;
+    if (remoteId) {
+      (async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/api/personal-rides/${encodeURIComponent(remoteId)}`, {
+            method: 'DELETE',
+            headers: { 'Accept': 'application/json' },
+          });
+          if (!res.ok) {
+            console.warn('Remote personal booking delete failed', res.status);
+            // revert optimistic change
+            persistPersonalRides(previous);
+          }
+        } catch (err) {
+          console.error('Failed to delete remote personal booking:', err);
+          // revert optimistic change
+          persistPersonalRides(previous);
+        }
+      })();
+    }
   };
 
   /* ---------- Dialog handlers ---------- */
@@ -942,6 +2032,15 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const closeViewDialog = () => {
     setViewDialogOpen(false);
     setSelectedItem(null);
+  };
+
+  const openPassengersDialog = (item: RideData) => {
+    setSelectedRideForPassengers(item);
+    setPassengersDialogOpen(true);
+  };
+  const closePassengersDialog = () => {
+    setPassengersDialogOpen(false);
+    setSelectedRideForPassengers(null);
   };
 
   // Calculate dashboard statistics
@@ -1171,7 +2270,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                                 {activity.bookingId} - {activity.vehicle}
                               </p>
                               <p className="text-xs text-slate-500">
-                                {activity.pickup.location} → {activity.destination.location}
+                                {formatLocation(activity.pickup)} → {formatLocation(activity.destination)}
                               </p>
                             </div>
                             <div className="text-right">
@@ -1194,7 +2293,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             {/* Shared Requests */}
             {activePage === "sharedRequests" && (
               <>
-                <SharedRidesTable items={sharedRides} onDelete={handleDeleteShared} onOpen={openViewDialog} />
+                <SharedRidesTable items={sharedRides} onDelete={handleDeleteShared} onOpen={openViewDialog} onViewPassengers={openPassengersDialog} />
               </>
             )}
 
@@ -1245,22 +2344,19 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={(e) => { e.preventDefault(); handleRideSubmit(); }} className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Driver Name</label>
-                        <Input value={rideForm.driverName} onChange={(e) => setRideForm({ ...rideForm, driverName: e.target.value })} />
-                        {rideErrors.driverName && <p className="text-red-500 text-sm">{rideErrors.driverName}</p>}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Driver Image (URL or upload handled separately)</label>
-                        <Input value={rideForm.driverImage} onChange={(e) => setRideForm({ ...rideForm, driverImage: e.target.value })} />
-                      </div>
-                    </div>
 
+                    {/* Frequency field at the top */}
                     <div>
-                      <label className="block text-sm font-medium mb-2">Vehicle</label>
-                      <Input value={rideForm.vehicle} onChange={(e) => setRideForm({ ...rideForm, vehicle: e.target.value })} />
-                      {rideErrors.vehicle && <p className="text-red-500 text-sm">{rideErrors.vehicle}</p>}
+                      <label className="block text-sm font-medium mb-2">Frequency</label>
+                      <Select value={rideForm.frequency} onValueChange={(value) => setRideForm({ ...rideForm, frequency: value })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="one-time">One Time</SelectItem>
+                          <SelectItem value="daily">Daily</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
@@ -1277,15 +2373,38 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
+                      {/* Date field - only show if frequency is "one-time" */}
+                      {rideForm.frequency === "one-time" && (
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Date</label>
+                          <Input
+                            type="date"
+                            value={rideForm.rideDate}
+                            onChange={(e) => setRideForm({ ...rideForm, rideDate: e.target.value })}
+                          />
+                          {rideErrors.rideDate && <p className="text-red-500 text-sm">{rideErrors.rideDate}</p>}
+                        </div>
+                      )}
                       <div>
-                        <label className="block text-sm font-medium mb-2">Time</label>
-                        <Input value={rideForm.time} onChange={(e) => setRideForm({ ...rideForm, time: e.target.value })} />
-                        {rideErrors.time && <p className="text-red-500 text-sm">{rideErrors.time}</p>}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Duration</label>
-                        <Input value={rideForm.duration} onChange={(e) => setRideForm({ ...rideForm, duration: e.target.value })} />
-                        {rideErrors.duration && <p className="text-red-500 text-sm">{rideErrors.duration}</p>}
+                        <label className="block text-sm font-medium mb-2">Pickup Time</label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="time"
+                            value={rideForm.pickupTime}
+                            onChange={(e) => setRideForm({ ...rideForm, pickupTime: e.target.value })}
+                            className="flex-1"
+                          />
+                          <Select value={rideForm.ampm} onValueChange={(value) => setRideForm({ ...rideForm, ampm: value })}>
+                            <SelectTrigger className="w-20">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="AM">AM</SelectItem>
+                              <SelectItem value="PM">PM</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {rideErrors.pickupTime && <p className="text-red-500 text-sm">{rideErrors.pickupTime}</p>}
                       </div>
                     </div>
 
@@ -1302,47 +2421,25 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                       </div>
                     </div>
 
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Passengers</label>
-                        <Input value={rideForm.passengers} onChange={(e) => setRideForm({ ...rideForm, passengers: e.target.value })} />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Hand Carry</label>
-                        <Input value={rideForm.handCarry} onChange={(e) => setRideForm({ ...rideForm, handCarry: e.target.value })} />
-                      </div>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Price</label>
-                        <Input value={rideForm.price} onChange={(e) => setRideForm({ ...rideForm, price: e.target.value })} />
-                        {rideErrors.price && <p className="text-red-500 text-sm">{rideErrors.price}</p>}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Frequency</label>
-                        <Select value={rideForm.frequency} onValueChange={(value) => setRideForm({ ...rideForm, frequency: value })}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="one-time">One Time</SelectItem>
-                            <SelectItem value="daily">Daily</SelectItem>
-                            <SelectItem value="monthly">Monthly</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Hand Carry</label>
+                      <Input value={rideForm.handCarry} onChange={(e) => setRideForm({ ...rideForm, handCarry: e.target.value })} />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Posted Date & Time</label>
-                      <Input
-                        type="datetime-local"
-                        value={rideForm.postedDate}
-                        onChange={(e) => setRideForm({ ...rideForm, postedDate: e.target.value })}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Set when this ride was posted (defaults to now)</p>
+                      <label className="block text-sm font-medium mb-2">Price (USD)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                        <Input 
+                          value={rideForm.price} 
+                          onChange={(e) => setRideForm({ ...rideForm, price: e.target.value })} 
+                          className="pl-8"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      {rideErrors.price && <p className="text-red-500 text-sm">{rideErrors.price}</p>}
                     </div>
+
 
                     <div>
                       <Button type="button" onClick={() => handleRideSubmit()} disabled={isRideSubmitting} className="bg-yellow-500 w-full">
@@ -1369,7 +2466,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Price</label>
+                      <label className="block text-sm font-medium mb-2">Price($)</label>
                       <Input value={vehicleForm.price} onChange={(e) => setVehicleForm({ ...vehicleForm, price: e.target.value })} />
                       {vehicleErrors.price && <p className="text-red-500 text-sm">{vehicleErrors.price}</p>}
                     </div>
@@ -1491,7 +2588,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
               </Card>
             )}
 
-            {/* Rates */}
+           {/*  Rates */}
             {activePage === "rates" && (
               <Card>
                 <CardHeader>
@@ -1543,118 +2640,385 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
           {selectedItem && (
             <div className="space-y-6">
-              {/* Basic Info */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Booking ID</label>
-                  <p className="text-sm">{selectedItem.bookingId}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Type</label>
-                  <p className="text-sm capitalize">{selectedItem.type || "N/A"}</p>
-                </div>
-              </div>
+              {/* normalize fields supporting multiple payload shapes (admin local objects, API bookings, rawPayload) */}
+              {(() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const item: any = selectedItem as any
+                const rp = item.rawPayload || {}
+                const bookingId = item.bookingId || item.id || item._id || (rp && rp.id) || 'N/A'
+                const type = item.type || item.rideType || rp.rideType || 'N/A'
+                const driverName = (item.driver && item.driver.name) || (rp.driver && rp.driver.name) || 'N/A'
+                const vehicle = item.vehicle || rp.vehicle || 'N/A'
+                const pickupLoc = formatLocation(item.pickup ?? item.pickupLocation ?? rp.pickup ?? rp.pickupLocation)
+                const destLoc = formatLocation(item.destination ?? item.destinationLocation ?? rp.destination ?? rp.destinationLocation)
+                const time = item.time || rp.time || 'N/A'
+                const duration = item.duration || rp.duration || 'N/A'
+                const frequency = item.frequency || rp.frequency || 'N/A'
+                // Prefer counts from rawPayload (original frontend payload) when available,
+                // because item.seats may have been normalized/fallbacked to 0 earlier.
+                const seatsAvailable = (rp.seats && typeof rp.seats.available === 'number') ? rp.seats.available : ((item.seats && typeof item.seats.available === 'number') ? item.seats.available : (item.availableSeats ?? 'N/A'))
+                const seatsTotal = (rp.seats && typeof rp.seats.total === 'number') ? rp.seats.total : ((item.seats && typeof item.seats.total === 'number') ? item.seats.total : (item.totalSeats ?? 'N/A'))
+                const price = (item.price && String(item.price)) || (rp.price && String(rp.price)) || 'N/A'
+                const notes = item.notes || rp.notes || item.specialRequests || 'None'
 
-              {/* Locations */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Route</label>
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-green-600" />
-                  <span className="text-sm">{selectedItem.pickup.location}</span>
-                  <span className="text-gray-500">→</span>
-                  <MapPin className="h-4 w-4 text-red-600" />
-                  <span className="text-sm">{selectedItem.destination.location}</span>
-                </div>
-              </div>
+                // created/posted date - support Firestore timestamp shapes
+                const createdAtRaw = item.createdAt || item.postedDate || rp.postedDate || rp.createdAt || null
+                let createdAtFormatted = 'N/A'
+                if (createdAtRaw) {
+                  try {
+                    if (typeof createdAtRaw === 'object' && (createdAtRaw._seconds || createdAtRaw.seconds)) {
+                      const secs = Number(createdAtRaw._seconds ?? createdAtRaw.seconds)
+                      createdAtFormatted = new Date(secs * 1000).toLocaleString()
+                    } else {
+                      createdAtFormatted = new Date(createdAtRaw).toLocaleString()
+                    }
+                  } catch (err) {
+                    console.warn('Failed to format createdAt for admin view dialog', err)
+                    createdAtFormatted = String(createdAtRaw)
+                  }
+                }
 
-              {/* Driver Info */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Driver</label>
-                  <p className="text-sm">{selectedItem.driver.name}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Vehicle</label>
-                  <p className="text-sm">{selectedItem.vehicle}</p>
-                </div>
-              </div>
+                // passenger id and pickup date (from raw payload or item)
+                const passengerId = item.passengerId ?? rp.passengerId ?? 'N/A'
+                const pickupDateRaw = rp.pickupDate ?? item.pickupDate ?? null
+                let pickupDateFormatted = 'N/A'
+                if (pickupDateRaw) {
+                  try {
+                    if (typeof pickupDateRaw === 'string') pickupDateFormatted = new Date(pickupDateRaw).toLocaleString()
+                    else if (typeof pickupDateRaw === 'object' && (pickupDateRaw._seconds || pickupDateRaw.seconds)) {
+                      const secs = Number(pickupDateRaw._seconds ?? pickupDateRaw.seconds)
+                      pickupDateFormatted = new Date(secs * 1000).toLocaleString()
+                    } else pickupDateFormatted = String(pickupDateRaw)
+                  } catch {
+                    pickupDateFormatted = String(pickupDateRaw)
+                  }
+                }
 
-              {/* Schedule */}
-              <div className="grid md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Time</label>
-                  <p className="text-sm">{selectedItem.time}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Duration</label>
-                  <p className="text-sm">{selectedItem.duration}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Frequency</label>
-                  <p className="text-sm">{selectedItem.frequency}</p>
-                </div>
-              </div>
-
-              {/* Capacity */}
-              <div className="grid md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Seats Available</label>
-                  <p className="text-sm">{selectedItem.seats.available}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Total Seats</label>
-                  <p className="text-sm">{selectedItem.seats.total}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Passengers</label>
-                  <p className="text-sm">{selectedItem.passengers || "N/A"}</p>
-                </div>
-              </div>
-
-              {/* Additional Details */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Hand Carry</label>
-                  <p className="text-sm">{selectedItem.handCarry || "N/A"}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Price</label>
-                  <p className="text-sm">{selectedItem.price ? `$${selectedItem.price}` : "N/A"}</p>
-                </div>
-              </div>
-
-              {/* Customer Info */}
-              {selectedItem.customer && (
-                <div className="space-y-3">
-                  <h4 className="font-medium text-gray-900">Customer Information</h4>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Full Name</label>
-                      <p className="text-sm">{selectedItem.customer.fullName || "N/A"}</p>
+                return (
+                  <>
+                    {/* Basic Info */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Booking ID</label>
+                        <p className="text-sm">{bookingId}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Type</label>
+                        <p className="text-sm capitalize">{type}</p>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Email</label>
-                      <p className="text-sm">{selectedItem.customer.email || "N/A"}</p>
+
+                    {/* Extra identifiers */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Passenger ID</label>
+                        <p className="text-sm">{passengerId || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Pickup Date</label>
+                        <p className="text-sm">{pickupDateFormatted || 'N/A'}</p>
+                      </div>
+                    </div>
+
+                    {/* Route */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">Route</label>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-green-600" />
+                        <span className="text-sm">{pickupLoc}</span>
+                        <span className="text-gray-500">→</span>
+                        <MapPin className="h-4 w-4 text-red-600" />
+                        <span className="text-sm">{destLoc}</span>
+                      </div>
+                    </div>
+
+                    {/* Driver/Vehicle */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Driver</label>
+                        <p className="text-sm">{driverName}</p>
+                        {/* show driver contact when available (search multiple potential locations) */}
+                        {(() => {
+                          const drvFromItem = item.driver || undefined
+                          const drvFromRp = rp && rp.driver ? rp.driver : undefined
+                          const driverPhone = drvFromItem?.phone || drvFromRp?.phone || item.driverPhone || rp?.personalData?.phone || item.customer?.phone || 'N/A'
+                          const driverEmail = drvFromItem?.email || drvFromRp?.email || item.driverEmail || rp?.personalData?.email || item.customer?.email || 'N/A'
+                          return (
+                            <div className="text-xs text-slate-500 mt-1">
+                              <div>📞 {driverPhone !== 'N/A' ? `${driverPhone}` : 'Phone: N/A'}</div>
+                              <div>✉️ {driverEmail !== 'N/A' ? driverEmail : 'Email: N/A'}</div>
+                            </div>
+                          )
+                        })()}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Vehicle</label>
+                        <p className="text-sm">{vehicle}</p>
+                      </div>
+                    </div>
+
+                    {/* Schedule */}
+                    <div className="grid md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Time</label>
+                        <p className="text-sm">{time}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Duration</label>
+                        <p className="text-sm">{duration}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Frequency</label>
+                        <p className="text-sm">{frequency}</p>
+                      </div>
+                    </div>
+
+                    {/* Capacity */}
+                    <div className="grid md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Seats Available</label>
+                        <p className="text-sm">{seatsAvailable}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Total Seats</label>
+                        <p className="text-sm">{seatsTotal}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Price</label>
+                        <p className="text-sm">{price && price.toString().startsWith('$') ? price : (price !== 'N/A' ? `$${price}` : 'N/A')}</p>
+                      </div>
+                    </div>
+
+                    {/* Notes / Customer (if present) */}
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Notes</label>
+                            <p className="text-sm">{notes}</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Customer</label>
+                            {(() => {
+                              // Helper: return a non-empty trimmed string or undefined
+                              const maybeStr = (val: unknown) => (typeof val === 'string' && val.trim() !== '' ? val.trim() : undefined)
+
+                              // Recursive shallow scanner to find first matching key among targets
+                              const findInObj = (obj: unknown, targets: string[], depth = 0): string | undefined => {
+                                if (!obj || depth > 4) return undefined
+                                if (typeof obj === 'string') return maybeStr(obj)
+                                if (typeof obj !== 'object') return undefined
+                                try {
+                                  for (const key of Object.keys(obj as object)) {
+                                    const lower = key.toLowerCase()
+                                    // direct match
+                                    for (const t of targets) {
+                                      if (lower === t.toLowerCase()) {
+                                        const val = (obj as Record<string, unknown>)[key]
+                                        const s = maybeStr(val)
+                                        if (s) return s
+                                      }
+                                    }
+                                  }
+                                  // search children
+                                  for (const key of Object.keys(obj as object)) {
+                                    const child = (obj as Record<string, unknown>)[key]
+                                    const res = findInObj(child, targets, depth + 1)
+                                    if (res) return res
+                                  }
+                                } catch {
+                                  return undefined
+                                }
+                                return undefined
+                              }
+
+                              // Targets for each field
+                              const nameTargets = ['fullname', 'fullName', 'name', 'customername', 'customerName']
+                              const emailTargets = ['email', 'customeremail', 'customerEmail']
+                              const phoneTargets = ['phone', 'customerphone', 'customerPhone', 'mobile']
+
+                              // Check explicit top-level fields first
+                              const explicitName = maybeStr(item?.customer?.fullName) || maybeStr(item?.customerName) || maybeStr(item?.customer?.name)
+                              const explicitEmail = maybeStr(item?.customer?.email) || maybeStr(item?.customerEmail)
+                              const explicitPhone = maybeStr(item?.customer?.phone) || maybeStr(item?.customerPhone)
+
+                              // Compose search roots: item, rp, rp.rawPayload (if present)
+                              const roots = [item, rp, rp && rp.rawPayload, rp && rp.rawPayload && rp.rawPayload.rawPayload]
+
+                              const name = explicitName || roots.map(r => findInObj(r, nameTargets)).find(Boolean) || 'N/A'
+                              const email = explicitEmail || roots.map(r => findInObj(r, emailTargets)).find(Boolean) || 'N/A'
+                              const phoneRaw = explicitPhone || roots.map(r => findInObj(r, phoneTargets)).find(Boolean) || 'N/A'
+                              const formattedPhone = phoneRaw !== 'N/A' ? (formatPhone(String(phoneRaw)) ?? String(phoneRaw)) : 'N/A'
+
+                              if (name === 'N/A' && email === 'N/A' && formattedPhone === 'N/A') {
+                                return <p className="text-sm text-gray-500">No customer data available</p>
+                              }
+
+                              return (
+                                <div>
+                                  <p className="text-sm">{name}</p>
+                                  {email !== 'N/A' && <p className="text-xs text-gray-500">{email}</p>}
+                                  {formattedPhone !== 'N/A' && <p className="text-xs text-gray-500">{formattedPhone}</p>}
+                                </div>
+                              )
+                            })()}
+                          </div>
+                        </div>
+
+                    {/* Dates */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Posted</label>
+                        <p className="text-sm">{createdAtFormatted}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Time Ago</label>
+                        <p className="text-sm">{item.timeAgo || rp.timeAgo || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Passengers Dialog */}
+      <Dialog open={passengersDialogOpen} onOpenChange={closePassengersDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-600" />
+              Passenger Bookings - {selectedRideForPassengers?.bookingId}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedRideForPassengers && (
+            <div className="space-y-4">
+              {/* Ride Summary */}
+              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                <h3 className="font-semibold text-slate-700 mb-3">Ride Information</h3>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Route</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <MapPin className="h-3 w-3 text-green-600" />
+                      <span className="text-sm">{formatLocation(selectedRideForPassengers.pickup)}</span>
+                      <span className="text-gray-400">→</span>
+                      <MapPin className="h-3 w-3 text-red-600" />
+                      <span className="text-sm">{formatLocation(selectedRideForPassengers.destination)}</span>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Phone</label>
-                    <p className="text-sm">+94{selectedItem.customer.phone || "N/A"}</p>
+                    <label className="block text-xs font-medium text-gray-600">Available Seats</label>
+                    <p className="text-sm font-semibold mt-1">
+                      {selectedRideForPassengers.seats.available} / {selectedRideForPassengers.seats.total}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Price</label>
+                    <p className="text-sm font-semibold mt-1">${selectedRideForPassengers.price}</p>
                   </div>
                 </div>
-              )}
-
-              {/* Dates */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Posted</label>
-                  <p className="text-sm">{selectedItem.postedDate ? new Date(selectedItem.postedDate).toLocaleString() : "N/A"}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Time Ago</label>
-                  <p className="text-sm">{selectedItem.timeAgo}</p>
-                </div>
               </div>
+
+              {/* Passengers List */}
+              {(() => {
+                const rec = selectedRideForPassengers as unknown as Record<string, unknown>;
+                const bookingsArray = rec.bookings || (rec.rawPayload as Record<string, unknown>)?.bookings || [];
+                
+                if (!Array.isArray(bookingsArray) || bookingsArray.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-slate-500">
+                      <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No passenger bookings found for this ride.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-slate-700">
+                      Passengers ({bookingsArray.length})
+                    </h3>
+                    {bookingsArray.map((booking: Record<string, unknown>, index: number) => {
+                      // Format booking date
+                      const bookingDateRaw = booking.bookingDate || booking.createdAt;
+                      let bookingDateFormatted = 'N/A';
+                      if (bookingDateRaw) {
+                        try {
+                          if (typeof bookingDateRaw === 'object' && bookingDateRaw !== null) {
+                            const dateObj = bookingDateRaw as Record<string, unknown>;
+                            if ('_seconds' in dateObj || 'seconds' in dateObj) {
+                              const secs = Number(dateObj._seconds ?? dateObj.seconds);
+                              bookingDateFormatted = new Date(secs * 1000).toLocaleString();
+                            }
+                          } else if (typeof bookingDateRaw === 'string' || typeof bookingDateRaw === 'number') {
+                            bookingDateFormatted = new Date(bookingDateRaw).toLocaleString();
+                          }
+                        } catch {
+                          bookingDateFormatted = String(bookingDateRaw);
+                        }
+                      }
+
+                      const bookingStatusRaw = booking.status || 'pending';
+                      const bookingStatus = typeof bookingStatusRaw === 'string' ? bookingStatusRaw : 'pending';
+                      const statusColors = {
+                        'confirmed': 'bg-green-100 text-green-800',
+                        'pending': 'bg-yellow-100 text-yellow-800',
+                        'cancelled': 'bg-red-100 text-red-800',
+                        'completed': 'bg-blue-100 text-blue-800'
+                      };
+                      const statusClass = statusColors[bookingStatus as keyof typeof statusColors] || 'bg-gray-100 text-gray-800';
+
+                      const bookingId = typeof booking.id === 'string' || typeof booking.id === 'number' ? String(booking.id) : 'N/A';
+                      const rideId = typeof booking.rideId === 'string' ? booking.rideId : 'N/A';
+                      const passengerName = typeof booking.passengerName === 'string' ? booking.passengerName : 'N/A';
+                      const passengerPhone = typeof booking.passengerPhone === 'string' ? booking.passengerPhone : null;
+                      const seatsBooked = typeof booking.seatsBooked === 'number' ? booking.seatsBooked : 0;
+
+                      return (
+                        <div key={typeof booking.id === 'string' || typeof booking.id === 'number' ? String(booking.id) : index} className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-blue-100 rounded-full">
+                                <Users className="h-5 w-5 text-blue-600" />
+                              </div>
+                              <div>
+                                <h4 className="font-semibold text-slate-800">{passengerName}</h4>
+                                <p className="text-xs text-slate-500">Booking ID: {bookingId}</p>
+                              </div>
+                            </div>
+                            <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${statusClass}`}>
+                              {bookingStatus.charAt(0).toUpperCase() + bookingStatus.slice(1)}
+                            </span>
+                          </div>
+                          
+                          <div className="grid md:grid-cols-3 gap-3 text-sm">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600">Phone</label>
+                              <p className="font-medium">{passengerPhone ? (formatPhone(passengerPhone) || passengerPhone) : 'N/A'}</p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600">Seats Booked</label>
+                              <p className="font-semibold text-blue-600">{seatsBooked}</p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600">Booking Date</label>
+                              <p className="text-slate-600">{bookingDateFormatted}</p>
+                            </div>
+                          </div>
+                          
+                          {rideId !== 'N/A' && (
+                            <div className="mt-3 pt-3 border-t border-slate-100">
+                              <p className="text-xs text-slate-500">Ride ID: {rideId}</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </DialogContent>
