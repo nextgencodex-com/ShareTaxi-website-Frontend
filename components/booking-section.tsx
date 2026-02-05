@@ -655,7 +655,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
           <div className="space-y-8">
             <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:space-y-0 space-y-8">
-              <Card className="bg-white border-gray-200 shadow-lg">
+              <Card className={`border-gray-200 shadow-lg transition-colors duration-300 ${rideType === "personal" ? "bg-yellow-50" : "bg-white"}`}>
                 <CardContent className="p-6 sm:p-8">
                 <div className="space-y-6">
                   <div className="flex items-center justify-center mb-8">
@@ -714,7 +714,40 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                   </div>
 
                   <div className="space-y-6">
-                    <h3 className="text-lg font-semibold text-gray-800">Ride Details</h3>
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold text-gray-800">Ride Details</h3>
+                      
+                      {/* Elegant Ride Type Selection Buttons */}
+                      <div className="flex gap-3">
+                        <Button
+                          type="button"
+                          variant={rideType === "shared" ? "default" : "outline"}
+                          onClick={() => setRideType("shared")}
+                          className={`flex-1 h-12 text-base font-medium transition-all duration-300 ${
+                            rideType === "shared"
+                              ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                              : "bg-white hover:bg-blue-50 text-gray-700 border-2 border-gray-300 hover:border-blue-400"
+                          }`}
+                        >
+                          <span className="mr-2">🚗</span>
+                          Shared Ride
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={rideType === "personal" ? "default" : "outline"}
+                          onClick={() => setRideType("personal")}
+                          className={`flex-1 h-12 text-base font-medium transition-all duration-300 ${
+                            rideType === "personal"
+                              ? "bg-yellow-500 hover:bg-yellow-600 text-white shadow-md"
+                              : "bg-white hover:bg-yellow-50 text-gray-700 border-2 border-gray-300 hover:border-yellow-400"
+                          }`}
+                        >
+                          <span className="mr-2">👤</span>
+                          Personal Ride
+                        </Button>
+                      </div>
+                    </div>
+
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="from" className="text-gray-700 font-medium">
@@ -743,36 +776,6 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                             }}
                             className="bg-blue-50 border-blue-200 text-gray-800 placeholder:text-gray-500 h-12"
                           />
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 sm:gap-6">
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="radio"
-                            id="shared"
-                            name="rideType"
-                            value="shared"
-                            checked={rideType === "shared"}
-                            onChange={(e) => setRideType(e.target.value)}
-                            className="w-4 h-4 text-blue-500 border-gray-300 focus:ring-blue-500"
-                          />
-                          <Label htmlFor="shared" className="text-gray-700 font-medium">
-                            Shared
-                          </Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="radio"
-                            id="personal"
-                            name="rideType"
-                            value="personal"
-                            checked={rideType === "personal"}
-                            onChange={(e) => setRideType(e.target.value)}
-                            className="w-4 h-4 text-blue-500 border-gray-300 focus:ring-blue-500"
-                          />
-                          <Label htmlFor="personal" className="text-gray-700 font-medium">
-                            Personal
-                          </Label>
                         </div>
                       </div>
                       <div className="space-y-2">
