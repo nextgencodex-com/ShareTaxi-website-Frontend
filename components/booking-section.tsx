@@ -33,8 +33,39 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
   const [tripType, setTripType] = useState("one-way")
   const [rideType, setRideType] = useState("shared")
+  const [vehicleCategory, setVehicleCategory] = useState<"small" | "vans" | "premium">("small")
+  const [vehicleType, setVehicleType] = useState("sedan")
   const [pickupStart, setPickupStart] = useState("")
   const [pickupEnd, setPickupEnd] = useState("")
+
+  // Vehicle categories and their sub-types
+  const VEHICLE_CATEGORIES = {
+    small: {
+      label: "Small / Private Vehicles",
+      types: {
+        sedan: { label: "Car (Sedan)", description: "Ideal for couples, solo travelers", multiplier: 1 },
+        hatchback: { label: "Hatchback", description: "Budget-friendly short trips", multiplier: 0.9 },
+        suv: { label: "SUV / 4WD", description: "Long tours, hill country, off-road areas", multiplier: 1.4 },
+        luxury: { label: "Luxury Car", description: "VIP tourists, executives", multiplier: 2.5 }
+      }
+    },
+    vans: {
+      label: "Vans & Medium Vehicles",
+      types: {
+        kdh: { label: "KDH Van (HiAce / Super GL)", description: "6–10 passengers (very popular in Sri Lanka)", multiplier: 1.5 },
+        tourist: { label: "Tourist Van (AC / Non-AC)", description: "Family & group travel", multiplier: 1.3 },
+        mini: { label: "Mini Van", description: "Small tour groups", multiplier: 1.2 }
+      }
+    },
+    premium: {
+      label: "Premium & Niche",
+      types: {
+        electric: { label: "Electric Vehicles (EVs)", description: "Eco-tourism", multiplier: 1.3 },
+        vintage: { label: "Classic / Vintage Cars", description: "Wedding & luxury tourism", multiplier: 2.0 },
+        camper: { label: "Camper Van / Motorhome", description: "Road-trip tourism", multiplier: 1.8 }
+      }
+    }
+  }
 
   // Helpers to format and compare time values
   const formatTimeForPayload = (value: string) => {
@@ -120,23 +151,36 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
     
     const tripMultiplier = getTripMultiplier(tripType as "one-way" | "round-trip" | "multi-city")
+    const vehicleMultiplier = VEHICLE_CATEGORIES[vehicleCategory].types[vehicleType as keyof typeof VEHICLE_CATEGORIES[typeof vehicleCategory]['types']].multiplier
 
     let fareDisplay = ""
     if (rideType === "shared") {
       const basePerPersonFare = calculateSimpleFare(distance, ratePerKm)
-      const perPersonFare = basePerPersonFare * tripMultiplier
+      const perPersonFare = basePerPersonFare * tripMultiplier * vehicleMultiplier
       const totalFare = perPersonFare * passengers
-      fareDisplay = `🚗 Distance: ${distance} km<br>📍 Seats: ${passengers}<br>💰 Per Person: <span style="color:green; font-size: 16px; font-weight: bold;">$${perPersonFare.toFixed(2)}</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
+      
+      const currentVehicleLabel = VEHICLE_CATEGORIES[vehicleCategory].types[vehicleType as keyof typeof VEHICLE_CATEGORIES[typeof vehicleCategory]['types']].label
+      
+      fareDisplay = `🚗 ${currentVehicleLabel}<br>📍 Distance: ${distance} km<br>📍 Seats: ${passengers}<br>💰 Per Person: <span style="color:green; font-size: 16px; font-weight: bold;">$${perPersonFare.toFixed(2)}</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
       if (tripMultiplier > 1) {
         fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
       }
+      if (vehicleMultiplier > 1) {
+        fareDisplay += `<br>✨ Premium vehicle: ${vehicleMultiplier}x multiplier applied`
+      }
     } else {
       // Personal ride - distance-based using admin rate per km
-      const totalFare = distance * ratePerKm * tripMultiplier
+      const totalFare = distance * ratePerKm * tripMultiplier * vehicleMultiplier
       const formattedDistance = Number.isFinite(distance) ? distance.toFixed(1) : distance
-      fareDisplay = `🚗 Distance: ${formattedDistance} km<br>💰 Rate: <span style="color:green; font-size: 16px; font-weight: bold;">$${ratePerKm.toFixed(2)}/km</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
+      
+      const currentVehicleLabel = VEHICLE_CATEGORIES[vehicleCategory].types[vehicleType as keyof typeof VEHICLE_CATEGORIES[typeof vehicleCategory]['types']].label
+      
+      fareDisplay = `🚗 ${currentVehicleLabel}<br>📍 Distance: ${formattedDistance} km<br>💰 Rate: <span style="color:green; font-size: 16px; font-weight: bold;">$${ratePerKm.toFixed(2)}/km</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
       if (tripMultiplier > 1) {
         fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
+      }
+      if (vehicleMultiplier > 1) {
+        fareDisplay += `<br>✨ Premium vehicle: ${vehicleMultiplier}x multiplier applied`
       }
     }
 
@@ -422,7 +466,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     if (distance > 0) {
       calculateFareForType(tripType, distance)
     }
-  }, [tripType, rideType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance, calculateFareForType, backendRatePerKm])
+  }, [tripType, rideType, vehicleCategory, vehicleType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance, calculateFareForType, backendRatePerKm])
 
   // helper states removed: selectedTimeSlot, customTime
   // helper functions for dynamically adding/removing destinations and passenger change
@@ -536,6 +580,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       from: tripType === 'multi-city' ? startingPoint : from,
       to,
       rideType,
+      vehicleCategory,
+      vehicleType,
       date,
       time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
       passengers,
@@ -600,6 +646,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const resetForm = () => {
     setTripType("one-way")
     setRideType("shared")
+    setVehicleCategory("small")
+    setVehicleType("sedan")
     setPickupStart("")
     setPickupEnd("")
     setPassengers(1)
@@ -839,7 +887,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                         <p className="text-xs text-gray-500">Enter start and end time (will be saved as e.g. 12.30 - 2.00)</p>
                       </div>
                       
-                      {rideType === "shared" ? (
+                      {rideType === "shared" && (
                         <div className="space-y-2">
                           <Label className="text-gray-700 font-medium">Seats to Book</Label>
                           <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
@@ -865,23 +913,10 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           </div>
                           <p className="text-sm text-gray-600">Available seats: <span className="font-semibold">{Math.max(0, TOTAL_SEATS - passengers)}/{TOTAL_SEATS}</span></p>
                         </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <Label className="text-gray-700 font-medium">Vehicle Information</Label>
-                          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                            <p className="text-sm text-gray-700">
-                              <span className="font-semibold">Available Seats:</span> <span className="font-bold text-blue-600">{TOTAL_SEATS}</span>
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">Full vehicle at your service</p>
-                          </div>
-                        </div>
                       )}
 
                       {/* Fare Calculator for One-Way/Round-Trip - MOBILE RESPONSIVE FIX */}
                       <div className="space-y-3 bg-gray-50 p-3 sm:p-4 rounded-lg border">
-                        <h4 className="flex items-center gap-2 font-semibold text-sm sm:text-base">
-                          <span className="text-lg"> Per-person price</span> 
-                        </h4>
                         <div className="flex gap-2">
                           {/*<Input
                             type="number"
@@ -918,6 +953,49 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                             </div>
                           </div>
                         )}
+                      </div>
+
+                      {/* Vehicle Information Section with Hierarchical Dropdowns */}
+                      <div className="space-y-3">
+                        <Label className="text-gray-700 font-medium">
+                          Vehicle Selection
+                        </Label>
+                        
+                        {/* Main Category Selection */}
+                        <div className="relative">
+                          <select
+                            id="vehicle-category"
+                            value={vehicleCategory}
+                            onChange={(e) => {
+                              const newCategory = e.target.value as "small" | "vans" | "premium"
+                              setVehicleCategory(newCategory)
+                              // Set first vehicle type of the new category
+                              const firstType = Object.keys(VEHICLE_CATEGORIES[newCategory].types)[0]
+                              setVehicleType(firstType)
+                            }}
+                            className="w-full h-12 px-4 bg-blue-50 border-2 border-blue-200 rounded-md text-gray-800 font-medium appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          >
+                            {Object.entries(VEHICLE_CATEGORIES).map(([key, category]) => (
+                              <option key={key} value={key}>{category.label}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
+                        </div>
+
+                        {/* Sub-Type Selection */}
+                        <div className="relative">
+                          <select
+                            id="vehicle-type"
+                            value={vehicleType}
+                            onChange={(e) => setVehicleType(e.target.value)}
+                            className="w-full h-12 px-4 bg-green-50 border-2 border-green-200 rounded-md text-gray-800 font-medium appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                          >
+                            {Object.entries(VEHICLE_CATEGORIES[vehicleCategory].types).map(([key, vehicle]) => (
+                              <option key={key} value={key}>🚗 {vehicle.label}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500 pointer-events-none" />
+                        </div>
                       </div>
 
                     </div>
@@ -1023,6 +1101,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           from: tripType === 'multi-city' ? startingPoint : from,
           to,
           rideType,
+          vehicleCategory,
+          vehicleType,
           date,
           time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
           passengers,
@@ -1045,6 +1125,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           from: tripType === 'multi-city' ? startingPoint : from,
           to,
           rideType: "personal",
+          vehicleCategory,
+          vehicleType,
           date,
           time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
           passengers,

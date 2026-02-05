@@ -17,6 +17,8 @@ interface BookingData {
   from: string;
   to: string;
   rideType: string;
+  vehicleCategory?: string;
+  vehicleType?: string;
   date: string;
   time: string;
   passengers: number | string;
@@ -322,6 +324,22 @@ export function BookingDetailsPopup({
                   </div>
                 </div>
               </div>
+              
+              {/* Vehicle Information */}
+              {(bookingData.vehicleCategory || bookingData.vehicleType) && (
+                <div className="mt-4 p-4 bg-white rounded-lg border-2 border-blue-200">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">🚗 Selected Vehicle</h4>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-900 font-medium">
+                      {bookingData.vehicleCategory === 'small' && 'Small / Private Vehicles'}
+                      {bookingData.vehicleCategory === 'vans' && 'Vans & Medium Vehicles'}
+                      {bookingData.vehicleCategory === 'premium' && 'Premium & Niche'}
+                    </span>
+                    <span className="text-gray-500">•</span>
+                    <span className="text-gray-700">{bookingData.vehicleType}</span>
+                  </div>
+                </div>
+              )}
 
               <hr className="border-gray-200 my-4" />
 
