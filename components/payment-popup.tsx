@@ -2046,19 +2046,19 @@ Please confirm this booking. Thank you!
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-purple-400 rounded-full flex items-center justify-center">
-                    <Users className="h-3 w-3 text-purple-400" />
+                {isJoinRideFlow && (
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 border-2 border-purple-400 rounded-full flex items-center justify-center">
+                      <Users className="h-3 w-3 text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {`${rideData?.seats.available}/${rideData?.seats.total} seats`}
+                      </p>
+                      <p className="text-gray-600 text-sm">Available</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">
-                      {isJoinRideFlow
-                        ? `${rideData?.seats.available}/${rideData?.seats.total} seats`
-                        : `${personalData?.seatCount || "N/A"} seats`}
-                    </p>
-                    <p className="text-gray-600 text-sm">Available</p>
-                  </div>
-                </div>
+                )}
               </div>
 
               <hr className="border-gray-200 my-4" />

@@ -106,6 +106,15 @@ interface VehicleData {
   buttonColor?: string;
 }
 
+interface PersonalVehicleData {
+  id: number;
+  name: string;
+  ratePerKm: string;
+  passengers: string;
+  luggage: string;
+  image: string;
+}
+
 interface AdminPanelProps {
   onBack?: () => void;
   onAddRide?: (ride: RideData) => void;
@@ -122,6 +131,7 @@ const localKeys = {
   VEHICLE_BOOKINGS: "admin_vehicle_bookings_v1",
   PERSONAL_RIDES: "admin_personal_rides_v1",
   VEHICLE_CATALOG: "admin_vehicle_catalog_v1",
+  PERSONAL_VEHICLES: "admin_personal_vehicle_catalog_v1",
 };
 
 /* ---------- Main component ---------- */
@@ -135,6 +145,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     { key: "personalRides", label: "Personal Rides", icon: Clock },
     { key: "addSharedRide", label: "Add Ride", icon: Plus },
     { key: "addVehicle", label: "Add Vehicle", icon: Car },
+    { key: "addPersonalVehicle", label: "Add Personal Vehicle", icon: Car },
     { key: "manageDates", label: "Manage Dates", icon: Calendar },
     { key: "rates", label: "Rates", icon: Settings },
   ] as const;
@@ -167,6 +178,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const [vehicleBookings, setVehicleBookings] = useState<RideData[]>([]);
   const [personalRides, setPersonalRides] = useState<RideData[]>([]);
   const [vehicleCatalog, setVehicleCatalog] = useState<VehicleData[]>([]);
+  const [personalVehicleCatalog, setPersonalVehicleCatalog] = useState<PersonalVehicleData[]>([]);
 
   // vehicle bookings API state
   const [vehicleBookingsLoading, setVehicleBookingsLoading] = useState<boolean>(false);
@@ -250,11 +262,13 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       const v = localStorage.getItem(localKeys.VEHICLE_BOOKINGS);
       const p = localStorage.getItem(localKeys.PERSONAL_RIDES);
       const vc = localStorage.getItem(localKeys.VEHICLE_CATALOG);
+      const pvc = localStorage.getItem(localKeys.PERSONAL_VEHICLES);
 
       if (s) setSharedRides(JSON.parse(s));
       if (v) setVehicleBookings(JSON.parse(v));
       if (p) setPersonalRides(JSON.parse(p));
       if (vc) setVehicleCatalog(JSON.parse(vc));
+      if (pvc) setPersonalVehicleCatalog(JSON.parse(pvc));
 
       // Load rates from backend if available
       (async () => {
@@ -313,6 +327,11 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     setVehicleCatalog(list);
     localStorage.setItem(localKeys.VEHICLE_CATALOG, JSON.stringify(list));
   };
+  const persistPersonalVehicleCatalog = (list: PersonalVehicleData[]) => {
+    setPersonalVehicleCatalog(list);
+    localStorage.setItem(localKeys.PERSONAL_VEHICLES, JSON.stringify(list));
+    window.dispatchEvent(new Event('personalVehiclesUpdated'));
+  };
 
   /* ---------- small demo seed (if empty) ---------- */
   useEffect(() => {
@@ -351,6 +370,45 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           { id: 1, name: "Toyota Innova", price: "50", passengers: "6", luggage: "2", handCarry: "4", image: "/images/toyota-innova.jpg", features: ["A/C", "GPS"], gradient: "bg-gradient-to-br from-blue-400 to-blue-600", buttonColor: "bg-blue-600 hover:bg-blue-700" },
         ];
         persistVehicleCatalog(seedV);
+      }
+      if (!localStorage.getItem(localKeys.PERSONAL_VEHICLES)) {
+        const baseRateRaw = parseFloat(localStorage.getItem("ratePerKm") || "1");
+        const baseRate = Number.isFinite(baseRateRaw) && baseRateRaw > 0 ? baseRateRaw : 1;
+        const seedPersonal: PersonalVehicleData[] = [
+          {
+            id: Date.now(),
+            name: "Mini Car",
+            ratePerKm: (baseRate * 1).toFixed(2),
+            passengers: "2",
+            luggage: "1",
+            image: "http://localhost:5000/api/vehicle-images/mini-car",
+          },
+          {
+            id: Date.now() + 1,
+            name: "Sedan Car",
+            ratePerKm: (baseRate * 1.2).toFixed(2),
+            passengers: "3",
+            luggage: "3",
+            image: "http://localhost:5000/api/vehicle-images/sedan-car",
+          },
+          {
+            id: Date.now() + 2,
+            name: "Van",
+            ratePerKm: (baseRate * 1.5).toFixed(2),
+            passengers: "5",
+            luggage: "7",
+            image: "http://localhost:5000/api/vehicle-images/van",
+          },
+          {
+            id: Date.now() + 3,
+            name: "Mini Coach",
+            ratePerKm: (baseRate * 1.8).toFixed(2),
+            passengers: "10",
+            luggage: "10",
+            image: "http://localhost:5000/api/vehicle-images/mini-coach",
+          },
+        ];
+        persistPersonalVehicleCatalog(seedPersonal);
       }
     } catch (_e) {
       const err = _e as Error | string | null;
@@ -616,6 +674,18 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const [vehicleErrors, setVehicleErrors] = useState<Record<string, string>>({});
   const [isVehicleSubmitting, setIsVehicleSubmitting] = useState(false);
 
+  // Personal vehicle form state (personal rides)
+  const [personalVehicleForm, setPersonalVehicleForm] = useState({
+    name: "",
+    ratePerKm: "",
+    passengers: "2",
+    luggage: "1",
+    image: "",
+    imageFile: null as File | null,
+  });
+  const [personalVehicleErrors, setPersonalVehicleErrors] = useState<Record<string, string>>({});
+  const [isPersonalVehicleSubmitting, setIsPersonalVehicleSubmitting] = useState(false);
+
   /* ---------- Validation (kept similar to your original) ---------- */
   const validateRideForm = (form: typeof rideForm) => {
     const errors: Record<string, string> = {};
@@ -638,6 +708,18 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (!form.name.trim()) errors.name = "Vehicle name is required";
     if (isNaN(parseFloat(form.price)) || parseFloat(form.price) <= 0) errors.price = "Price must be a positive number";
     if (!form.feature1.trim()) errors.feature1 = "At least one feature is required";
+    return errors;
+  };
+
+  const validatePersonalVehicleForm = (form: typeof personalVehicleForm) => {
+    const errors: Record<string, string> = {};
+    if (!form.name.trim()) errors.name = "Vehicle name is required";
+    const rate = parseFloat(form.ratePerKm);
+    if (isNaN(rate) || rate <= 0) errors.ratePerKm = "Rate per KM must be a positive number";
+    const passengers = Number.parseInt(form.passengers || "0");
+    if (isNaN(passengers) || passengers < 1) errors.passengers = "Passengers must be at least 1";
+    const luggage = Number.parseInt(form.luggage || "0");
+    if (isNaN(luggage) || luggage < 0) errors.luggage = "Luggage must be 0 or more";
     return errors;
   };
 
@@ -873,6 +955,45 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         setIsVehicleSubmitting(false);
       }
     })();
+  };
+
+  /* ---------- Add Personal Ride Vehicle ---------- */
+  const handlePersonalVehicleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const errors = validatePersonalVehicleForm(personalVehicleForm);
+    setPersonalVehicleErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    setIsPersonalVehicleSubmitting(true);
+
+    const imagePath = personalVehicleForm.imageFile
+      ? `/images/${personalVehicleForm.imageFile.name}`
+      : personalVehicleForm.image || "/images/toyota-innova.jpg";
+
+    setTimeout(() => {
+      const newVehicle: PersonalVehicleData = {
+        id: Date.now(),
+        name: personalVehicleForm.name.trim(),
+        ratePerKm: personalVehicleForm.ratePerKm,
+        passengers: personalVehicleForm.passengers,
+        luggage: personalVehicleForm.luggage,
+        image: imagePath,
+      };
+      const updated = [newVehicle, ...personalVehicleCatalog];
+      persistPersonalVehicleCatalog(updated);
+
+      setPersonalVehicleForm({
+        name: "",
+        ratePerKm: "",
+        passengers: "2",
+        luggage: "1",
+        image: "",
+        imageFile: null,
+      });
+      setIsPersonalVehicleSubmitting(false);
+      setActivePage("personalRides");
+      setRateStatus("✅ Personal ride vehicle added");
+      setTimeout(() => setRateStatus(""), 2500);
+    }, 600);
   };
 
   /* ---------- Create a private vehicle booking record (simulate booking) ---------- */
@@ -2333,6 +2454,51 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             {activePage === "personalRides" && (
               <>
                 <PersonalRidesTable items={personalRides} onDelete={handleDeletePersonal} />
+                <div className="mt-4">
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <CardTitle>Personal Ride Vehicles ({personalVehicleCatalog.length})</CardTitle>
+                      <Button onClick={() => setActivePage("addPersonalVehicle")} className="bg-yellow-500">
+                        Add New Vehicle
+                      </Button>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {personalVehicleCatalog.map((v) => (
+                          <div key={v.id} className="border rounded p-3 flex flex-col gap-2">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={v.image}
+                                alt={v.name}
+                                className="w-16 h-12 object-cover rounded bg-gray-100"
+                              />
+                              <div>
+                                <div className="text-lg font-semibold">{v.name}</div>
+                                <div className="text-sm text-gray-600">${v.ratePerKm} per KM</div>
+                              </div>
+                            </div>
+                            <div className="text-sm text-gray-600">👤 x {v.passengers} • 🎒 x {v.luggage}</div>
+                            <div className="mt-2 flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  const updated = personalVehicleCatalog.filter(item => item.id !== v.id);
+                                  persistPersonalVehicleCatalog(updated);
+                                }}
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                        {personalVehicleCatalog.length === 0 && (
+                          <div className="text-sm text-gray-500">No personal ride vehicles added yet.</div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </>
             )}
 
@@ -2513,6 +2679,63 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <div>
                       <Button type="button" onClick={() => handleVehicleSubmit()} disabled={isVehicleSubmitting} className="bg-yellow-500 w-full">
                         {isVehicleSubmitting ? "Adding Vehicle..." : "Add Vehicle"}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Add Personal Ride Vehicle */}
+            {activePage === "addPersonalVehicle" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Add Personal Ride Vehicle</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={(e) => { e.preventDefault(); handlePersonalVehicleSubmit(); }} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Vehicle Name</label>
+                      <Input value={personalVehicleForm.name} onChange={(e) => setPersonalVehicleForm({ ...personalVehicleForm, name: e.target.value })} />
+                      {personalVehicleErrors.name && <p className="text-red-500 text-sm">{personalVehicleErrors.name}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Rate per KM (USD)</label>
+                      <Input value={personalVehicleForm.ratePerKm} onChange={(e) => setPersonalVehicleForm({ ...personalVehicleForm, ratePerKm: e.target.value })} />
+                      {personalVehicleErrors.ratePerKm && <p className="text-red-500 text-sm">{personalVehicleErrors.ratePerKm}</p>}
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Passengers</label>
+                        <Input value={personalVehicleForm.passengers} onChange={(e) => setPersonalVehicleForm({ ...personalVehicleForm, passengers: e.target.value })} />
+                        {personalVehicleErrors.passengers && <p className="text-red-500 text-sm">{personalVehicleErrors.passengers}</p>}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Luggage</label>
+                        <Input value={personalVehicleForm.luggage} onChange={(e) => setPersonalVehicleForm({ ...personalVehicleForm, luggage: e.target.value })} />
+                        {personalVehicleErrors.luggage && <p className="text-red-500 text-sm">{personalVehicleErrors.luggage}</p>}
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Image URL</label>
+                        <Input value={personalVehicleForm.image} onChange={(e) => setPersonalVehicleForm({ ...personalVehicleForm, image: e.target.value })} placeholder="https://..." />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Upload Image</label>
+                        <Input type="file" accept="image/*" onChange={(e) => setPersonalVehicleForm({ ...personalVehicleForm, imageFile: e.target.files?.[0] || null })} />
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <Button type="button" variant="ghost" onClick={() => setActivePage("personalRides")}>
+                        Back to Personal Rides
+                      </Button>
+                      <Button type="button" onClick={() => handlePersonalVehicleSubmit()} disabled={isPersonalVehicleSubmitting} className="bg-yellow-500 w-full">
+                        {isPersonalVehicleSubmitting ? "Adding Vehicle..." : "Add Vehicle"}
                       </Button>
                     </div>
                   </form>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,7 @@ import { Calendar as CalendarIcon, ChevronDown, MapPin, ChevronUp, AlertTriangle
 import dynamic from 'next/dynamic'
 import { BookingDetailsPopup } from "./booking-details-popup"
 import { PersonalDetailsPopup } from "./personal-rides/personal-details-popup"
+import { SharedRidesSection } from "./shared-rides-section"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -27,45 +28,77 @@ interface BookingSectionProps {
   onAddSharedRide?: (bookingData: unknown) => void
 }
 
+interface PersonalVehicle {
+  id: number
+  name: string
+  ratePerKm: string
+  passengers: string
+  luggage: string
+  image: string
+}
+
+const PERSONAL_VEHICLES_KEY = "admin_personal_vehicle_catalog_v1"
+
+const defaultPersonalVehicles: PersonalVehicle[] = [
+  {
+    id: 1,
+    name: "Mini Car",
+    ratePerKm: "1.00",
+    passengers: "2",
+    luggage: "1",
+    image: "http://localhost:5000/api/vehicle-images/mini-car",
+  },
+  {
+    id: 2,
+    name: "Sedan Car",
+    ratePerKm: "1.20",
+    passengers: "3",
+    luggage: "3",
+    image: "http://localhost:5000/api/vehicle-images/sedan-car",
+  },
+  {
+    id: 3,
+    name: "Van",
+    ratePerKm: "1.50",
+    passengers: "5",
+    luggage: "7",
+    image: "http://localhost:5000/api/vehicle-images/van",
+  },
+  {
+    id: 4,
+    name: "Mini Coach",
+    ratePerKm: "1.80",
+    passengers: "10",
+    luggage: "10",
+    image: "http://localhost:5000/api/vehicle-images/mini-coach",
+  },
+]
+
 export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const isMobile = useIsMobile()
   const [showMapMobile, setShowMapMobile] = useState(false)
 
   const [tripType, setTripType] = useState("one-way")
   const [rideType, setRideType] = useState("shared")
-  const [vehicleCategory, setVehicleCategory] = useState<"small" | "vans" | "premium">("small")
-  const [vehicleType, setVehicleType] = useState("sedan")
+  const [vehicleType, setVehicleType] = useState<"standard" | "electric" | "vintage" | "camper">("standard")
+  const [personalVehicles, setPersonalVehicles] = useState<PersonalVehicle[]>([])
+  const [selectedPersonalVehicleId, setSelectedPersonalVehicleId] = useState<number | null>(null)
   const [pickupStart, setPickupStart] = useState("")
   const [pickupEnd, setPickupEnd] = useState("")
 
-  // Vehicle categories and their sub-types
-  const VEHICLE_CATEGORIES = {
-    small: {
-      label: "Small / Private Vehicles",
-      types: {
-        sedan: { label: "Car (Sedan)", description: "Ideal for couples, solo travelers", multiplier: 1 },
-        hatchback: { label: "Hatchback", description: "Budget-friendly short trips", multiplier: 0.9 },
-        suv: { label: "SUV / 4WD", description: "Long tours, hill country, off-road areas", multiplier: 1.4 },
-        luxury: { label: "Luxury Car", description: "VIP tourists, executives", multiplier: 2.5 }
-      }
-    },
-    vans: {
-      label: "Vans & Medium Vehicles",
-      types: {
-        kdh: { label: "KDH Van (HiAce / Super GL)", description: "6–10 passengers (very popular in Sri Lanka)", multiplier: 1.5 },
-        tourist: { label: "Tourist Van (AC / Non-AC)", description: "Family & group travel", multiplier: 1.3 },
-        mini: { label: "Mini Van", description: "Small tour groups", multiplier: 1.2 }
-      }
-    },
-    premium: {
-      label: "Premium & Niche",
-      types: {
-        electric: { label: "Electric Vehicles (EVs)", description: "Eco-tourism", multiplier: 1.3 },
-        vintage: { label: "Classic / Vintage Cars", description: "Wedding & luxury tourism", multiplier: 2.0 },
-        camper: { label: "Camper Van / Motorhome", description: "Road-trip tourism", multiplier: 1.8 }
-      }
-    }
+  // Premium vehicle multipliers
+  const VEHICLE_MULTIPLIERS = {
+    standard: 1,
+    electric: 1.3,    // 30% premium for EVs
+    vintage: 2.0,     // 100% premium for vintage/luxury
+    camper: 1.8       // 80% premium for camper vans
   }
+
+  const selectedPersonalVehicle = useMemo(() => {
+    if (!personalVehicles.length) return null
+    const found = personalVehicles.find((v) => v.id === selectedPersonalVehicleId)
+    return found || personalVehicles[0]
+  }, [personalVehicles, selectedPersonalVehicleId])
 
   // Helpers to format and compare time values
   const formatTimeForPayload = (value: string) => {
@@ -122,9 +155,44 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   // backend-provided rate (per km) — prefer this over localStorage
   const [backendRatePerKm, setBackendRatePerKm] = useState<number | null>(null)
 
+  const currentDistanceKm = useMemo(() => {
+    let distance = 0
+    if (tripType === "round-trip" && roundTripDistance) {
+      distance = parseFloat(roundTripDistance)
+    } else if (tripType === "one-way" && oneWayDistance) {
+      distance = parseFloat(oneWayDistance)
+    } else if (tripType === "multi-city" && multiCityDistance) {
+      distance = parseFloat(multiCityDistance)
+    } else if (mapDistance) {
+      distance = parseFloat(mapDistance)
+    }
+
+    return Number.isFinite(distance) && distance > 0 ? distance : 0
+  }, [tripType, roundTripDistance, oneWayDistance, multiCityDistance, mapDistance])
+
   // Validation state
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PERSONAL_VEHICLES_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as PersonalVehicle[]
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPersonalVehicles(parsed)
+          setSelectedPersonalVehicleId(parsed[0].id)
+          return
+        }
+      }
+      localStorage.setItem(PERSONAL_VEHICLES_KEY, JSON.stringify(defaultPersonalVehicles))
+      setPersonalVehicles(defaultPersonalVehicles)
+      setSelectedPersonalVehicleId(defaultPersonalVehicles[0].id)
+    } catch {
+      setPersonalVehicles(defaultPersonalVehicles)
+      setSelectedPersonalVehicleId(defaultPersonalVehicles[0].id)
+    }
+  }, [])
 
   
   const calculateFareForType = useCallback((tripType: string, distance: number) => {
@@ -149,9 +217,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     
     const ratePerKm = ratePerKmRaw
 
-    
     const tripMultiplier = getTripMultiplier(tripType as "one-way" | "round-trip" | "multi-city")
-    const vehicleMultiplier = VEHICLE_CATEGORIES[vehicleCategory].types[vehicleType as keyof typeof VEHICLE_CATEGORIES[typeof vehicleCategory]['types']].multiplier
+    const vehicleMultiplier = VEHICLE_MULTIPLIERS[vehicleType] ?? 1
 
     let fareDisplay = ""
     if (rideType === "shared") {
@@ -159,9 +226,16 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       const perPersonFare = basePerPersonFare * tripMultiplier * vehicleMultiplier
       const totalFare = perPersonFare * passengers
       
-      const currentVehicleLabel = VEHICLE_CATEGORIES[vehicleCategory].types[vehicleType as keyof typeof VEHICLE_CATEGORIES[typeof vehicleCategory]['types']].label
-      
-      fareDisplay = `🚗 ${currentVehicleLabel}<br>📍 Distance: ${distance} km<br>📍 Seats: ${passengers}<br>💰 Per Person: <span style="color:green; font-size: 16px; font-weight: bold;">$${perPersonFare.toFixed(2)}</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
+      const vehicleIcons = {
+        standard: "🚗",
+        electric: "⚡",
+        vintage: "🎩",
+        camper: "🚐"
+      }
+
+      const icon = vehicleIcons[vehicleType] || "🚗"
+
+      fareDisplay = `${icon} Distance: ${distance} km<br>� Seats: ${passengers}<br>💰 Per Person: <span style="color:green; font-size: 16px; font-weight: bold;">$${perPersonFare.toFixed(2)}</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
       if (tripMultiplier > 1) {
         fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
       }
@@ -169,23 +243,27 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
         fareDisplay += `<br>✨ Premium vehicle: ${vehicleMultiplier}x multiplier applied`
       }
     } else {
-      // Personal ride - distance-based using admin rate per km
-      const totalFare = distance * ratePerKm * tripMultiplier * vehicleMultiplier
+      // Personal ride - distance-based using per-vehicle rate per km
+      const personalRateRaw = selectedPersonalVehicle ? parseFloat(selectedPersonalVehicle.ratePerKm) : NaN
+      const personalRate = Number.isFinite(personalRateRaw) && personalRateRaw > 0 ? personalRateRaw : ratePerKm
+
+      if (!personalRate || personalRate <= 0) {
+        setFareResults(prev => ({ ...prev, [tripType]: "⚠️ No personal-ride rate configured for this vehicle." }))
+        return
+      }
+
+      const totalFare = distance * personalRate * tripMultiplier
       const formattedDistance = Number.isFinite(distance) ? distance.toFixed(1) : distance
-      
-      const currentVehicleLabel = VEHICLE_CATEGORIES[vehicleCategory].types[vehicleType as keyof typeof VEHICLE_CATEGORIES[typeof vehicleCategory]['types']].label
-      
-      fareDisplay = `🚗 ${currentVehicleLabel}<br>📍 Distance: ${formattedDistance} km<br>💰 Rate: <span style="color:green; font-size: 16px; font-weight: bold;">$${ratePerKm.toFixed(2)}/km</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
+      const vehicleName = selectedPersonalVehicle?.name || "Vehicle"
+
+      fareDisplay = `🚗 ${vehicleName} • Distance: ${formattedDistance} km<br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
       if (tripMultiplier > 1) {
         fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
-      }
-      if (vehicleMultiplier > 1) {
-        fareDisplay += `<br>✨ Premium vehicle: ${vehicleMultiplier}x multiplier applied`
       }
     }
 
     setFareResults(prev => ({ ...prev, [tripType]: fareDisplay }))
-  }, [rideType, backendRatePerKm, passengers])
+  }, [rideType, backendRatePerKm, passengers, vehicleType, selectedPersonalVehicle])
 
   // Function to refresh rates from backend and localStorage
   const refreshRates = useCallback(async () => {
@@ -246,19 +324,49 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       if (e.key === 'ratePerKm') {
         refreshRates()
       }
+      if (e.key === PERSONAL_VEHICLES_KEY) {
+        try {
+          const raw = localStorage.getItem(PERSONAL_VEHICLES_KEY)
+          if (raw) {
+            const parsed = JSON.parse(raw) as PersonalVehicle[]
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setPersonalVehicles(parsed)
+              setSelectedPersonalVehicleId(parsed[0].id)
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
     }
     
     // Listen for custom event (same-page updates)
     const handleCustomRateUpdate = () => {
       refreshRates()
     }
+    const handlePersonalVehiclesUpdate = () => {
+      try {
+        const raw = localStorage.getItem(PERSONAL_VEHICLES_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw) as PersonalVehicle[]
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPersonalVehicles(parsed)
+            setSelectedPersonalVehicleId(parsed[0].id)
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
     
     window.addEventListener('storage', handleStorageChange)
     window.addEventListener('ratesUpdated', handleCustomRateUpdate)
+    window.addEventListener('personalVehiclesUpdated', handlePersonalVehiclesUpdate)
     
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('ratesUpdated', handleCustomRateUpdate)
+      window.removeEventListener('personalVehiclesUpdated', handlePersonalVehiclesUpdate)
     }
   }, [refreshRates])
 
@@ -466,7 +574,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     if (distance > 0) {
       calculateFareForType(tripType, distance)
     }
-  }, [tripType, rideType, vehicleCategory, vehicleType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance, calculateFareForType, backendRatePerKm])
+  }, [tripType, rideType, vehicleType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance, calculateFareForType, backendRatePerKm])
 
   // helper states removed: selectedTimeSlot, customTime
   // helper functions for dynamically adding/removing destinations and passenger change
@@ -580,7 +688,6 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       from: tripType === 'multi-city' ? startingPoint : from,
       to,
       rideType,
-      vehicleCategory,
       vehicleType,
       date,
       time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
@@ -646,8 +753,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const resetForm = () => {
     setTripType("one-way")
     setRideType("shared")
-    setVehicleCategory("small")
-    setVehicleType("sedan")
+    setVehicleType("standard")
     setPickupStart("")
     setPickupEnd("")
     setPassengers(1)
@@ -887,7 +993,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                         <p className="text-xs text-gray-500">Enter start and end time (will be saved as e.g. 12.30 - 2.00)</p>
                       </div>
                       
-                      {rideType === "shared" && (
+                      {rideType === "shared" ? (
                         <div className="space-y-2">
                           <Label className="text-gray-700 font-medium">Seats to Book</Label>
                           <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
@@ -913,12 +1019,16 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           </div>
                           <p className="text-sm text-gray-600">Available seats: <span className="font-semibold">{Math.max(0, TOTAL_SEATS - passengers)}/{TOTAL_SEATS}</span></p>
                         </div>
-                      )}
+                      ) : null}
 
                       {/* Fare Calculator for One-Way/Round-Trip - MOBILE RESPONSIVE FIX */}
+                      {/*
                       <div className="space-y-3 bg-gray-50 p-3 sm:p-4 rounded-lg border">
+                        <h4 className="flex items-center gap-2 font-semibold text-sm sm:text-base">
+                          <span className="text-lg"> Per-person price</span> 
+                        </h4>
                         <div className="flex gap-2">
-                          {/*<Input
+                          <Input
                             type="number"
                             placeholder={"Distance (km) e.g. 40"}
                             value={tripType === "round-trip" ? roundTripDistance : oneWayDistance}
@@ -929,7 +1039,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                             }
                             className="bg-white"
                           />
-                          {/* <Button
+                          <Button
                             type="button"
                             onClick={() => {
                               const distanceKey = tripType === "round-trip" ? roundTripDistance : oneWayDistance;
@@ -938,7 +1048,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                             className="bg-yellow-500 hover:bg-yellow-600 text-black px-4"
                           >
                             Calculate
-                          </Button> */}
+                          </Button>
                         </div>
                         {(fareResults["one-way"] || fareResults["round-trip"]) && (
                           <div className="p-2 sm:p-3 bg-white border rounded text-xs sm:text-sm">
@@ -954,49 +1064,61 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           </div>
                         )}
                       </div>
+                      */}
 
-                      {/* Vehicle Information Section with Hierarchical Dropdowns */}
-                      <div className="space-y-3">
-                        <Label className="text-gray-700 font-medium">
-                          Vehicle Selection
-                        </Label>
-                        
-                        {/* Main Category Selection */}
-                        <div className="relative">
-                          <select
-                            id="vehicle-category"
-                            value={vehicleCategory}
-                            onChange={(e) => {
-                              const newCategory = e.target.value as "small" | "vans" | "premium"
-                              setVehicleCategory(newCategory)
-                              // Set first vehicle type of the new category
-                              const firstType = Object.keys(VEHICLE_CATEGORIES[newCategory].types)[0]
-                              setVehicleType(firstType)
-                            }}
-                            className="w-full h-12 px-4 bg-blue-50 border-2 border-blue-200 rounded-md text-gray-800 font-medium appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                          >
-                            {Object.entries(VEHICLE_CATEGORIES).map(([key, category]) => (
-                              <option key={key} value={key}>{category.label}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
-                        </div>
+                      {/* Vehicle Type Selection - Personal Rides Only - Before Continue Button */}
+                      {rideType === "personal" && (
+                        <div className="space-y-3">
+                          <Label className="text-gray-700 font-medium">Select Vehicle</Label>
+                          <div className="space-y-3">
+                            {personalVehicles.map((vehicle) => {
+                              const rate = parseFloat(vehicle.ratePerKm)
+                              const hasRate = Number.isFinite(rate) && rate > 0
+                              const hasDistance = currentDistanceKm > 0
+                              const perPersonPrice = hasRate && hasDistance ? currentDistanceKm * rate : null
 
-                        {/* Sub-Type Selection */}
-                        <div className="relative">
-                          <select
-                            id="vehicle-type"
-                            value={vehicleType}
-                            onChange={(e) => setVehicleType(e.target.value)}
-                            className="w-full h-12 px-4 bg-green-50 border-2 border-green-200 rounded-md text-gray-800 font-medium appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                          >
-                            {Object.entries(VEHICLE_CATEGORIES[vehicleCategory].types).map(([key, vehicle]) => (
-                              <option key={key} value={key}>🚗 {vehicle.label}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500 pointer-events-none" />
+                              return (
+                                <button
+                                  key={vehicle.id}
+                                  type="button"
+                                  onClick={() => setSelectedPersonalVehicleId(vehicle.id)}
+                                  className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all duration-300 ${
+                                    (selectedPersonalVehicleId ?? personalVehicles[0]?.id) === vehicle.id
+                                      ? "border-blue-500 bg-blue-50"
+                                      : "border-gray-200 bg-white hover:border-gray-300"
+                                  }`}
+                                >
+                                  <img
+                                    src={vehicle.image}
+                                    alt={vehicle.name}
+                                    className="w-14 h-12 object-cover rounded flex-shrink-0 bg-gray-100"
+                                  />
+                                  <div className="flex flex-col min-w-[140px]">
+                                    <h4 className="font-semibold text-gray-900 text-sm text-left">{vehicle.name}</h4>
+                                  </div>
+                                  <div className="flex-1 flex flex-col items-center justify-center text-xs text-gray-600">
+                                    <span className="flex items-center gap-1">👤 x {vehicle.passengers}</span>
+                                    <span className="flex items-center gap-1">🎒 x {vehicle.luggage}</span>
+                                  </div>
+                                  <div className="flex flex-col gap-1 text-xs text-gray-600 items-end text-right">
+                                    <span className="flex items-center gap-1">
+                                      💰 Price:&nbsp;
+                                      {perPersonPrice !== null ? (
+                                        <span className="font-bold text-green-700 text-sm">${perPersonPrice.toFixed(2)}</span>
+                                      ) : (
+                                        <span className="text-gray-400">Add route</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </button>
+                              )
+                            })}
+                            {personalVehicles.length === 0 && (
+                              <div className="text-sm text-gray-500">No personal ride vehicles available.</div>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                     </div>
 
@@ -1090,6 +1212,9 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
         </div>
       </section>
 
+      {/* Shared Rides Section - Before Continue Button */}
+      <SharedRidesSection />
+
       <BookingDetailsPopup
         isOpen={showBookingPopup}
         onClose={() => {
@@ -1101,7 +1226,6 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           from: tripType === 'multi-city' ? startingPoint : from,
           to,
           rideType,
-          vehicleCategory,
           vehicleType,
           date,
           time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
@@ -1125,8 +1249,13 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           from: tripType === 'multi-city' ? startingPoint : from,
           to,
           rideType: "personal",
-          vehicleCategory,
           vehicleType,
+          vehicleId: selectedPersonalVehicle?.id,
+          vehicleName: selectedPersonalVehicle?.name,
+          vehicleImage: selectedPersonalVehicle?.image,
+          vehiclePassengers: selectedPersonalVehicle?.passengers,
+          vehicleLuggage: selectedPersonalVehicle?.luggage,
+          vehicleRatePerKm: selectedPersonalVehicle?.ratePerKm,
           date,
           time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
           passengers,

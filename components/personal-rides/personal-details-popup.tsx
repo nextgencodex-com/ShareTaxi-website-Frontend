@@ -19,6 +19,12 @@ interface BookingData {
   rideType: string;
   vehicleCategory?: string;
   vehicleType?: string;
+  vehicleId?: number;
+  vehicleName?: string;
+  vehicleImage?: string;
+  vehiclePassengers?: string;
+  vehicleLuggage?: string;
+  vehicleRatePerKm?: string;
   date: string;
   time: string;
   passengers: number | string;
@@ -290,7 +296,6 @@ export function PersonalDetailsPopup({
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">
-                      {formData.seatCount} {formData.seatCount === 1 ? "Person" : "Persons"} Requested{" "}
                       {bookingData.rideType === "shared" ? "Shared ride" : "Personal ride"}
                     </p>
                     <p className="text-gray-600 text-sm">
@@ -301,17 +306,29 @@ export function PersonalDetailsPopup({
               </div>
               
               {/* Vehicle Information */}
-              {(bookingData.vehicleCategory || bookingData.vehicleType) && (
+              {(bookingData.vehicleName || bookingData.vehicleType || bookingData.vehicleImage) && (
                 <div className="mt-4 p-4 bg-white rounded-lg border-2 border-yellow-200">
                   <h4 className="text-sm font-semibold text-gray-700 mb-2">🚗 Selected Vehicle</h4>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-900 font-medium">
-                      {bookingData.vehicleCategory === 'small' && 'Small / Private Vehicles'}
-                      {bookingData.vehicleCategory === 'vans' && 'Vans & Medium Vehicles'}
-                      {bookingData.vehicleCategory === 'premium' && 'Premium & Niche'}
-                    </span>
-                    <span className="text-gray-500">•</span>
-                    <span className="text-gray-700">{bookingData.vehicleType}</span>
+                  <div className="flex items-center gap-3">
+                    {bookingData.vehicleImage && (
+                      <img
+                        src={bookingData.vehicleImage}
+                        alt={bookingData.vehicleName || "Vehicle"}
+                        className="w-14 h-12 object-cover rounded bg-gray-100"
+                      />
+                    )}
+                    <div>
+                      <span className="text-gray-900 font-medium">
+                        {bookingData.vehicleName || bookingData.vehicleType || "Vehicle"}
+                      </span>
+                      {(bookingData.vehiclePassengers || bookingData.vehicleLuggage) && (
+                        <div className="text-xs text-gray-600 mt-1">
+                          {bookingData.vehiclePassengers && <span>👤 x {bookingData.vehiclePassengers}</span>}
+                          {bookingData.vehiclePassengers && bookingData.vehicleLuggage && <span className="mx-1">•</span>}
+                          {bookingData.vehicleLuggage && <span>🎒 x {bookingData.vehicleLuggage}</span>}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
