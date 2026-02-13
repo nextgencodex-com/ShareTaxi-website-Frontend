@@ -20,7 +20,7 @@ const center = {
 };
 
 export default function Map({ from, to, onDistanceChange }: MapProps) {
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+  const apiKey = "AIzaSyAB-nJsOEFtT7LMZEUr2JpDM8HGtOBLU3w";
 
   // If there's no API key configured, avoid loading the Maps JS and show
   // a helpful message instead of spamming the console with API errors.
