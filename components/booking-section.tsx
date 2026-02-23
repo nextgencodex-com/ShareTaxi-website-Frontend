@@ -10,7 +10,6 @@ import { Calendar as CalendarIcon, ChevronDown, MapPin, ChevronUp, AlertTriangle
 import dynamic from 'next/dynamic'
 import { BookingDetailsPopup } from "./booking-details-popup"
 import { PersonalDetailsPopup } from "./personal-rides/personal-details-popup"
-import { SharedRidesSection } from "./shared-rides-section"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -1211,9 +1210,6 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           </div>
         </div>
       </section>
-
-      {/* Shared Rides Section - Before Continue Button */}
-      <SharedRidesSection />
 
       <BookingDetailsPopup
         isOpen={showBookingPopup}

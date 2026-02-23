@@ -261,13 +261,12 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       const s = localStorage.getItem(localKeys.SHARED_RIDES);
       const v = localStorage.getItem(localKeys.VEHICLE_BOOKINGS);
       const p = localStorage.getItem(localKeys.PERSONAL_RIDES);
-      const vc = localStorage.getItem(localKeys.VEHICLE_CATALOG);
+      // Vehicle catalog is loaded from API now, not from localStorage
       const pvc = localStorage.getItem(localKeys.PERSONAL_VEHICLES);
 
       if (s) setSharedRides(JSON.parse(s));
       if (v) setVehicleBookings(JSON.parse(v));
       if (p) setPersonalRides(JSON.parse(p));
-      if (vc) setVehicleCatalog(JSON.parse(vc));
       if (pvc) setPersonalVehicleCatalog(JSON.parse(pvc));
 
       // Load rates from backend if available
@@ -365,12 +364,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         ];
         persistSharedRides(seed);
       }
-      if (allowDemoSeed && !localStorage.getItem(localKeys.VEHICLE_CATALOG)) {
-        const seedV: VehicleData[] = [
-          { id: 1, name: "Toyota Innova", price: "50", passengers: "6", luggage: "2", handCarry: "4", image: "/images/toyota-innova.jpg", features: ["A/C", "GPS"], gradient: "bg-gradient-to-br from-blue-400 to-blue-600", buttonColor: "bg-blue-600 hover:bg-blue-700" },
-        ];
-        persistVehicleCatalog(seedV);
-      }
+      // Vehicle catalog is now loaded from API, no need to seed demo data
       if (!localStorage.getItem(localKeys.PERSONAL_VEHICLES)) {
         const baseRateRaw = parseFloat(localStorage.getItem("ratePerKm") || "1");
         const baseRate = Number.isFinite(baseRateRaw) && baseRateRaw > 0 ? baseRateRaw : 1;
@@ -570,6 +564,47 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     return () => { mounted = false };
   }, []);
 
+  // Fetch vehicles from API and populate vehicle catalog
+  useEffect(() => {
+    let mounted = true;
+    const fetchVehicles = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/vehicles');
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const json = await res.json();
+        const apiVehicles = json?.data?.vehicles as unknown;
+        if (Array.isArray(apiVehicles) && mounted) {
+          const mapped: VehicleData[] = (apiVehicles as Record<string, unknown>[]).map((raw) => {
+            const v = raw as Record<string, unknown>;
+            const idVal = v.id ?? v._id ?? Date.now() + Math.floor(Math.random() * 1000);
+            const id = typeof idVal === 'number' ? idVal : (typeof idVal === 'string' ? parseInt(idVal) : Date.now() + Math.floor(Math.random() * 1000));
+            
+            return {
+              id,
+              name: typeof v.name === 'string' ? v.name : 'Unknown Vehicle',
+              price: typeof v.price === 'string' ? v.price : (typeof v.price === 'number' ? v.price.toString() : '0'),
+              passengers: typeof v.passengers === 'string' ? v.passengers : '4',
+              luggage: typeof v.luggage === 'string' ? v.luggage : '2',
+              handCarry: typeof v.handCarry === 'string' ? v.handCarry : '2',
+              image: typeof v.image === 'string' ? v.image : '/images/default-vehicle.jpg',
+              features: Array.isArray(v.features) ? v.features.filter(f => typeof f === 'string') as string[] : [],
+              gradient: typeof v.gradient === 'string' ? v.gradient : 'bg-gradient-to-br from-blue-400 to-blue-600',
+              buttonColor: typeof v.buttonColor === 'string' ? v.buttonColor : 'bg-blue-600 hover:bg-blue-700',
+            } as VehicleData;
+          });
+
+          setVehicleCatalog(mapped);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('Failed to load vehicles from API:', msg);
+      }
+    };
+
+    fetchVehicles();
+    return () => { mounted = false };
+  }, []);
+
   // Fetch personal bookings from API and map to RideData; keep local storage as fallback
   useEffect(() => {
     let mounted = true;
@@ -608,7 +643,16 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
               vehicle: typeof r.vehicle === 'string' ? r.vehicle : (typeof r.vehicleName === 'string' ? r.vehicleName : ''),
               notes: typeof r.notes === 'string' ? r.notes : undefined,
               pickup: { location: typeof r.pickupLocation === 'string' ? r.pickupLocation : (pickupObj && typeof pickupObj.location === 'string' ? (pickupObj.location as string) : ''), type: 'Pickup point' },
-              destination: { location: typeof r.destinationLocation === 'string' ? r.destinationLocation : (destObj && typeof destObj.location === 'string' ? (destObj.location as string) : ''), type: 'Destination' },
+              destination: { 
+                location: typeof r.destinationLocation === 'string' 
+                  ? r.destinationLocation 
+                  : (typeof r.destination === 'string' 
+                    ? r.destination 
+                    : (destObj && typeof destObj.location === 'string' 
+                      ? (destObj.location as string) 
+                      : ((r.rawPayload as Record<string,unknown>)?.destination as string) || '')), 
+                type: 'Destination' 
+              },
               time: typeof r.time === 'string' ? r.time : new Date(postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               duration: typeof r.duration === 'string' ? r.duration : '',
               // Preserve rawPayload so the View Details dialog can surface original frontend payload fields
@@ -635,6 +679,46 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
     fetchPersonal();
     return () => { mounted = false };
+  }, []);
+
+  /* ---------- Fetch personal vehicles from API ---------- */
+  useEffect(() => {
+    let mounted = true;
+    const fetchPersonalVehicles = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/vehicles/by-type?type=personal');
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const json = await res.json();
+        const vehicles = json?.data?.vehicles || [];
+        
+        // Map backend vehicle format to PersonalVehicleData format
+        const mapped: PersonalVehicleData[] = vehicles.map((v: any) => ({
+          id: v.id || Date.now(),
+          name: v.name || '',
+          ratePerKm: v.ratePerKm || '0',
+          passengers: v.passengers || '2',
+          luggage: v.luggage || '1',
+          image: v.image || '/images/default-vehicle.jpg'
+        }));
+
+        if (mounted) {
+          setPersonalVehicleCatalog(mapped);
+        }
+      } catch (err) {
+        console.warn('Failed to load personal vehicles from API:', err);
+      }
+    };
+
+    fetchPersonalVehicles();
+    
+    // Listen for updates
+    const handleUpdate = () => fetchPersonalVehicles();
+    window.addEventListener('personalVehiclesUpdated', handleUpdate);
+    
+    return () => { 
+      mounted = false;
+      window.removeEventListener('personalVehiclesUpdated', handleUpdate);
+    };
   }, []);
 
   /* ---------- Shared Ride / Vehicle Add handlers (reuse your original logic) ---------- */
@@ -958,28 +1042,46 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   };
 
   /* ---------- Add Personal Ride Vehicle ---------- */
-  const handlePersonalVehicleSubmit = (e?: React.FormEvent) => {
+  const handlePersonalVehicleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const errors = validatePersonalVehicleForm(personalVehicleForm);
     setPersonalVehicleErrors(errors);
     if (Object.keys(errors).length > 0) return;
     setIsPersonalVehicleSubmitting(true);
 
-    const imagePath = personalVehicleForm.imageFile
-      ? `/images/${personalVehicleForm.imageFile.name}`
-      : personalVehicleForm.image || "/images/toyota-innova.jpg";
+    try {
+      const imagePath = personalVehicleForm.imageFile
+        ? `/images/${personalVehicleForm.imageFile.name}`
+        : personalVehicleForm.image || "/images/toyota-innova.jpg";
 
-    setTimeout(() => {
-      const newVehicle: PersonalVehicleData = {
-        id: Date.now(),
+      const vehicleData = {
         name: personalVehicleForm.name.trim(),
         ratePerKm: personalVehicleForm.ratePerKm,
         passengers: personalVehicleForm.passengers,
         luggage: personalVehicleForm.luggage,
+        handCarry: '0',
         image: imagePath,
+        features: [],
+        vehicleType: 'personal',
+        gradient: 'bg-gradient-to-br from-yellow-400 to-orange-500',
+        buttonColor: 'bg-yellow-600 hover:bg-yellow-700'
       };
-      const updated = [newVehicle, ...personalVehicleCatalog];
-      persistPersonalVehicleCatalog(updated);
+
+      const res = await fetch('http://localhost:5000/api/vehicles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(vehicleData)
+      });
+
+      if (!res.ok) throw new Error(`Failed to create vehicle: ${res.status}`);
+      
+      const json = await res.json();
+      console.log('Vehicle created:', json);
+
+      // Trigger refresh of vehicle list
+      window.dispatchEvent(new Event('personalVehiclesUpdated'));
 
       setPersonalVehicleForm({
         name: "",
@@ -993,7 +1095,12 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       setActivePage("personalRides");
       setRateStatus("✅ Personal ride vehicle added");
       setTimeout(() => setRateStatus(""), 2500);
-    }, 600);
+    } catch (error) {
+      console.error('Error creating vehicle:', error);
+      setIsPersonalVehicleSubmitting(false);
+      setRateStatus("❌ Failed to add vehicle");
+      setTimeout(() => setRateStatus(""), 2500);
+    }
   };
 
   /* ---------- Create a private vehicle booking record (simulate booking) ---------- */
@@ -1878,8 +1985,33 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <td className="py-4 px-6 text-slate-600 font-mono text-xs">{it.bookingId}</td>
                     <td className="py-4 px-6 text-slate-700">
                       <div className="flex flex-col">
-                        <span className="font-medium">{it.postedDate ? new Date(it.postedDate).toLocaleDateString() : "N/A"}</span>
-                        <span className="text-xs text-slate-500">{it.postedDate ? new Date(it.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
+                        {/* Prefer server-provided pickupDate when available; it may be an ISO string or a Firestore Timestamp-like object */}
+                        {(() => {
+                          const rec = it as unknown as Record<string, unknown>;
+                          // Prefer rawPayload.pickupDate (string) first, then top-level pickupDate (timestamp), then postedDate
+                          const pdRaw = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.pickupDate) ?? rec.pickupDate ?? rec.postedDate;
+                          // normalize Firestore timestamp-like objects
+                          let dateObj: Date | null = null;
+                          if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
+                          else if (pdRaw && typeof pdRaw === 'object') {
+                            const pRec = pdRaw as Record<string, unknown>;
+                            const secs = typeof pRec._seconds === 'number' ? pRec._seconds : (typeof pRec.seconds === 'number' ? pRec.seconds : undefined);
+                            if (typeof secs === 'number') dateObj = new Date(secs * 1000);
+                          } else if (pdRaw instanceof Date) dateObj = pdRaw;
+                          // Fallback to postedDate if nothing else
+                          if (!dateObj && typeof rec.postedDate === 'string') dateObj = new Date(rec.postedDate as string);
+
+                          const dateStr = dateObj ? dateObj.toLocaleDateString() : 'N/A';
+                          // time: prefer explicit ride time field then fallback to pickupDate time
+                          const timeStr = (it.time && String(it.time).trim() !== '') ? String(it.time) : (dateObj ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
+                          return (
+                            <>
+                              <span className="font-medium">{dateStr}</span>
+                              <span className="text-xs text-slate-500">{timeStr}</span>
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="py-4 px-6">
@@ -2230,8 +2362,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           }`}>
             <div className="bg-white/80 backdrop-blur-lg border border-white/50 rounded-2xl lg:rounded-xl shadow-xl lg:shadow-lg p-6 m-4 lg:m-0 h-[calc(100vh-2rem)] lg:h-fit overflow-y-auto">
               {/* Logo/Header */}
-              <div className="hidden lg:flex items-center justify-between mb-8">
-                <div className="flex items-center gap-3">
+              <div className="hidden lg:block mb-6">
+                <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg">
                     <BarChart3 className="h-6 w-6 text-white" />
                   </div>
@@ -2242,7 +2374,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <p className="text-xs text-slate-500">Management Dashboard</p>
                   </div>
                 </div>
-                {/* Back to Home button for desktop */}
+                {/* Back to Home button above navigation */}
                 {onBack && (
                   <Button
                     variant="ghost"
@@ -2255,10 +2387,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                       onBack();
                     }}
                     size="sm"
-                    className="bg-blue-100 hover:bg-blue-200 text-blue-700"
+                    className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700"
                   >
                     <ArrowLeft className="h-4 w-4 mr-1" />
-                    Back to Home
+                    Back
                   </Button>
                 )}
               </div>
@@ -2435,9 +2567,23 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                             <div className="text-sm text-gray-600">Passengers: {v.passengers} • Price: ${v.price}</div>
                             <div className="mt-3 flex gap-2">
                               <Button size="sm" onClick={() => createVehicleBooking(v)}>Create Booking</Button>
-                              <Button size="sm" variant="ghost" onClick={() => {
+                              <Button size="sm" variant="ghost" onClick={async () => {
+                                // Optimistically remove from UI
                                 const updated = vehicleCatalog.filter(item => item.id !== v.id);
-                                persistVehicleCatalog(updated);
+                                setVehicleCatalog(updated);
+                                
+                                // Delete from backend
+                                try {
+                                  const res = await fetch(`http://localhost:5000/api/vehicles/${v.id}`, {
+                                    method: 'DELETE',
+                                  });
+                                  if (!res.ok) {
+                                    console.warn('Failed to delete vehicle from server:', res.status);
+                                    // Optionally re-add it back
+                                  }
+                                } catch (err) {
+                                  console.error('Error deleting vehicle:', err);
+                                }
                               }}>Remove</Button>
                             </div>
                           </div>
@@ -2482,9 +2628,27 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                onClick={() => {
-                                  const updated = personalVehicleCatalog.filter(item => item.id !== v.id);
-                                  persistPersonalVehicleCatalog(updated);
+                                onClick={async () => {
+                                  try {
+                                    // Optimistically remove from UI
+                                    const updated = personalVehicleCatalog.filter(item => item.id !== v.id);
+                                    setPersonalVehicleCatalog(updated);
+                                    
+                                    // Delete from backend
+                                    const res = await fetch(`http://localhost:5000/api/vehicles/${v.id}`, {
+                                      method: 'DELETE',
+                                    });
+                                    if (!res.ok) {
+                                      throw new Error('Failed to delete vehicle');
+                                    }
+                                    
+                                    // Trigger refresh
+                                    window.dispatchEvent(new Event('personalVehiclesUpdated'));
+                                  } catch (error) {
+                                    console.error('Error deleting vehicle:', error);
+                                    // Refresh to show correct state
+                                    window.dispatchEvent(new Event('personalVehiclesUpdated'));
+                                  }
                                 }}
                               >
                                 Remove
@@ -2856,13 +3020,15 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
       {/* View Details Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={closeViewDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Booking Details - {selectedItem?.bookingId}</DialogTitle>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="border-b pb-4">
+            <DialogTitle className="text-xl font-semibold text-gray-800">
+              Booking Details - {selectedItem?.bookingId}
+            </DialogTitle>
           </DialogHeader>
 
           {selectedItem && (
-            <div className="space-y-6">
+            <div className="space-y-4 py-4">
               {/* normalize fields supporting multiple payload shapes (admin local objects, API bookings, rawPayload) */}
               {(() => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2919,107 +3085,112 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
                 return (
                   <>
-                    {/* Basic Info */}
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Booking ID</label>
-                        <p className="text-sm">{bookingId}</p>
+                    {/* Header Info Cards */}
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Booking ID</label>
+                        <p className="text-sm font-mono font-semibold text-gray-900">{bookingId}</p>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Type</label>
-                        <p className="text-sm capitalize">{type}</p>
-                      </div>
-                    </div>
-
-                    {/* Extra identifiers */}
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Passenger ID</label>
-                        <p className="text-sm">{passengerId || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Pickup Date</label>
-                        <p className="text-sm">{pickupDateFormatted || 'N/A'}</p>
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Type</label>
+                        <p className="text-sm font-semibold capitalize text-gray-900">{type}</p>
                       </div>
                     </div>
 
-                    {/* Route */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">Route</label>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-green-600" />
-                        <span className="text-sm">{pickupLoc}</span>
-                        <span className="text-gray-500">→</span>
-                        <MapPin className="h-4 w-4 text-red-600" />
-                        <span className="text-sm">{destLoc}</span>
+                    {/* Passenger & Date Cards */}
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Passenger ID</label>
+                        <p className="text-sm font-medium text-gray-900">{passengerId || 'N/A'}</p>
+                      </div>
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Pickup Date</label>
+                        <p className="text-sm font-medium text-gray-900">{pickupDateFormatted || 'N/A'}</p>
                       </div>
                     </div>
 
-                    {/* Driver/Vehicle */}
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Driver</label>
-                        <p className="text-sm">{driverName}</p>
-                        {/* show driver contact when available (search multiple potential locations) */}
+                    {/* Route Section */}
+                    <div className="bg-slate-50 rounded-lg p-4 border">
+                      <label className="text-sm font-semibold text-gray-700 block mb-3">Route</label>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-green-600" />
+                          <span className="text-sm text-gray-900">{pickupLoc}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-400 text-xs pl-1">
+                          ↓
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-red-600" />
+                          <span className="text-sm text-gray-900">{destLoc}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Driver & Vehicle Cards */}
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-2">Driver</label>
+                        <p className="text-sm font-semibold text-gray-900 mb-2">{driverName}</p>
                         {(() => {
                           const drvFromItem = item.driver || undefined
                           const drvFromRp = rp && rp.driver ? rp.driver : undefined
                           const driverPhone = drvFromItem?.phone || drvFromRp?.phone || item.driverPhone || rp?.personalData?.phone || item.customer?.phone || 'N/A'
                           const driverEmail = drvFromItem?.email || drvFromRp?.email || item.driverEmail || rp?.personalData?.email || item.customer?.email || 'N/A'
                           return (
-                            <div className="text-xs text-slate-500 mt-1">
-                              <div>📞 {driverPhone !== 'N/A' ? `${driverPhone}` : 'Phone: N/A'}</div>
-                              <div>✉️ {driverEmail !== 'N/A' ? driverEmail : 'Email: N/A'}</div>
+                            <div className="space-y-1 text-xs text-gray-600">
+                              <div>{driverPhone !== 'N/A' ? `📞 ${driverPhone}` : 'Phone: N/A'}</div>
+                              <div className="truncate">{driverEmail !== 'N/A' ? `✉️ ${driverEmail}` : 'Email: N/A'}</div>
                             </div>
                           )
                         })()}
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Vehicle</label>
-                        <p className="text-sm">{vehicle}</p>
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Vehicle</label>
+                        <p className="text-sm font-semibold text-gray-900">{vehicle}</p>
                       </div>
                     </div>
 
-                    {/* Schedule */}
-                    <div className="grid md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Time</label>
-                        <p className="text-sm">{time}</p>
+                    {/* Schedule Info */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Time</label>
+                        <p className="text-sm font-semibold text-gray-900">{time}</p>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Duration</label>
-                        <p className="text-sm">{duration}</p>
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Duration</label>
+                        <p className="text-sm font-semibold text-gray-900">{duration}</p>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Frequency</label>
-                        <p className="text-sm">{frequency}</p>
-                      </div>
-                    </div>
-
-                    {/* Capacity */}
-                    <div className="grid md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Seats Available</label>
-                        <p className="text-sm">{seatsAvailable}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Total Seats</label>
-                        <p className="text-sm">{seatsTotal}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Price</label>
-                        <p className="text-sm">{price && price.toString().startsWith('$') ? price : (price !== 'N/A' ? `$${price}` : 'N/A')}</p>
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Frequency</label>
+                        <p className="text-sm font-semibold text-gray-900">{frequency}</p>
                       </div>
                     </div>
 
-                    {/* Notes / Customer (if present) */}
-                        <div className="grid md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">Notes</label>
-                            <p className="text-sm">{notes}</p>
+                    {/* Capacity & Price Section */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Seats Available</label>
+                        <p className="text-lg font-bold text-gray-900">{seatsAvailable}</p>
+                      </div>
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Total Seats</label>
+                        <p className="text-lg font-bold text-gray-900">{seatsTotal}</p>
+                      </div>
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Price</label>
+                        <p className="text-lg font-bold text-gray-900">{price && price.toString().startsWith('$') ? price : (price !== 'N/A' ? `$${price}` : 'N/A')}</p>
+                      </div>
+                    </div>
+
+                    {/* Notes / Customer Grid */}
+                        <div className="grid md:grid-cols-2 gap-3">
+                          <div className="bg-slate-50 rounded-lg p-3 border">
+                            <label className="text-xs font-medium text-gray-600 block mb-2">Notes</label>
+                            <p className="text-sm text-gray-900">{notes}</p>
                           </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">Customer</label>
+                          <div className="bg-slate-50 rounded-lg p-3 border">
+                            <label className="text-xs font-medium text-gray-600 block mb-2">Customer</label>
                             {(() => {
                               // Helper: return a non-empty trimmed string or undefined
                               const maybeStr = (val: unknown) => (typeof val === 'string' && val.trim() !== '' ? val.trim() : undefined)
@@ -3072,29 +3243,29 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                               const formattedPhone = phoneRaw !== 'N/A' ? (formatPhone(String(phoneRaw)) ?? String(phoneRaw)) : 'N/A'
 
                               if (name === 'N/A' && email === 'N/A' && formattedPhone === 'N/A') {
-                                return <p className="text-sm text-gray-500">No customer data available</p>
+                                return <p className="text-sm text-gray-500 italic">No customer data available</p>
                               }
 
                               return (
-                                <div>
-                                  <p className="text-sm">{name}</p>
-                                  {email !== 'N/A' && <p className="text-xs text-gray-500">{email}</p>}
-                                  {formattedPhone !== 'N/A' && <p className="text-xs text-gray-500">{formattedPhone}</p>}
+                                <div className="space-y-1">
+                                  <p className="text-sm font-semibold text-gray-900">{name}</p>
+                                  {email !== 'N/A' && <p className="text-xs text-gray-600">{email}</p>}
+                                  {formattedPhone !== 'N/A' && <p className="text-xs text-gray-600">{formattedPhone}</p>}
                                 </div>
                               )
                             })()}
                           </div>
                         </div>
 
-                    {/* Dates */}
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Posted</label>
-                        <p className="text-sm">{createdAtFormatted}</p>
+                    {/* Dates Section */}
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Posted</label>
+                        <p className="text-sm font-medium text-gray-900">{createdAtFormatted}</p>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Time Ago</label>
-                        <p className="text-sm">{item.timeAgo || rp.timeAgo || 'N/A'}</p>
+                      <div className="bg-slate-50 rounded-lg p-3 border">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Time Ago</label>
+                        <p className="text-sm font-medium text-gray-900">{item.timeAgo || rp.timeAgo || 'N/A'}</p>
                       </div>
                     </div>
                   </>

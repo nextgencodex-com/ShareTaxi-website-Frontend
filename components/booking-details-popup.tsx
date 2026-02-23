@@ -260,42 +260,29 @@ export function BookingDetailsPopup({
             </Alert>
           )}
 
-          <div className="p-6 space-y-6">
+          <div className="p-6 space-y-5">
             {/* Ride Summary */}
-            <div className="bg-yellow-50 rounded-2xl p-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Ride Summary</h3>
+            <div className="bg-slate-50 rounded-lg p-5 border">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Ride Summary</h3>
 
-              <div className="grid grid-cols-2 gap-6">
+              {/* Route Info */}
+              <div className="space-y-3 mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                    <MapPin className="h-3 w-3 text-white" />
-                  </div>
+                  <MapPin className="h-4 w-4 text-green-600" />
                   <div>
+                    <p className="text-xs text-gray-500">Pickup</p>
                     <p className="font-semibold text-gray-900">{bookingData.from}</p>
-                    <p className="text-gray-600 text-sm">Pickup point</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-blue-400 rounded-full flex items-center justify-center">
-                    <Clock className="h-3 w-3 text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">
-                      Pickup Time: {bookingData.time} | Date:{" "}
-                      {new Date(bookingData.date).toLocaleDateString("en-US")}
-                    </p>
-                    <p className="text-gray-600 text-sm">
-                      {bookingData.mapDuration || "Estimated duration"}
-                    </p>
-                  </div>
+                <div className="flex items-center gap-3 text-gray-400 text-xs ml-1">
+                  ↓
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
-                    <MapPin className="h-3 w-3 text-white" />
-                  </div>
+                  <MapPin className="h-4 w-4 text-red-600" />
                   <div>
+                    <p className="text-xs text-gray-500">Destination</p>
                     <p className="font-semibold text-gray-900">
                       {bookingData.tripType === "multi-city" && bookingData.destinations
                         ? bookingData.destinations
@@ -304,98 +291,102 @@ export function BookingDetailsPopup({
                             .join(", ")
                         : bookingData.to}
                     </p>
-                    <p className="text-gray-600 text-sm">Destination</p>
                   </div>
                 </div>
+              </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-purple-400 rounded-full flex items-center justify-center">
-                    <Users className="h-3 w-3 text-purple-400" />
+              {/* Info Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white rounded-lg p-3 border">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Clock className="h-4 w-4 text-blue-600" />
+                    <p className="text-xs text-gray-600 font-medium">Schedule</p>
                   </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">
-                      {formData.seatCount}{" "}
-                      {formData.seatCount === 1 ? "Person" : "Persons"} Requested{" "}
-                      {bookingData.rideType === "shared" ? "Shared ride" : "Personal ride"}
-                    </p>
-                    <p className="text-gray-600 text-sm">
-                      {bookingData.rideType === "shared" ? "Shared ride" : "Personal ride"}
-                    </p>
+                  <p className="font-semibold text-gray-900 text-sm">{bookingData.time}</p>
+                  <p className="text-xs text-gray-600">
+                    {new Date(bookingData.date).toLocaleDateString("en-US", { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+
+                <div className="bg-white rounded-lg p-3 border">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users className="h-4 w-4 text-purple-600" />
+                    <p className="text-xs text-gray-600 font-medium">Passengers</p>
                   </div>
+                  <p className="font-bold text-gray-900 text-lg">{formData.seatCount}</p>
+                  <p className="text-xs text-gray-600">{bookingData.rideType === "shared" ? "Shared ride" : "Personal ride"}</p>
                 </div>
               </div>
               
               {/* Vehicle Information */}
               {(bookingData.vehicleCategory || bookingData.vehicleType) && (
-                <div className="mt-4 p-4 bg-white rounded-lg border-2 border-blue-200">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2">🚗 Selected Vehicle</h4>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-900 font-medium">
-                      {bookingData.vehicleCategory === 'small' && 'Small / Private Vehicles'}
-                      {bookingData.vehicleCategory === 'vans' && 'Vans & Medium Vehicles'}
-                      {bookingData.vehicleCategory === 'premium' && 'Premium & Niche'}
-                    </span>
-                    <span className="text-gray-500">•</span>
-                    <span className="text-gray-700">{bookingData.vehicleType}</span>
-                  </div>
+                <div className="bg-white rounded-lg p-3 border mt-3">
+                  <p className="text-xs text-gray-600 font-medium mb-1">Vehicle</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {bookingData.vehicleCategory === 'small' && 'Small / Private Vehicles'}
+                    {bookingData.vehicleCategory === 'vans' && 'Vans & Medium Vehicles'}
+                    {bookingData.vehicleCategory === 'premium' && 'Premium & Niche'}
+                    {bookingData.vehicleType && ` - ${bookingData.vehicleType}`}
+                  </p>
                 </div>
               )}
 
-              <hr className="border-gray-200 my-4" />
-
+              {/* Fare */}
               {currentBookingData?.calculatedFare ? (
-                <div className="bg-blue-50 p-3 rounded-lg border">
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mt-3">
                   <div
-                    className="text-sm font-medium"
+                    className="text-sm"
                     dangerouslySetInnerHTML={{
                       __html: currentBookingData.calculatedFare,
                     }}
                   />
                 </div>
               ) : (
-                <div className="text-gray-500 italic">Fare not available.</div>
+                <div className="bg-gray-50 rounded-lg p-3 border mt-3">
+                  <p className="text-gray-500 text-sm italic">Fare calculation not available</p>
+                </div>
               )}
             </div>
 
             {/* Personal Details Form */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-semibold text-gray-900 mb-2 block">
-                  Full Name
-                </label>
-                <Input
-                  value={formData.fullName}
-                  onChange={(e) => handleInputChange("fullName", e.target.value)}
-                  placeholder="Enter your full name"
-                  className="bg-blue-50 border-0 h-12"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-semibold text-gray-900 mb-2 block">
-                  Email Address
-                </label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange("email", e.target.value)}
-                  placeholder="Enter your email"
-                  className="bg-blue-50 border-0 h-12"
-                />
-              </div>
-            </div>
+            <div className="bg-slate-50 rounded-lg p-5 border">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Information</h3>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-semibold text-gray-900 mb-2 block">
-                  Phone Number
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    value={formData.phoneCountry}
-                    onChange={(e) => handleInputChange("phoneCountry", e.target.value)}
-                    className="w-13 bg-blue-50 border-0 h-12 rounded-md px-0"
-                    aria-label="Country code"
-                  >
+              <div className="space-y-3">
+                {/* Name & Email Row */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">Full Name</label>
+                    <Input
+                      value={formData.fullName}
+                      onChange={(e) => handleInputChange("fullName", e.target.value)}
+                      placeholder="Enter your full name"
+                      className="bg-white border h-10"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">Email Address</label>
+                    <Input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange("email", e.target.value)}
+                      placeholder="Enter your email"
+                      className="bg-white border h-10"
+                    />
+                  </div>
+                </div>
+
+                {/* Phone & Payment Row */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">Phone Number</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={formData.phoneCountry}
+                        onChange={(e) => handleInputChange("phoneCountry", e.target.value)}
+                        className="w-20 bg-white border h-10 rounded-md px-2 text-sm"
+                        aria-label="Country code"
+                      >
                     <option value="+93">+93 (AF - Afghanistan)</option>
                     <option value="+355">+355 (AL - Albania)</option>
                     <option value="+213">+213 (DZ - Algeria)</option>
@@ -702,49 +693,50 @@ export function BookingDetailsPopup({
                     <option value="+260">+260 (ZM - Zambia)</option>
                     <option value="+263">+263 (ZW - Zimbabwe)</option>
                   </select>
-                  <Input
-                    value={formData.phoneNumber}
-                    onChange={(e) => handleInputChange("phoneNumber", e.target.value)}
-                    placeholder="Enter local number (digits only)"
-                    className="flex-1 bg-blue-50 border-0 h-12"
+                      <Input
+                        value={formData.phoneNumber}
+                        onChange={(e) => handleInputChange("phoneNumber", e.target.value)}
+                        placeholder="Enter local number (digits only)"
+                        className="flex-1 bg-white border h-10"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">Payment Method</label>
+                    <select
+                      value={formData.paymentMethod}
+                      onChange={(e) => handleInputChange("paymentMethod", e.target.value)}
+                      className="w-full bg-white border h-10 rounded-md px-3"
+                    >
+                      <option value="">Select payment method</option>
+                      <option value="Visa Card">Visa Card</option>
+                      <option value="QR Payment">QR Payment</option>
+                      <option value="UPI">UPI</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Via Payment Gateway">Via Payment Gateway</option>
+                      <option value="Cash">Cash</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Special Requests */}
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Special Requests or Notes</label>
+                  <Textarea
+                    value={formData.specialRequests}
+                    onChange={(e) => handleInputChange("specialRequests", e.target.value)}
+                    className="bg-white border min-h-[80px] resize-none"
+                    placeholder="Enter any special requests or notes..."
                   />
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-semibold text-gray-900 mb-2 block">
-                  Payment Method
-                </label>
-                <select
-                  value={formData.paymentMethod}
-                  onChange={(e) => handleInputChange("paymentMethod", e.target.value)}
-                  className="w-full bg-blue-50 border-0 h-12 rounded-md px-3"
-                >
-                  <option value="">Select payment method</option>
-                  <option value="Visa Card">Visa Card</option>
-                  <option value="QR Payment">QR Payment</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Bank Transfer">Bank Transfer</option>
-                  <option value="Via Payment Gateway">Via Payment Gateway</option>
-                  <option value="Cash">Cash</option>
-                </select>
-              </div>
             </div>
 
-            <div>
-              <label className="text-sm font-semibold text-gray-900 mb-2 block">
-                Special Requests or Notes
-              </label>
-              <Textarea
-                value={formData.specialRequests}
-                onChange={(e) => handleInputChange("specialRequests", e.target.value)}
-                className="bg-blue-50 border-0 min-h-[100px] resize-none"
-                placeholder="Enter your special request"
-              />
-            </div>
-
+            {/* Submit Button */}
             <Button
               onClick={handleContinueToPayment}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white h-14 text-lg font-semibold rounded-2xl"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 font-semibold rounded-lg"
             >
               Continue To Create a Ride
             </Button>
