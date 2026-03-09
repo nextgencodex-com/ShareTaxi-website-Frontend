@@ -418,7 +418,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
         const s = document.createElement("script");
         s.id = scriptId;
-        s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+        s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
         s.async = true;
         s.defer = true;
         s.onload = () => resolve();
@@ -450,6 +450,10 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           if (!elFrom && !elTo) return;
 
           if (elFrom) {
+            // NOTE: google.maps.places.Autocomplete is deprecated as of March 2025
+            // Migration to PlaceAutocompleteElement is recommended but requires significant refactoring
+            // See: https://developers.google.com/maps/documentation/javascript/places-migration-overview
+            // Current implementation will continue to work with bug fixes for major regressions
             // @ts-expect-error - runtime google maps types
             autocompleteFrom = new g!.maps.places.Autocomplete(elFrom, { types: ["geocode"] });
             // @ts-expect-error - runtime listener provided by google maps
@@ -489,6 +493,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           }
 
           if (elTo) {
+            // NOTE: Using deprecated Autocomplete API (see note above for elFrom)
             // @ts-expect-error - runtime google maps types
             autocompleteTo = new g!.maps.places.Autocomplete(elTo, { types: ["geocode"] });
             // @ts-expect-error - runtime listener provided by google maps

@@ -38,6 +38,8 @@ export default function Map({ from, to, onDistanceChange }: MapProps) {
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey,
+    libraries: ['places', 'geometry'],
+    preventGoogleFontsLoading: true,
   });
 
   const [directionsResponse, setDirectionsResponse] = useState<any>(null);
