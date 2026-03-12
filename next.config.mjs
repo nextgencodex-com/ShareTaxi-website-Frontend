@@ -14,8 +14,6 @@ const nextConfig = {
     unoptimized: true,
   },
   output: 'export',
-  basePath: '/sharetaxi',
-  assetPrefix: '/sharetaxi/',
 };
 
 export default withNextIntl(nextConfig);
