@@ -1,4 +1,4 @@
-name: Deploy Frontend to hPanel hotty
+name: Deploy Frontend to hPanel via FTP hotty changes name
 
 on:
   push:
