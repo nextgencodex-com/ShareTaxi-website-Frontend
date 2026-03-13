@@ -1,9 +1,9 @@
-name: Deploy Frontend to hPanel
+name: Deploy Frontend to hPanel hotty
 
 on:
   push:
     branches:
-      - Liveproduction
+      - frontend-live-working
 
 jobs:
   build-and-deploy:
@@ -44,3 +44,5 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./out/
           server-dir: ${{ secrets.FTP_TARGET_DIR }}
+
+          
