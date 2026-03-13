@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRideBooking, useDriverActions } from '@/hooks/use-ride-booking';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { API_BASE_URL } from '@/lib/api-url';
 
 export function TestIntegration() {
   const { bookRide, loading: rideLoading, findNearbyDrivers, nearbyDrivers } = useRideBooking();
@@ -125,7 +126,7 @@ export function TestIntegration() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2 text-sm">
-            <div>Backend URL: {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}</div>
+            <div>Backend URL: {API_BASE_URL || '(not set)'}</div>
             <div>Environment: {process.env.NODE_ENV}</div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>

@@ -8,6 +8,7 @@ import { Clock, Users, MapPin, X, CreditCard, Share2, ChevronDown, ArrowLeft } f
 import { JoinRidePopup } from "./join-ride-popup"
 import { BookingDetailsPopup } from "./booking-details-popup"
 import { calculateTotalPrice, formatPriceUSD } from "@/lib/pricing"
+import { buildApiUrl } from "@/lib/api-url"
 
 const DEFAULT_SHARED_DISTANCE = 45; // km
 const DEFAULT_PASSENGERS_FOR_CALC = 6; // for medium vehicle
@@ -155,7 +156,7 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
     const fetchRides = async () => {
       try {
         console.log('Fetching shared rides from API...')
-          const res = await fetch('http://localhost:5000/api/shared-rides', { 
+          const res = await fetch(buildApiUrl("/shared-rides"), { 
             cache: 'no-store', headers: { 'Accept': 'application/json' } })
         if (!res.ok) return
         const json = await res.json()

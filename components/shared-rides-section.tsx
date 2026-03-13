@@ -12,6 +12,7 @@ import Slider from "react-slick"
 import "slick-carousel/slick/slick.css"
 import "slick-carousel/slick/slick-theme.css"
 import { da } from "date-fns/locale"
+import { buildApiUrl } from "@/lib/api-url"
 
 interface Ride {
   id: number
@@ -61,7 +62,7 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
     const fetchRides = async () => {
       try {
         setLoadingRides(true)
-        const res = await fetch('http://localhost:5000/api/shared-rides', { cache: 'no-store', headers: { 'Accept': 'application/json' } })
+        const res = await fetch(buildApiUrl("/shared-rides"), { cache: 'no-store', headers: { 'Accept': 'application/json' } })
         if (!res.ok) {
           const text = await res.text()
           console.error('Failed to fetch shared rides:', res.status, text)

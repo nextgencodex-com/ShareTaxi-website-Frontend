@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { format, parseISO, startOfDay, addDays } from "date-fns"
 import { calculateSimpleFare, calculateIndividualFare, getTripMultiplier } from "@/lib/pricing"
+import { buildApiUrl, buildVehicleImageUrl, resolveApiAssetUrl } from "@/lib/api-url"
 
 const Map = dynamic(() => import('./map'), { ssr: false })
 
@@ -45,7 +46,7 @@ const defaultPersonalVehicles: PersonalVehicle[] = [
     ratePerKm: "1.00",
     passengers: "2",
     luggage: "1",
-    image: "http://localhost:5000/api/vehicle-images/mini-car",
+    image: buildVehicleImageUrl("mini-car"),
   },
   {
     id: 2,
@@ -53,7 +54,7 @@ const defaultPersonalVehicles: PersonalVehicle[] = [
     ratePerKm: "1.20",
     passengers: "3",
     luggage: "3",
-    image: "http://localhost:5000/api/vehicle-images/sedan-car",
+    image: buildVehicleImageUrl("sedan-car"),
   },
   {
     id: 3,
@@ -61,7 +62,7 @@ const defaultPersonalVehicles: PersonalVehicle[] = [
     ratePerKm: "1.50",
     passengers: "5",
     luggage: "7",
-    image: "http://localhost:5000/api/vehicle-images/van",
+    image: buildVehicleImageUrl("van"),
   },
   {
     id: 4,
@@ -69,9 +70,15 @@ const defaultPersonalVehicles: PersonalVehicle[] = [
     ratePerKm: "1.80",
     passengers: "10",
     luggage: "10",
-    image: "http://localhost:5000/api/vehicle-images/mini-coach",
+    image: buildVehicleImageUrl("mini-coach"),
   },
 ]
+
+const normalizePersonalVehicles = (vehicles: PersonalVehicle[]) =>
+  vehicles.map((vehicle) => ({
+    ...vehicle,
+    image: resolveApiAssetUrl(vehicle.image),
+  }))
 
 export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const isMobile = useIsMobile()
@@ -179,8 +186,13 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       if (raw) {
         const parsed = JSON.parse(raw) as PersonalVehicle[]
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setPersonalVehicles(parsed)
-          setSelectedPersonalVehicleId(parsed[0].id)
+          const normalized = normalizePersonalVehicles(parsed)
+          const normalizedRaw = JSON.stringify(normalized)
+          if (normalizedRaw !== raw) {
+            localStorage.setItem(PERSONAL_VEHICLES_KEY, normalizedRaw)
+          }
+          setPersonalVehicles(normalized)
+          setSelectedPersonalVehicleId(normalized[0].id)
           return
         }
       }
@@ -286,7 +298,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     }
 
     try {
-      const res = await fetch('http://localhost:5000/api/rates')
+      const res = await fetch(buildApiUrl("/rates"))
       if (!res.ok) throw new Error(`API ${res.status}`)
       const json = await res.json()
       const rates = json?.data?.rates
@@ -329,8 +341,9 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
           if (raw) {
             const parsed = JSON.parse(raw) as PersonalVehicle[]
             if (Array.isArray(parsed) && parsed.length > 0) {
-              setPersonalVehicles(parsed)
-              setSelectedPersonalVehicleId(parsed[0].id)
+              const normalized = normalizePersonalVehicles(parsed)
+              setPersonalVehicles(normalized)
+              setSelectedPersonalVehicleId(normalized[0].id)
             }
           }
         } catch {
@@ -349,8 +362,9 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
         if (raw) {
           const parsed = JSON.parse(raw) as PersonalVehicle[]
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setPersonalVehicles(parsed)
-            setSelectedPersonalVehicleId(parsed[0].id)
+            const normalized = normalizePersonalVehicles(parsed)
+            setPersonalVehicles(normalized)
+            setSelectedPersonalVehicleId(normalized[0].id)
           }
         }
       } catch {
@@ -717,7 +731,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     }
 
     // Default behavior: POST to backend endpoints
-  const endpoint = rideType === 'shared' ? 'http://localhost:5000/api/shared-rides' : 'http://localhost:5000/api/private-rides'
+  const endpoint = rideType === 'shared' ? buildApiUrl("/shared-rides") : buildApiUrl("/private-rides")
     ;(async () => {
       try {
         const res = await fetch(endpoint, {
