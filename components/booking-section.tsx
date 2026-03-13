@@ -418,7 +418,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
         const s = document.createElement("script");
         s.id = scriptId;
-        s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
+        // Reverted loading=async as it breaks synchronous availability of google.maps.places without a callback
+        s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
         s.async = true;
         s.defer = true;
         s.onload = () => resolve();
@@ -1128,8 +1129,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
                   <Button
                     onClick={handleNextClick}
-                    disabled={!(fareResults[tripType] && !fareResults[tripType].includes("⚠️"))}
-                    className="w-full bg-blue-500 text-white hover:bg-blue-600 py-3 text-base sm:text-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-blue-500 text-white hover:bg-blue-600 py-3 text-base sm:text-lg font-medium"
                     size="lg"
                   >
                     {!fareResults[tripType] || fareResults[tripType].includes("⚠️") ? "Continue Ride →" : "Next →"}
