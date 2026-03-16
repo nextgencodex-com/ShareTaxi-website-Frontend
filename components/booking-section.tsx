@@ -205,15 +205,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     const ratePerKmRaw = typeof backendRatePerKm === 'number' && !isNaN(backendRatePerKm) && backendRatePerKm > 0
       ? backendRatePerKm
       : (localRate > 0 ? localRate : 0)
-    
-    // Don't calculate if we don't have a valid rate yet
-    if (ratePerKmRaw <= 0) {
-      const currentRate = localStorage.getItem("ratePerKm")
-      const rateInfo = currentRate ? ` (localStorage: ${currentRate})` : ""
-      setFareResults(prev => ({ ...prev, [tripType]: `⚠️ No rate configured. Please set a rate in admin panel first.${rateInfo}` }))
-      return
-    }
-    
+
     const ratePerKm = ratePerKmRaw
 
     const tripMultiplier = getTripMultiplier(tripType as "one-way" | "round-trip" | "multi-city")
@@ -221,6 +213,14 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
     let fareDisplay = ""
     if (rideType === "shared") {
+      // Shared rides require a configured global/admin rate.
+      if (ratePerKm <= 0) {
+        const currentRate = localStorage.getItem("ratePerKm")
+        const rateInfo = currentRate ? ` (localStorage: ${currentRate})` : ""
+        setFareResults(prev => ({ ...prev, [tripType]: `⚠️ No rate configured. Please set a rate in admin panel first.${rateInfo}` }))
+        return
+      }
+
       const basePerPersonFare = calculateSimpleFare(distance, ratePerKm)
       const perPersonFare = basePerPersonFare * tripMultiplier * vehicleMultiplier
       const totalFare = perPersonFare * passengers
@@ -563,7 +563,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     const effectiveRate = typeof backendRatePerKm === 'number' && !isNaN(backendRatePerKm)
       ? backendRatePerKm
       : parseFloat(localStorage.getItem("ratePerKm") || "0")
-    if (!effectiveRate) return
+    if (rideType === "shared" && !effectiveRate) return
 
     let distance = 0
     if (tripType === "round-trip" && roundTripDistance) {
