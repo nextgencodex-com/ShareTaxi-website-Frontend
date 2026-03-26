@@ -306,11 +306,11 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
       <section id="shared-rides-section" className="py-16 bg-gray-50">
         <div className="container mx-auto px-4">
           <div className="text-center mb-8">
-            <h2 className="text-5xl font-bold text-yellow-500 mb-4">Available Shared Rides</h2>
+            <h2 className="text-5xl font-bold text-yellow-500 mb-4">Available Share Rides</h2>
             <p className="text-gray-600 text-lg mb-2">Join other passengers and save money while traveling.</p>
             <p className="text-gray-600 text-lg mb-2">Real-time updates show live availability</p>
             {backendDown && (
-              <p className="text-red-600 text-sm mt-2">Backend appears to be offline — live shared rides are unavailable.</p>
+              <p className="text-red-600 text-sm mt-2">Backend appears to be offline — live share rides are unavailable.</p>
             )}
           </div>
 

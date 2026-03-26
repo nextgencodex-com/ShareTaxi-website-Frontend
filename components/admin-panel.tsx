@@ -94,7 +94,7 @@ interface RideData {
 }
 
 interface VehicleData {
-  id: number;
+  id: number | string;
   name: string;
   price: string;
   passengers: string;
@@ -140,7 +140,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   // ---- navigation ----
   const pages = [
     { key: "dashboard", label: "Dashboard", icon: BarChart3 },
-    { key: "sharedRequests", label: "Shared Rides", icon: Users },
+    { key: "sharedRequests", label: "Share Rides", icon: Users },
     { key: "vehicleBookings", label: "Vehicle Bookings", icon: Car },
     { key: "personalRides", label: "Personal Rides", icon: Clock },
     { key: "addSharedRide", label: "Add Ride", icon: Plus },
@@ -577,7 +577,11 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           const mapped: VehicleData[] = (apiVehicles as Record<string, unknown>[]).map((raw) => {
             const v = raw as Record<string, unknown>;
             const idVal = v.id ?? v._id ?? Date.now() + Math.floor(Math.random() * 1000);
-            const id = typeof idVal === 'number' ? idVal : (typeof idVal === 'string' ? parseInt(idVal) : Date.now() + Math.floor(Math.random() * 1000));
+            const id = typeof idVal === 'number'
+              ? idVal
+              : (typeof idVal === 'string' && idVal.trim().length > 0
+                ? idVal
+                : Date.now() + Math.floor(Math.random() * 1000));
             
             return {
               id,
@@ -971,7 +975,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         });
         setIsRideSubmitting(false);
         setActivePage('sharedRequests');
-        setRateStatus('✅ Shared ride added');
+        setRateStatus('✅ Share ride added');
         setTimeout(() => setRateStatus(''), 2500);
       }
     })();
@@ -1631,7 +1635,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           <CardTitle className="flex items-center justify-between text-lg">
             <span className="flex items-center gap-2">
               <Users className="h-5 w-5 text-blue-600" />
-              Shared Rides Requests ({items.length})
+              Share Rides Requests ({items.length})
               {sharedLoading && <span className="ml-3 text-xs text-slate-500">Loading…</span>}
               {sharedError && <span className="ml-3 text-xs text-red-500">API error</span>}
             </span>
@@ -1804,7 +1808,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <td colSpan={7} className="py-12 px-6 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <Users className="h-12 w-12 text-slate-300" />
-                        <p className="text-slate-500">No shared ride requests found.</p>
+                        <p className="text-slate-500">No share ride requests found.</p>
                       </div>
                     </td>
                   </tr>
@@ -2470,7 +2474,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-white/80 text-sm font-medium">Shared Rides</p>
+                          <p className="text-white/80 text-sm font-medium">Share Rides</p>
                           <p className="text-2xl font-bold text-white">{sharedRides.length}</p>
                         </div>
                         <div className="p-3 bg-white/20 rounded-full">
@@ -2569,12 +2573,12 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                               <Button size="sm" onClick={() => createVehicleBooking(v)}>Create Booking</Button>
                               <Button size="sm" variant="ghost" onClick={async () => {
                                 // Optimistically remove from UI
-                                const updated = vehicleCatalog.filter(item => item.id !== v.id);
-                                setVehicleCatalog(updated);
+                                const removeId = String(v.id);
+                                setVehicleCatalog((prev) => prev.filter((item) => String(item.id) !== removeId));
                                 
                                 // Delete from backend
                                 try {
-                                  const res = await fetch(`http://localhost:5000/api/vehicles/${v.id}`, {
+                                  const res = await fetch(`http://localhost:5000/api/vehicles/${encodeURIComponent(String(v.id))}`, {
                                     method: 'DELETE',
                                   });
                                   if (!res.ok) {
@@ -2670,7 +2674,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             {activePage === "addSharedRide" && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Add New Shared Ride</CardTitle>
+                  <CardTitle>Add New Share Ride</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={(e) => { e.preventDefault(); handleRideSubmit(); }} className="space-y-4">
@@ -2773,7 +2777,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
                     <div>
                       <Button type="button" onClick={() => handleRideSubmit()} disabled={isRideSubmitting} className="bg-yellow-500 w-full">
-                        {isRideSubmitting ? "Adding Ride..." : "Add Shared Ride"}
+                        {isRideSubmitting ? "Adding Ride..." : "Add Share Ride"}
                       </Button>
                     </div>
                   </form>
@@ -2913,7 +2917,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                 <CardHeader>
                   <CardTitle>Manage Dates - Edit Posted Dates for Rides</CardTitle>
                   <p className="text-sm text-gray-600 mt-2">
-                    View and edit the posted dates for all shared rides. Changes are saved automatically.
+                    View and edit the posted dates for all share rides. Changes are saved automatically.
                   </p>
                 </CardHeader>
                 <CardContent>

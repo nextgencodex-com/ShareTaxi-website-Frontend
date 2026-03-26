@@ -129,4 +129,17 @@
   .font-sans {
     font-family: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
   }
+
+  /* Keep native mobile time inputs stable on real devices (especially iOS Safari). */
+  input[type="time"] {
+    -webkit-appearance: auto;
+    appearance: auto;
+    min-height: 3rem;
+    font-size: 16px;
+    line-height: 1.2;
+  }
+
+  input[type="time"]::-webkit-date-and-time-value {
+    text-align: left;
+  }
 }

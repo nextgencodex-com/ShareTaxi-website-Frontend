@@ -78,7 +78,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const [showMapMobile, setShowMapMobile] = useState(false)
 
   const [tripType, setTripType] = useState("one-way")
-  const [rideType, setRideType] = useState("shared")
+  const rideType = "shared"
   const [vehicleType, setVehicleType] = useState<"standard" | "electric" | "vintage" | "camper">("standard")
   const [personalVehicles, setPersonalVehicles] = useState<PersonalVehicle[]>([])
   const [selectedPersonalVehicleId, setSelectedPersonalVehicleId] = useState<number | null>(null)
@@ -680,13 +680,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     // Get the calculated fare for current trip type
   const currentFare = fareResults[tripType]
   
-  // For personal rides, show the personal rides popup first to review fare
-  // For shared rides, show booking details popup directly
-  if (rideType === "personal") {
-    setShowPersonalRidesPopup(true)
-  } else {
-    setShowBookingPopup(true)
-  }
+  // Shared-only flow for now.
+  setShowBookingPopup(true)
 
     // Prepare booking payload to send to backend if onAddSharedRide not provided
     const bookingPayload = {
@@ -757,7 +752,6 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   // Reset form to initial state
   const resetForm = () => {
     setTripType("one-way")
-    setRideType("shared")
     setVehicleType("standard")
     setPickupStart("")
     setPickupEnd("")
@@ -814,7 +808,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
           <div className="space-y-8">
             <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:space-y-0 space-y-8">
-              <Card className={`border-gray-200 shadow-lg transition-colors duration-300 ${rideType === "personal" ? "bg-yellow-50" : "bg-white"}`}>
+              <Card className="border-gray-200 shadow-lg transition-colors duration-300 bg-white">
                 <CardContent className="p-6 sm:p-8">
                 <div className="space-y-6">
                   <div className="flex items-center justify-center mb-8">
@@ -881,7 +875,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                         <Button
                           type="button"
                           variant={rideType === "shared" ? "default" : "outline"}
-                          onClick={() => setRideType("shared")}
+                          onClick={() => {}}
                           className={`flex-1 h-12 text-base font-medium transition-all duration-300 ${
                             rideType === "shared"
                               ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md"
@@ -889,8 +883,9 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           }`}
                         >
                           <span className="mr-2">🚗</span>
-                          Shared Ride
+                          Share Ride
                         </Button>
+                        {/*
                         <Button
                           type="button"
                           variant={rideType === "personal" ? "default" : "outline"}
@@ -904,6 +899,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           <span className="mr-2">👤</span>
                           Personal Ride
                         </Button>
+                        */}
                       </div>
                     </div>
 
@@ -981,7 +977,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                               type="time"
                               value={pickupStart}
                               onChange={(e) => setPickupStart(e.target.value)}
-                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 pr-10 h-12"
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 h-12 text-base [appearance:auto]"
+                              inputMode="numeric"
                               aria-label="Pickup start time"
                             />
                           </div>
@@ -990,7 +987,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                               type="time"
                               value={pickupEnd}
                               onChange={(e) => setPickupEnd(e.target.value)}
-                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 pr-10 h-12"
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 h-12 text-base [appearance:auto]"
+                              inputMode="numeric"
                               aria-label="Pickup end time"
                             />
                           </div>
@@ -1072,7 +1070,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                       */}
 
                       {/* Vehicle Type Selection - Personal Rides Only - Before Continue Button */}
-                      {rideType === "personal" && (
+                      {false && (
                         <div className="space-y-3">
                           <Label className="text-gray-700 font-medium">Select Vehicle</Label>
                           <div className="space-y-3">
@@ -1126,6 +1124,27 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                       )}
 
                     </div>
+
+                  {fareResults[tripType] && (
+                    <div
+                      className={`mb-4 rounded-lg border p-3 text-sm ${
+                        fareResults[tripType].includes("⚠️")
+                          ? "bg-amber-50 border-amber-200 text-amber-800"
+                          : "bg-green-50 border-green-200 text-green-800"
+                      }`}
+                    >
+                      <p className="font-semibold mb-2">Calculated Price</p>
+                      <div className="space-y-1 break-words">
+                        {fareResults[tripType].split('<br>').map((line, idx) => (
+                          <div
+                            key={idx}
+                            dangerouslySetInnerHTML={{ __html: line }}
+                            className="break-words"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <Button
                     onClick={handleNextClick}
