@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Users, Briefcase, ShoppingBag, X, ArrowLeft } from "lucide-react"
 import { BookRidePopup } from "./book-ride-popup"
+import { buildApiUrl, resolveApiAssetUrl } from "@/lib/api-url"
 
 interface Vehicle {
   id: number
@@ -32,7 +33,7 @@ export function PrivateVehiclesPopup({ isOpen, onClose }: PrivateVehiclesPopupPr
   useEffect(() => {
     const fetchVehicles = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/vehicles/by-type?type=personal')
+        const res = await fetch(buildApiUrl("/vehicles/by-type?type=personal"))
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         const vehiclesData = json?.data?.vehicles || []
@@ -45,7 +46,7 @@ export function PrivateVehiclesPopup({ isOpen, onClose }: PrivateVehiclesPopupPr
           passengers: v.passengers || '2',
           luggage: `X ${v.luggage || '1'} Big`,
           handCarry: v.handCarry ? `X ${v.handCarry} Hand` : 'X 0 Hand',
-          image: v.image || '/images/default-vehicle.jpg',
+          image: typeof v.image === "string" ? resolveApiAssetUrl(v.image) : '/images/default-vehicle.jpg',
           features: (v.features && v.features.length > 0 ? v.features : ['Air Conditioning', 'GPS Navigation', 'USB Charging']) as string[],
           gradient: v.gradient || 'bg-gradient-to-br from-yellow-400 to-orange-500',
           buttonColor: v.buttonColor || 'bg-yellow-600 hover:bg-yellow-700'

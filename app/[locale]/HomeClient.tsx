@@ -13,6 +13,7 @@ import { LoginSignupPopup } from "@/components/login-signup-popup"
 import { AdminPanel } from "@/components/admin-panel"
 import { AdminLogin } from "@/components/admin-login"
 import { useAuth } from "@/components/auth-context"
+import { buildApiUrl } from "@/lib/api-url"
 
 export default function HomeClient() {
   const [isLoginSignupOpen, setIsLoginSignupOpen] = useState(false)
@@ -83,7 +84,7 @@ export default function HomeClient() {
     let mounted = true
     ;(async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/shared-rides')
+        const res = await fetch(buildApiUrl("/shared-rides"))
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         const apiList = (json?.data?.rides as unknown) || []
