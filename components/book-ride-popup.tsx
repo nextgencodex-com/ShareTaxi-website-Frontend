@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { X, Users, Briefcase, ShoppingBag, Calendar, ArrowLeft } from "lucide-react"
 import { useRideBooking } from "@/hooks/use-ride-booking"
 import emailjs from "@emailjs/browser"
+import { buildApiUrl } from "@/lib/api-url"
 
 interface Vehicle {
   id: number
@@ -62,8 +63,7 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
         notes: `Vehicle: ${vehicle.name}`,
       }
 
-  const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '')
-  const apiUrl = base.endsWith('/api') ? `${base}/private-rides` : `${base}/api/private-rides`
+      const apiUrl = buildApiUrl("/private-rides")
 
       const res = await fetch(apiUrl, {
         method: 'POST',
