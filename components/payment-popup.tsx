@@ -241,7 +241,7 @@ const sendConfirmationEmail = async (
         })()
       : (bookingData?.time || "N/A");
 
-    const rideType = isJoinRideFlow ? "Shared" : (bookingData?.rideType === "personal" ? "Personal" : "Shared");
+    const rideType = isJoinRideFlow ? "Share" : (bookingData?.rideType === "personal" ? "Personal" : "Share");
     const tripType = bookingData?.tripType 
       ? bookingData.tripType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())
       : "One Way Ride";
@@ -1058,7 +1058,7 @@ export function PaymentDetailsPopup({
         },
         vehicle:
           bookingData.rideType === "shared"
-            ? "Shared Vehicle"
+            ? "Share Vehicle"
             : "Private Vehicle",
         pickup: {
           location: bookingData.from || "N/A",
@@ -1103,7 +1103,7 @@ export function PaymentDetailsPopup({
           name: personalData.fullName,
           image: "/placeholder-user.jpg",
         },
-        vehicle: rideData.vehicle || "Shared Vehicle",
+        vehicle: rideData.vehicle || "Share Vehicle",
         pickup: rideData.pickup || { location: "N/A", type: "Pickup point" },
         destination: rideData.destination || {
           location: "N/A",
@@ -1749,7 +1749,7 @@ export function PaymentDetailsPopup({
 
           const joinRideDetails = `\nTaxi Booking Request\n\nRoute: ${
             rideData?.pickup?.location || "N/A"
-          } → ${rideData?.destination?.location || "N/A"}\nDate: ${displayDate}\nTime: ${displayTime}\nType: Shared, One Way Ride\n\nPersonal Details:\n• Name: ${
+          } → ${rideData?.destination?.location || "N/A"}\nDate: ${displayDate}\nTime: ${displayTime}\nType: Share, One Way Ride\n\nPersonal Details:\n• Name: ${
             personalData?.fullName || "N/A"
           }\n• Email: ${personalData?.email || "N/A"}\n• Phone: ${
             sanitizedPhone
@@ -1837,7 +1837,7 @@ Taxi Booking Request
 Route: ${bookingData?.from || "N/A"} → ${bookingData?.to || "N/A"}
 Date: ${bookingData?.date || "N/A"}
 Time: ${bookingData?.time || "N/A"}
-Type: Shared, One Way Ride
+Type: Share, One Way Ride
 
 Personal Details:
 • Name: ${personalData?.fullName || "N/A"}

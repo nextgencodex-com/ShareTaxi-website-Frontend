@@ -65,7 +65,13 @@ export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogPr
         vehicle: data.vehicle,
         driver: data.driver,
         tag: data.tag,
-        user: user ? { id: user.id || user.uid, phone: user.phone, email: user.email } : undefined,
+        user: user
+          ? {
+              id: user.email || user.phone,
+              phone: user.phone,
+              email: user.email,
+            }
+          : undefined,
       }
 
       const apiUrl = buildApiUrl("/reviews")
@@ -76,17 +82,23 @@ export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogPr
         body: JSON.stringify(payload),
       })
 
+      let saved: any
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         console.error('Failed to submit review', res.status, body)
-        throw new Error(body.message || 'Failed to submit review')
-      }
-
-      const json = await res.json().catch(() => null)
-      const saved = json && json.data ? json.data : {
-        id: Date.now(),
-        ...payload,
-        createdAt: new Date()
+        // Fallback to local UI record so the user can still see their review immediately.
+        saved = {
+          id: Date.now(),
+          ...payload,
+          createdAt: new Date()
+        }
+      } else {
+        const json = await res.json().catch(() => null)
+        saved = json && json.data ? json.data : {
+          id: Date.now(),
+          ...payload,
+          createdAt: new Date()
+        }
       }
 
       // Normalize for UI: build avatar, tagColor, date, helpful count
@@ -232,7 +244,7 @@ export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogPr
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="Individual">Individual</SelectItem>
-                      <SelectItem value="Shared">Shared</SelectItem>
+                      <SelectItem value="Shared">Share</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

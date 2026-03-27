@@ -230,7 +230,7 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
             >
               <ArrowLeft className="h-4 w-4 text-gray-600" />
             </button>
-            <h2 className="text-2xl font-bold text-gray-900">Available Shared Rides</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Available Share Rides</h2>
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center hover:bg-gray-100"
@@ -423,7 +423,7 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
                               className="w-4 h-4 text-blue-500 border-gray-300 focus:ring-blue-500"
                             />
                             <Label htmlFor="shared" className="text-gray-700 font-medium">
-                              Shared
+                              Share
                             </Label>
                           </div>
                           <div className="flex items-center space-x-2">
@@ -532,7 +532,7 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
                     // Share functionality with form data
                     if (navigator.share) {
                       navigator.share({
-                        title: 'Shared Ride Available',
+                        title: 'Share Ride Available',
                         text: `Join ride from ${from} to ${to} for ${calculatedPriceForShare}`,
                         url: window.location.href,
                       })
