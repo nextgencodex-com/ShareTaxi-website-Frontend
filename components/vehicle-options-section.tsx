@@ -7,6 +7,7 @@ import { Users, Briefcase, ShoppingBag, Filter, ChevronLeft, ChevronRight } from
 import { PersonalRidePopup } from "./personal-rides/personal-ride-popup"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useIsMobile } from "@/components/ui/use-mobile"
+import { buildApiUrl, resolveApiAssetUrl } from "@/lib/api-url"
 
 // 🧭 Add these for swipe in mobile view
 import Slider from "react-slick"
@@ -50,7 +51,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
 
     ;(async () => {
       try {
-        const resp = await fetch("http://localhost:5000/api/vehicles", { cache: "no-store" })
+        const resp = await fetch(buildApiUrl("/vehicles"), { cache: "no-store" })
         if (!mounted) return
         if (!resp.ok) throw new Error(`Server responded ${resp.status}`)
         const json = await resp.json()
@@ -87,7 +88,7 @@ export function VehicleOptionsSection({ initialVehicles = [] }: VehicleOptionsSe
                 passengers: passengers ?? "",
                 luggage: luggage ?? "",
                 handCarry: handCarry ?? "",
-                image: image ?? "/placeholder.svg",
+                image: typeof image === "string" ? resolveApiAssetUrl(image) : "/placeholder.svg",
                 features: (features ?? []) as string[],
                 gradient,
                 buttonColor,
