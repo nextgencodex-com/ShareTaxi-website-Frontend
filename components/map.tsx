@@ -19,15 +19,17 @@ const center = {
   lng: 79.8612,
 };
 
-export default function Map({ from, to, onDistanceChange }: MapProps) {
-  const apiKey = "AIzaSyAB-nJsOEFtT7LMZEUr2JpDM8HGtOBLU3w";
+// IMPORTANT: Keep this array outside the component so the reference is stable
+// across renders. Passing an inline array literal causes @react-google-maps/api
+// to see a new object every render and reload the entire Google Maps script.
+const LIBRARIES: ("places" | "geometry")[] = ['places', 'geometry'];
 
+const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+
+export default function Map({ from, to, onDistanceChange }: MapProps) {
   // If there's no API key configured, avoid loading the Maps JS and show
   // a helpful message instead of spamming the console with API errors.
   if (!apiKey) {
-    console.error(
-      'Missing NEXT_PUBLIC_GOOGLE_MAPS_API_KEY. Set it in .env.local and restart the dev server.'
-    );
     return (
       <div className="text-red-600">
         Google Maps API key is missing. Please set <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> in
@@ -38,7 +40,7 @@ export default function Map({ from, to, onDistanceChange }: MapProps) {
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey,
-    libraries: ['places', 'geometry'],
+    libraries: LIBRARIES,
     preventGoogleFontsLoading: true,
   });
 

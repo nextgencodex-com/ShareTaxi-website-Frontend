@@ -314,7 +314,7 @@ export function BookingDetailsPopup({
                     <p className="text-xs text-gray-600 font-medium">Passengers</p>
                   </div>
                   <p className="font-bold text-gray-900 text-lg">{formData.seatCount}</p>
-                  <p className="text-xs text-gray-600">{bookingData.rideType === "shared" ? "Shared ride" : "Personal ride"}</p>
+                  <p className="text-xs text-gray-600">{bookingData.rideType === "shared" ? "Share ride" : "Personal ride"}</p>
                 </div>
               </div>
               
@@ -354,7 +354,7 @@ export function BookingDetailsPopup({
 
               <div className="space-y-3">
                 {/* Name & Email Row */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium text-gray-700 block mb-1">Full Name</label>
                     <Input
@@ -377,7 +377,7 @@ export function BookingDetailsPopup({
                 </div>
 
                 {/* Phone & Payment Row */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium text-gray-700 block mb-1">Phone Number</label>
                     <div className="flex gap-2">

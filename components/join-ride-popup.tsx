@@ -679,7 +679,7 @@ export function JoinRidePopup({
             {/* Guidelines */}
             <div className="border-2 border-red-200 rounded-2xl p-6 bg-red-50/30">
               <h4 className="font-bold text-gray-900 mb-3">
-                Shared Ride Guidelines
+                Share Ride Guidelines
               </h4>
               <ul className="space-y-2 text-gray-700">
                 <li className="flex items-start gap-2">

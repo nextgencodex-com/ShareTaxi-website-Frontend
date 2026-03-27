@@ -27,9 +27,9 @@ type Review = {
 
 export function ReviewsSection() {
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [averageRating, setAverageRating] = useState(4.7);
-  const [totalReviews, setTotalReviews] = useState(6);
-  const [ratingDistribution, setRatingDistribution] = useState([4, 2, 0, 0, 0]);
+  const [averageRating, setAverageRating] = useState(0);
+  const [totalReviews, setTotalReviews] = useState(0);
+  const [ratingDistribution, setRatingDistribution] = useState([0, 0, 0, 0, 0]);
 
   useEffect(() => {
     const loadReviews = async () => {
@@ -62,9 +62,9 @@ export function ReviewsSection() {
             rating: Number(r.rating || r.rate || 0),
             review: r.review || r.comment || "",
             helpful: r.helpful || 0,
-            tag: r.tag || "Individual",
+            tag: r.tag === "Shared" ? "Share" : (r.tag || "Individual"),
             tagColor:
-              r.tag === "Shared"
+              (r.tag === "Shared" || r.tag === "Share")
                 ? "bg-blue-100 text-blue-600"
                 : "bg-purple-100 text-purple-600",
           }));
@@ -74,10 +74,9 @@ export function ReviewsSection() {
           return;
         }
 
-        const response = await fetch("/reviews.json");
-        const staticReviews = await response.json();
-        setReviews(staticReviews);
-        calculateStats(staticReviews);
+        // No server reviews yet: keep section empty instead of showing static dummy data.
+        setReviews([]);
+        calculateStats([]);
       } catch (error) {
         console.error("Error loading reviews:", error);
       }
@@ -86,7 +85,12 @@ export function ReviewsSection() {
   }, []);
 
   const calculateStats = (allReviews: Review[]) => {
-    if (allReviews.length === 0) return;
+    if (allReviews.length === 0) {
+      setAverageRating(0);
+      setTotalReviews(0);
+      setRatingDistribution([0, 0, 0, 0, 0]);
+      return;
+    }
     const totalRating = allReviews.reduce(
       (sum, review) => sum + review.rating,
       0
@@ -105,8 +109,11 @@ export function ReviewsSection() {
   };
 
   const handleSubmitReview = (newReview: Review) => {
-    setReviews((prev) => [newReview, ...prev]);
-    calculateStats([newReview, ...reviews]);
+    setReviews((prev) => {
+      const next = [newReview, ...prev];
+      calculateStats(next);
+      return next;
+    });
   };
 
   // ✅ Slider settings for mobile
@@ -338,7 +345,7 @@ export function ReviewsSection() {
         <div className="bg-gradient-to-r from-orange-400 to-yellow-500 rounded-2xl p-8 text-center text-white">
           <div className="flex items-center justify-center gap-4 mb-4">
             <div className="text-4xl font-bold">Share Your Experience</div>
-            <div className="text-6xl">🚕</div>
+            {/* <div className="text-6xl">🚕</div> */}
           </div>
           <p className="text-lg mb-6 opacity-90">
             Had a great ride with us? Share your Review with our community!

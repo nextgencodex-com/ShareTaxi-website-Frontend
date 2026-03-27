@@ -296,10 +296,10 @@ export function PersonalDetailsPopup({
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">
-                      {bookingData.rideType === "shared" ? "Shared ride" : "Personal ride"}
+                      {bookingData.rideType === "shared" ? "Share ride" : "Personal ride"}
                     </p>
                     <p className="text-gray-600 text-sm">
-                      {bookingData.rideType === "shared" ? "Shared ride" : "Personal ride"}
+                      {bookingData.rideType === "shared" ? "Share ride" : "Personal ride"}
                     </p>
                   </div>
                 </div>

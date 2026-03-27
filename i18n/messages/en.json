@@ -20,8 +20,8 @@
     },
     "description": "Book scheduled or shared rides with our premium fleet. Safe, reliable, and comfortable transportation at your fingertip.",
     "buttons": {
-      "bookIndividualRide": "Book Shared Ride",
-      "joinSharedRide": "Join Shared Ride"
+      "bookIndividualRide": "Book Share Ride",
+      "joinSharedRide": "Join Share Ride"
     },
     "features": {
       "service247": "24/7 Service",
