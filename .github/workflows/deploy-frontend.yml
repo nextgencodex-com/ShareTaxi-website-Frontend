@@ -1,9 +1,9 @@
-name: Deploy Frontend to hPanel
+name: Deploy Frontend to hPanel via FTP
 
 on:
   push:
     branches:
-      - Liveproduction
+      - frontend-live-working
 
 jobs:
   build-and-deploy:
@@ -39,8 +39,11 @@ jobs:
       - name: Deploy to hPanel via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./out/
-          server-dir: ${{ secrets.FTP_TARGET_DIR }}
+            server: ${{ secrets.FTP_SERVER }}
+            username: ${{ secrets.FTP_USERNAME }}
+            password: ${{ secrets.FTP_PASSWORD }}
+            protocol: ftps
+            port: 21
+            local-dir: ./out/
+            server-dir: ${{ secrets.FTP_TARGET_DIR }}
+            dangerous-clean-slate: true

@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Star } from "lucide-react"
 import { useAuth } from "./auth-context"
+import { buildApiUrl } from "@/lib/api-url"
 
 const reviewSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -73,8 +74,7 @@ export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogPr
           : undefined,
       }
 
-      const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '')
-      const apiUrl = base.endsWith('/api') ? `${base}/reviews` : `${base}/api/reviews`
+      const apiUrl = buildApiUrl("/reviews")
 
       const res = await fetch(apiUrl, {
         method: 'POST',

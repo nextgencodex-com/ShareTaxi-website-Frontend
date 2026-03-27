@@ -15,14 +15,9 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Static export + basePath only for production builds.
-  // In dev mode these are omitted so the dev server works correctly
-  // (middleware, getMessages(), and dynamic routing all require a server runtime).
-  ...(isProd && {
-    output: 'export',
-    basePath: '/sharetaxi',
-    assetPrefix: '/sharetaxi/',
-  }),
-};
+  // Export static HTML for hosting on static hosts (e.g., hPanel file manager)
+  // All pages must be statically renderable for this to work correctly.
+  output: 'export',
+}
 
 export default withNextIntl(nextConfig);

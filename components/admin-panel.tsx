@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { Footer } from "@/components/footer";
 import emailjs from "@emailjs/browser";
+import { buildApiUrl, buildVehicleImageUrl, resolveApiAssetUrl } from "@/lib/api-url";
 
 /**
  * AdminPanel
@@ -133,6 +134,16 @@ const localKeys = {
   VEHICLE_CATALOG: "admin_vehicle_catalog_v1",
   PERSONAL_VEHICLES: "admin_personal_vehicle_catalog_v1",
 };
+
+const normalizeVehicleData = (vehicle: VehicleData): VehicleData => ({
+  ...vehicle,
+  image: resolveApiAssetUrl(vehicle.image),
+});
+
+const normalizePersonalVehicleData = (vehicle: PersonalVehicleData): PersonalVehicleData => ({
+  ...vehicle,
+  image: resolveApiAssetUrl(vehicle.image),
+});
 
 /* ---------- Main component ---------- */
 
@@ -267,12 +278,20 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       if (s) setSharedRides(JSON.parse(s));
       if (v) setVehicleBookings(JSON.parse(v));
       if (p) setPersonalRides(JSON.parse(p));
-      if (pvc) setPersonalVehicleCatalog(JSON.parse(pvc));
+      if (pvc) {
+        const parsed = JSON.parse(pvc) as PersonalVehicleData[];
+        const normalized = Array.isArray(parsed) ? parsed.map(normalizePersonalVehicleData) : [];
+        const normalizedRaw = JSON.stringify(normalized);
+        if (normalizedRaw !== pvc) {
+          localStorage.setItem(localKeys.PERSONAL_VEHICLES, normalizedRaw);
+        }
+        setPersonalVehicleCatalog(normalized);
+      }
 
       // Load rates from backend if available
       (async () => {
         try {
-          const res = await fetch('http://localhost:5000/api/rates');
+          const res = await fetch(buildApiUrl('/rates'));
           if (!res.ok) throw new Error(`API ${res.status}`);
           const json = await res.json();
           const rates = json?.data?.rates;
@@ -323,12 +342,14 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     localStorage.setItem(localKeys.PERSONAL_RIDES, JSON.stringify(list));
   };
   const persistVehicleCatalog = (list: VehicleData[]) => {
-    setVehicleCatalog(list);
-    localStorage.setItem(localKeys.VEHICLE_CATALOG, JSON.stringify(list));
+    const normalized = list.map(normalizeVehicleData);
+    setVehicleCatalog(normalized);
+    localStorage.setItem(localKeys.VEHICLE_CATALOG, JSON.stringify(normalized));
   };
   const persistPersonalVehicleCatalog = (list: PersonalVehicleData[]) => {
-    setPersonalVehicleCatalog(list);
-    localStorage.setItem(localKeys.PERSONAL_VEHICLES, JSON.stringify(list));
+    const normalized = list.map(normalizePersonalVehicleData);
+    setPersonalVehicleCatalog(normalized);
+    localStorage.setItem(localKeys.PERSONAL_VEHICLES, JSON.stringify(normalized));
     window.dispatchEvent(new Event('personalVehiclesUpdated'));
   };
 
@@ -375,7 +396,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             ratePerKm: (baseRate * 1).toFixed(2),
             passengers: "2",
             luggage: "1",
-            image: "http://localhost:5000/api/vehicle-images/mini-car",
+            image: buildVehicleImageUrl("mini-car"),
           },
           {
             id: Date.now() + 1,
@@ -383,7 +404,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             ratePerKm: (baseRate * 1.2).toFixed(2),
             passengers: "3",
             luggage: "3",
-            image: "http://localhost:5000/api/vehicle-images/sedan-car",
+            image: buildVehicleImageUrl("sedan-car"),
           },
           {
             id: Date.now() + 2,
@@ -391,7 +412,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             ratePerKm: (baseRate * 1.5).toFixed(2),
             passengers: "5",
             luggage: "7",
-            image: "http://localhost:5000/api/vehicle-images/van",
+            image: buildVehicleImageUrl("van"),
           },
           {
             id: Date.now() + 3,
@@ -399,7 +420,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             ratePerKm: (baseRate * 1.8).toFixed(2),
             passengers: "10",
             luggage: "10",
-            image: "http://localhost:5000/api/vehicle-images/mini-coach",
+            image: buildVehicleImageUrl("mini-coach"),
           },
         ];
         persistPersonalVehicleCatalog(seedPersonal);
@@ -422,7 +443,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       setSharedLoading(true)
       setSharedError(null)
       try {
-        const res = await fetch("http://localhost:5000/api/shared-rides")
+        const res = await fetch(buildApiUrl("/shared-rides"))
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         const apiRides = json?.data?.rides as unknown
@@ -507,7 +528,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       setVehicleBookingsLoading(true);
       setVehicleBookingsError(null);
       try {
-        const res = await fetch('http://localhost:5000/api/private-rides');
+        const res = await fetch(buildApiUrl('/private-rides'));
         if (!res.ok) throw new Error(`API ${res.status}`);
         const json = await res.json();
         const apiRides = json?.data?.rides as unknown;
@@ -569,7 +590,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     let mounted = true;
     const fetchVehicles = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/vehicles');
+        const res = await fetch(buildApiUrl('/vehicles'));
         if (!res.ok) throw new Error(`API ${res.status}`);
         const json = await res.json();
         const apiVehicles = json?.data?.vehicles as unknown;
@@ -590,7 +611,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
               passengers: typeof v.passengers === 'string' ? v.passengers : '4',
               luggage: typeof v.luggage === 'string' ? v.luggage : '2',
               handCarry: typeof v.handCarry === 'string' ? v.handCarry : '2',
-              image: typeof v.image === 'string' ? v.image : '/images/default-vehicle.jpg',
+              image: typeof v.image === 'string' ? resolveApiAssetUrl(v.image) : '/images/default-vehicle.jpg',
               features: Array.isArray(v.features) ? v.features.filter(f => typeof f === 'string') as string[] : [],
               gradient: typeof v.gradient === 'string' ? v.gradient : 'bg-gradient-to-br from-blue-400 to-blue-600',
               buttonColor: typeof v.buttonColor === 'string' ? v.buttonColor : 'bg-blue-600 hover:bg-blue-700',
@@ -616,7 +637,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       setPersonalLoading(true);
       setPersonalError(null);
       try {
-        const res = await fetch('http://localhost:5000/api/personal-rides');
+        const res = await fetch(buildApiUrl('/personal-rides'));
         if (!res.ok) throw new Error(`API ${res.status}`);
         const json = await res.json();
         const apiBookings = json?.data?.bookings as unknown;
@@ -690,7 +711,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     let mounted = true;
     const fetchPersonalVehicles = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/vehicles/by-type?type=personal');
+        const res = await fetch(buildApiUrl('/vehicles/by-type?type=personal'));
         if (!res.ok) throw new Error(`API ${res.status}`);
         const json = await res.json();
         const vehicles = json?.data?.vehicles || [];
@@ -702,7 +723,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           ratePerKm: v.ratePerKm || '0',
           passengers: v.passengers || '2',
           luggage: v.luggage || '1',
-          image: v.image || '/images/default-vehicle.jpg'
+          image: typeof v.image === 'string' ? resolveApiAssetUrl(v.image) : '/images/default-vehicle.jpg'
         }));
 
         if (mounted) {
@@ -841,7 +862,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     console.log('Submitting shared ride payload:', payload);
 
       try {
-        const res = await fetch('http://localhost:5000/api/shared-rides', {
+        const res = await fetch(buildApiUrl('/shared-rides'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(payload),
@@ -856,7 +877,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             const idVal = serverRide?.id ?? serverRide?._id ?? serverRide?.bookingId ?? null;
             if (idVal) {
               const idStr = String(idVal);
-              const fetchRes = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(idStr)}`);
+              const fetchRes = await fetch(buildApiUrl(`/shared-rides/${encodeURIComponent(idStr)}`));
               if (fetchRes.ok) {
                 const fetched = await fetchRes.json();
                 const srvSeats = fetched?.seats ?? { available: fetched?.availableSeats, total: fetched?.totalSeats };
@@ -865,7 +886,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                 if ((typeof srvAvailable === 'number' && srvAvailable !== availableSeatsNum) || (typeof srvTotal === 'number' && srvTotal !== totalSeatsNum)) {
                   // Attempt to update server-side seats to the expected values
                   try {
-                    await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(idStr)}`, {
+                    await fetch(buildApiUrl(`/shared-rides/${encodeURIComponent(idStr)}`), {
                       method: 'PUT',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ seats: { available: availableSeatsNum, total: totalSeatsNum } }),
@@ -1009,7 +1030,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           buttonColor: "bg-blue-600 hover:bg-blue-700",
         } as Record<string, unknown>;
 
-        const res = await fetch('http://localhost:5000/api/vehicles', {
+        const res = await fetch(buildApiUrl('/vehicles'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(payload),
@@ -1028,8 +1049,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         }
 
         // Update local UI state only (do not persist to localStorage)
-        setVehicleCatalog([serverVehicle as VehicleData, ...vehicleCatalog]);
-        onAddVehicle?.(serverVehicle as VehicleData);
+        const normalizedServerVehicle = normalizeVehicleData(serverVehicle as VehicleData);
+        setVehicleCatalog([normalizedServerVehicle, ...vehicleCatalog]);
+        onAddVehicle?.(normalizedServerVehicle);
 
         setVehicleForm({ name: "", price: "", passengers: "4", luggage: "", handCarry: "2", image: "", imageFile: null, feature1: "", feature2: "", feature3: "" });
         setRateStatus("✅ Vehicle added");
@@ -1071,7 +1093,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         buttonColor: 'bg-yellow-600 hover:bg-yellow-700'
       };
 
-      const res = await fetch('http://localhost:5000/api/vehicles', {
+      const res = await fetch(buildApiUrl('/vehicles'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1203,7 +1225,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     // Try to persist to backend as well
     (async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/rates', {
+        const res = await fetch(buildApiUrl('/rates'), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ ratePerKm: usdRate, rateLKRPerKm: lkrRate, exchangeRate: currentExchangeRate }),
@@ -1245,7 +1267,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const removeRate = () => {
     (async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/rates', { method: 'DELETE' });
+        const res = await fetch(buildApiUrl('/rates'), { method: 'DELETE' });
         if (!res.ok) throw new Error(`API ${res.status}`);
         // clear local UI
         setRatePerKm('');
@@ -1508,7 +1530,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             pickupLocation: ride?.pickup?.location,
             destinationLocation: ride?.destination?.location,
           }
-          const res = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(buildApiUrl(`/shared-rides/${encodeURIComponent(remoteId)}`), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify(body),
@@ -1543,7 +1565,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`http://localhost:5000/api/private-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(buildApiUrl(`/private-rides/${encodeURIComponent(remoteId)}`), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({ status }),
@@ -1585,7 +1607,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
     (async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/personal-rides/${encodeURIComponent(remoteId)}`, {
+        const res = await fetch(buildApiUrl(`/personal-rides/${encodeURIComponent(remoteId)}`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({ status }),
@@ -2092,7 +2114,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`http://localhost:5000/api/shared-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(buildApiUrl(`/shared-rides/${encodeURIComponent(remoteId)}`), {
             method: 'DELETE',
           })
           if (!res.ok) {
@@ -2142,7 +2164,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         // Prefer bookingId for remote id if present, else use numeric id
         const remoteId = ride.bookingId ?? ride.id;
         const idForUrl = encodeURIComponent(String(remoteId));
-        const res = await fetch(`http://localhost:5000/api/shared-rides/${idForUrl}`, {
+        const res = await fetch(buildApiUrl(`/shared-rides/${idForUrl}`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ postedDate: iso }),
@@ -2236,7 +2258,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`http://localhost:5000/api/private-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(buildApiUrl(`/private-rides/${encodeURIComponent(remoteId)}`), {
             method: 'DELETE',
             headers: { 'Accept': 'application/json' },
           });
@@ -2263,7 +2285,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
     if (remoteId) {
       (async () => {
         try {
-          const res = await fetch(`http://localhost:5000/api/personal-rides/${encodeURIComponent(remoteId)}`, {
+          const res = await fetch(buildApiUrl(`/personal-rides/${encodeURIComponent(remoteId)}`), {
             method: 'DELETE',
             headers: { 'Accept': 'application/json' },
           });
@@ -2578,7 +2600,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                                 
                                 // Delete from backend
                                 try {
-                                  const res = await fetch(`http://localhost:5000/api/vehicles/${encodeURIComponent(String(v.id))}`, {
+                                  const res = await fetch(buildApiUrl(`/vehicles/${v.id}`), {
                                     method: 'DELETE',
                                   });
                                   if (!res.ok) {
@@ -2639,7 +2661,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                                     setPersonalVehicleCatalog(updated);
                                     
                                     // Delete from backend
-                                    const res = await fetch(`http://localhost:5000/api/vehicles/${v.id}`, {
+                                    const res = await fetch(buildApiUrl(`/vehicles/${v.id}`), {
                                       method: 'DELETE',
                                     });
                                     if (!res.ok) {

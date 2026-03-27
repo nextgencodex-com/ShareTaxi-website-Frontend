@@ -23,6 +23,7 @@ import {
   formatPriceUSD,
   calculateProgressiveSharedTotal,
 } from "@/lib/pricing";
+import { buildApiUrl } from "@/lib/api-url";
 import { useCallback } from "react";
 import { AlertTriangle } from "lucide-react";
 
@@ -910,7 +911,7 @@ export function PaymentDetailsPopup({
     // POST new shared ride to backend instead of localStorage
     try {
       const res = await fetch(
-        "http://localhost:5000/api/shared-rides",
+        buildApiUrl("/shared-rides"),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -995,7 +996,7 @@ export function PaymentDetailsPopup({
     // POST new personal ride to backend instead of localStorage
     try {
       const res = await fetch(
-        "http://localhost:5000/api/personal-rides",
+        buildApiUrl("/personal-rides"),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1135,8 +1136,8 @@ export function PaymentDetailsPopup({
       // Choose endpoint based on ride type: personal rides go to /api/personal-rides
       const endpoint =
         bookingData && bookingData.rideType === "personal"
-          ? "http://localhost:5000/api/personal-rides"
-          : "http://localhost:5000/api/shared-rides";
+          ? buildApiUrl("/personal-rides")
+          : buildApiUrl("/shared-rides");
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1238,7 +1239,7 @@ export function PaymentDetailsPopup({
         let baselineAvailable = typeof (rideData.seats && rideData.seats.available) === "number" ? Number(rideData.seats.available) : 0;
         let baselineTotal = typeof (rideData.seats && rideData.seats.total) === "number" ? Number(rideData.seats.total) : TOTAL_SEATS;
         try {
-          const latestRes = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`);
+          const latestRes = await fetch(buildApiUrl(`/shared-rides/${rideData.id}`));
           if (latestRes.ok) {
             const latestJson = await latestRes.json();
             const latestSeats = (latestJson && latestJson.seats) ? latestJson.seats : undefined;
@@ -1259,7 +1260,7 @@ export function PaymentDetailsPopup({
           // Send the requested seats (delta) to the backend. The backend
           // transaction will validate and decrement availability atomically.
           const res = await fetch(
-            `http://localhost:5000/api/shared-rides/${rideData.id}/book`,
+            buildApiUrl(`/shared-rides/${rideData.id}/book`),
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1271,7 +1272,7 @@ export function PaymentDetailsPopup({
             }
           );
           try {
-            const latestRes = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`);
+            const latestRes = await fetch(buildApiUrl(`/shared-rides/${rideData.id}`));
             if (latestRes.ok) {
               const latestJson = await latestRes.json();
               const latestSeats = (latestJson && latestJson.seats) ? latestJson.seats : undefined;
@@ -1290,7 +1291,7 @@ export function PaymentDetailsPopup({
           // Post-booking verification: compute expectedAvailable from the
           // baseline we fetched just before booking and reconcile if needed.
           try {
-            const latestAfterRes = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`);
+            const latestAfterRes = await fetch(buildApiUrl(`/shared-rides/${rideData.id}`));
             if (latestAfterRes.ok) {
               const latestAfterJson = await latestAfterRes.json();
               const serverSeats = latestAfterJson?.seats;
@@ -1301,7 +1302,7 @@ export function PaymentDetailsPopup({
               if (typeof serverAvailable === 'number' && serverAvailable !== expectedAvailable) {
                 // Attempt to correct server value (best-effort). Use PUT to update seats.
                 try {
-                  await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`, {
+                  await fetch(buildApiUrl(`/shared-rides/${rideData.id}`), {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     // backend expects top-level availableSeats/totalSeats fields
@@ -1312,7 +1313,7 @@ export function PaymentDetailsPopup({
                 }
                 // refresh authoritative result
                 try {
-                  const refreshed = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`);
+                  const refreshed = await fetch(buildApiUrl(`/shared-rides/${rideData.id}`));
                   if (refreshed.ok) {
                     const refreshedJson = await refreshed.json();
                     if (onUpdateSeats) onUpdateSeats(rideData.id, seatsToBook);
@@ -1614,7 +1615,7 @@ export function PaymentDetailsPopup({
           // Call backend booking endpoint
           // Re-check latest availability before booking to avoid races
           try {
-            const latestRes = await fetch(`http://localhost:5000/api/shared-rides/${rideData.id}`);
+            const latestRes = await fetch(buildApiUrl(`/shared-rides/${rideData.id}`));
             if (latestRes.ok) {
               const latestJson = await latestRes.json();
               const latestSeats = (latestJson && latestJson.seats) ? latestJson.seats : undefined;
@@ -1629,7 +1630,7 @@ export function PaymentDetailsPopup({
           }
 
           const res = await fetch(
-            `http://localhost:5000/api/shared-rides/${rideData.id}/book`,
+            buildApiUrl(`/shared-rides/${rideData.id}/book`),
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },

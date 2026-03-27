@@ -9,6 +9,7 @@ import { ReviewFormDialog } from "./review-form-dialog";
 import Slider from "react-slick"; // ✅ Add this for mobile slider
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
+import { buildApiUrl } from "@/lib/api-url";
 
 type Review = {
   id: string | number;
@@ -33,12 +34,7 @@ export function ReviewsSection() {
   useEffect(() => {
     const loadReviews = async () => {
       try {
-        const base =
-          (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "") ||
-          "http://localhost:5000";
-        const apiUrl = base.endsWith("/api")
-          ? `${base}/reviews`
-          : `${base}/api/reviews`;
+        const apiUrl = buildApiUrl("/reviews");
 
         let serverReviews = [];
         try {
