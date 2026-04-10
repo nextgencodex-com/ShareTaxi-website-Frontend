@@ -45,13 +45,18 @@ export function HeroSection() {
             >
               {t('buttons.bookIndividualRide')}
             </Button>
+            
             <Button
               variant="outline"
               size="lg"
-              className="rounded-full h-16 px-8 text-lg font-popins"
+              className="rounded-full h-16 px-8 text-lg font-popins relative z-50 pointer-events-auto"
               onClick={() => {
+                // Ensure mobile browsers also update hash and scroll
+                try {
+                  window.location.hash = '#shared-rides-section'
+                } catch {}
                 const element = document.getElementById('shared-rides-section');
-                element?.scrollIntoView({ behavior: 'smooth' });
+                element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }}
             >
               {t('buttons.joinSharedRide')}
