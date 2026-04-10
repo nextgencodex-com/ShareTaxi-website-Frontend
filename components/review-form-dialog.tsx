@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Star } from "lucide-react"
 import { useAuth } from "./auth-context"
+import { buildApiUrl } from "@/lib/api-url"
 
 const reviewSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -31,6 +32,7 @@ interface ReviewFormDialogProps {
 
 export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogProps) {
   const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
   const { isLoggedIn, user } = useAuth()
 
   const form = useForm<ReviewFormData>({
@@ -52,31 +54,74 @@ export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogPr
     }
   }, [user, form])
 
-  const onSubmit = (data: ReviewFormData) => {
-    const newReview = {
-      id: Date.now(), // Simple ID generation
-      name: data.name,
-      avatar: user?.phone ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.phone}` : "/placeholder.svg",
-      vehicle: data.vehicle,
-      driver: data.driver,
-      date: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
-      rating: data.rating,
-      review: data.review,
-      helpful: 0,
-      tag: data.tag,
-      tagColor: data.tag === "Individual" ? "bg-purple-100 text-purple-600" : "bg-blue-100 text-blue-600"
-    }
+  const onSubmit = async (data: ReviewFormData) => {
+    setLoading(true)
+    try {
+      // Build payload — include form fields and user info where available
+      const payload = {
+        name: data.name,
+        rating: data.rating,
+        review: data.review,
+        vehicle: data.vehicle,
+        driver: data.driver,
+        tag: data.tag,
+        user: user
+          ? {
+              id: user.email || user.phone,
+              phone: user.phone,
+              email: user.email,
+            }
+          : undefined,
+      }
 
-    onSubmitReview(newReview)
-    form.reset()
-    setOpen(false)
+      const apiUrl = buildApiUrl("/reviews")
+
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      let saved: any
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        console.error('Failed to submit review', res.status, body)
+        // Fallback to local UI record so the user can still see their review immediately.
+        saved = {
+          id: Date.now(),
+          ...payload,
+          createdAt: new Date()
+        }
+      } else {
+        const json = await res.json().catch(() => null)
+        saved = json && json.data ? json.data : {
+          id: Date.now(),
+          ...payload,
+          createdAt: new Date()
+        }
+      }
+
+      // Normalize for UI: build avatar, tagColor, date, helpful count
+      const newReview = {
+        ...saved,
+        avatar: user?.phone ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.phone}` : "/placeholder.svg",
+        date: new Date(saved.createdAt || Date.now()).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
+        helpful: saved.helpful || 0,
+        tagColor: saved.tag === "Individual" ? "bg-purple-100 text-purple-600" : "bg-blue-100 text-blue-600"
+      }
+
+      onSubmitReview(newReview)
+      form.reset()
+      setOpen(false)
+    } catch (err) {
+      console.error('Submit review error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleTriggerClick = () => {
-    if (!isLoggedIn) {
-      alert("Please log in to write a review")
-      return
-    }
+  
     setOpen(true)
   }
 
@@ -199,7 +244,7 @@ export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogPr
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="Individual">Individual</SelectItem>
-                      <SelectItem value="Shared">Shared</SelectItem>
+                      <SelectItem value="Shared">Share</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -230,8 +275,8 @@ export function ReviewFormDialog({ onSubmitReview, trigger }: ReviewFormDialogPr
               <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">
                 Cancel
               </Button>
-              <Button type="submit" className="flex-1">
-                Submit Review
+              <Button type="submit" className="flex-1" disabled={loading}>
+                {loading ? 'Submitting...' : 'Submit Review'}
               </Button>
             </div>
           </form>

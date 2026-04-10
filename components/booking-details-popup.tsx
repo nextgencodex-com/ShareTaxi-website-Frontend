@@ -1,297 +1,229 @@
-"use client"
+"use client";
 
-import { useState, useMemo, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { X, MapPin, Clock, Users, ArrowLeft, AlertTriangle } from "lucide-react"
-import { PaymentDetailsPopup } from "./payment-popup"
-import { calculateTotalPrice, getPerKmRate, getTripMultiplier, PER_SEAT_RATE_USD, formatPriceUSD, getPassengerCountCategory } from "@/lib/pricing"
-
-// Import vehicle data
-const vehicles = [
-  {
-    id: 1,
-    name: "Toyota Innova",
-    price: "$6/ hour",
-    passengers: "5-6",
-    luggage: "X 1 Big",
-    handCarry: "X 3 Hand",
-    image: "/toyota-innova-white-mpv-car.jpg",
-    features: ["Air Conditioning", "GPS Navigation", "USB Charging"],
-  },
-  {
-    id: 2,
-    name: "Toyota Alphard",
-    price: "$9/ hour",
-    passengers: "5-6",
-    luggage: "X 2 Big",
-    handCarry: "X 4 Hand",
-    image: "/toyota-alphard-luxury-van.jpg",
-    features: ["Premium Interior", "Entertainment System", "Privacy Curtain"],
-  },
-  {
-    id: 3,
-    name: "Hyundai Starex",
-    price: "$12/ hour",
-    passengers: "7-8",
-    luggage: "X 2 Big",
-    handCarry: "X 4 Hand",
-    image: "/hyundai-starex-van.jpg",
-    features: ["Extra Space", "Family Friendly", "Comfortable Seating"],
-  },
-]
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { X, MapPin, Clock, Users, ArrowLeft, AlertTriangle } from "lucide-react";
+import { PaymentDetailsPopup } from "./payment-popup";
 
 interface Destination {
-  id: string
-  location: string
+  id: string;
+  location: string;
 }
 
 interface BookingData {
-  from: string
-  to: string
-  rideType: string
-  date: string
-  time: string
-  passengers: number | string
-  tripType: string
-  destinations?: Destination[]
-  startingPoint?: string
-  mapDistance?: string | null
-  mapDuration?: string | null
-  calculatedFare?: string
+  from: string;
+  to: string;
+  rideType: string;
+  vehicleCategory?: string;
+  vehicleType?: string;
+  date: string;
+  time: string;
+  passengers: number | string;
+  tripType: string;
+  destinations?: Destination[];
+  startingPoint?: string;
+  mapDistance?: string | null;
+  mapDuration?: string | null;
+  calculatedFare?: string;
 }
 
 interface BookingDetailsPopupProps {
-  isOpen: boolean
-  onClose: () => void
-  onAddSharedRide?: (bookingData: any) => void
-  bookingData: BookingData | null
+  isOpen: boolean;
+  onClose: () => void;
+  onAddSharedRide?: (bookingData: any) => void;
+  bookingData: BookingData | null;
 }
 
-export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingData }: BookingDetailsPopupProps) {
+export function BookingDetailsPopup({
+  isOpen,
+  onClose,
+  onAddSharedRide,
+  bookingData,
+}: BookingDetailsPopupProps) {
+  // Total seats constant: booking input represents seats requested; total vehicle capacity is TOTAL_SEATS
+  const TOTAL_SEATS = 10;
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
-    phone: "",
-    emergencyContact: "",
+    // split phone into country code and local number for better UX
+    phoneCountry: "+94",
+    phoneNumber: "",
     specialRequests: "",
-    seatCount: 2,
-  })
+    seatCount: bookingData?.passengers ? Number(bookingData.passengers) : 1,
+    paymentMethod: "",
+  });
 
-  const [showPaymentPopup, setShowPaymentPopup] = useState(false)
-  const [currentBookingData, setCurrentBookingData] = useState<BookingData | null>(bookingData)
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [showPaymentPopup, setShowPaymentPopup] = useState(false);
+  const [currentBookingData, setCurrentBookingData] = useState<BookingData | null>(bookingData);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
 
-  // Keep internal booking data in sync with prop updates so calculated fare shows correctly
+  // ✅ keep seatCount synced when parent updates passengers
   useEffect(() => {
-    setCurrentBookingData(bookingData)
-    setIsInitialLoad(true) // Reset for each new booking
-  }, [bookingData])
+    if (bookingData?.passengers) {
+      const count = Number(bookingData.passengers);
+      setFormData((prev) => ({ ...prev, seatCount: count }));
+      recalculateFareWithNewSeats(count);
+    }
+  }, [bookingData?.passengers]);
 
-  // Recalculate fare with seats on initial load
+  useEffect(() => {
+    setCurrentBookingData(bookingData);
+    setIsInitialLoad(true);
+  }, [bookingData]);
+
   useEffect(() => {
     if (isOpen && currentBookingData && isInitialLoad) {
-      recalculateFareWithNewSeats(formData.seatCount)
-      setIsInitialLoad(false)
+      recalculateFareWithNewSeats(formData.seatCount);
+      setIsInitialLoad(false);
     }
-  }, [currentBookingData, isOpen, isInitialLoad])
+  }, [currentBookingData, isOpen, isInitialLoad]);
 
-  // Validation state
-  const [validationErrors, setValidationErrors] = useState<string[]>([])
-  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
-  const [fieldErrors, setFieldErrors] = useState<{[key: string]: string}>({})
-
-  if (!isOpen || !bookingData) return null
+  if (!isOpen || !bookingData) return null;
 
   const validateField = (field: string, value: string) => {
-    let error = ""
-    const trimmedValue = value.trim()
+    let error = "";
+    const trimmedValue = value.trim();
 
     switch (field) {
       case "fullName":
-        if (!trimmedValue) {
-          error = "Full name is required"
-        } else if (trimmedValue.length < 2) {
-          error = "Full name must be at least 2 characters long"
-        } else if (trimmedValue.length > 100) {
-          error = "Full name cannot exceed 100 characters"
-        } else if (!/^[a-zA-Z\s\-']+$/.test(trimmedValue)) {
-          error = "Full name can only contain letters, spaces, hyphens, and apostrophes"
-        }
-        break
+        if (!trimmedValue) error = "Full name is required";
+        else if (trimmedValue.length < 2) error = "Full name must be at least 2 characters long";
+        else if (trimmedValue.length > 100) error = "Full name cannot exceed 100 characters";
+        else if (!/^[a-zA-Z\s\-']+$/.test(trimmedValue))
+          error = "Full name can only contain letters, spaces, hyphens, and apostrophes";
+        break;
       case "email":
-        if (!trimmedValue) {
-          error = "Email address is required"
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedValue)) {
-          error = "Please enter a valid email address"
-        } else if (trimmedValue.length > 254) {
-          error = "Email address is too long"
-        }
-        break
-      case "phone":
-        if (!trimmedValue) {
-          error = "Phone number is required"
-        } else if (!/^\d{8,10}$/.test(trimmedValue)) {
-          error = "Phone number must be 8-10 digits"
-        } else if (!/^7[0-9]{7}|^9[0-9]{7}|^6[0-9]{7}|^11[0-9]{6}|^[0-9]{9,10}$/.test(trimmedValue)) {
-          error = "Please enter a valid Sri Lankan phone number"
-        }
-        break
-      case "emergencyContact":
-        if (trimmedValue) {
-          if (!/^\d{8,10}$/.test(trimmedValue)) {
-            error = "Emergency contact must be 8-10 digits if provided"
-          } else if (!/^7[0-9]{7}|^9[0-9]{7}|^6[0-9]{7}|^11[0-9]{6}|^[0-9]{9,10}$/.test(trimmedValue)) {
-            error = "Please enter a valid Sri Lankan phone number"
-          }
-        }
-        break
+        if (!trimmedValue) error = "Email address is required";
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedValue))
+          error = "Please enter a valid email address";
+        break;
+      case "phoneNumber":
+        if (!trimmedValue) error = "Phone number is required";
+        else if (!/^\d{8,10}$/.test(trimmedValue))
+          error = "Phone number must be 8-10 digits";
+        break;
+      case "phoneCountry":
+        if (!trimmedValue) error = "Country code is required";
+        else if (!/^\+\d{1,4}$/.test(trimmedValue))
+          error = "Please select a valid country code (e.g., +94)";
+        break;
+      case "paymentMethod":
+        if (!trimmedValue) error = "Payment method is required";
+        break;
       case "specialRequests":
-        if (value.length > 500) {
-          error = "Special requests cannot exceed 500 characters"
-        }
-        break
+        if (value.length > 500) error = "Special requests cannot exceed 500 characters";
+        break;
     }
 
-    setFieldErrors(prev => ({ ...prev, [field]: error }))
-    return error
-  }
+    setFieldErrors((prev) => ({ ...prev, [field]: error }));
+    return error;
+  };
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-    validateField(field, value)
-  }
+    // Special handling for phoneNumber: strip non-digits and any leading country code
+    if (field === "phoneNumber") {
+      // remove all non-digit characters
+      let cleaned = (value || "").replace(/[^0-9]/g, "");
+      // If the user pasted a full international number including the country code,
+      // remove the country code prefix so phoneNumber stores only local digits.
+      const cc = (formData.phoneCountry || "").replace("+", "");
+      if (cc && cleaned.startsWith(cc)) {
+        cleaned = cleaned.slice(cc.length);
+      }
+      setFormData((prev) => ({ ...prev, phoneNumber: cleaned }));
+      validateField("phoneNumber", cleaned);
+      return;
+    }
+
+    // When changing phoneCountry, keep the local phoneNumber as-is (already digits-only)
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    validateField(field, value);
+  };
 
   const handleSeatCountChange = (change: number) => {
-    const newSeatCount = Math.max(1, Math.min(20, formData.seatCount + change))
-    setFormData((prev) => ({
-      ...prev,
-      seatCount: newSeatCount
-    }))
-
-    // Recalculate fare when seat count changes
-    recalculateFareWithNewSeats(newSeatCount)
-  }
+    const newSeatCount = Math.max(1, Math.min(20, formData.seatCount + change));
+    setFormData((prev) => ({ ...prev, seatCount: newSeatCount }));
+    recalculateFareWithNewSeats(newSeatCount);
+  };
 
   const recalculateFareWithNewSeats = (seats: number) => {
-    if (!currentBookingData?.calculatedFare) return
+    if (!currentBookingData?.calculatedFare) return;
+    const rateMatch = currentBookingData.calculatedFare.match(/Rate:\s*\$([0-9.]+)/);
+    const distanceMatch = currentBookingData.calculatedFare.match(/Distance:\s*([0-9.]+)/);
+    if (!rateMatch || !distanceMatch) return;
+    const rate = parseFloat(rateMatch[1]);
+    const distance = parseFloat(distanceMatch[1]);
+    let newFareDisplay = "";
 
-    // Extract original rate and distance from current calculated fare
-    const rateMatch = currentBookingData.calculatedFare.match(/Rate:\s*\$([0-9.]+)/)
-    const distanceMatch = currentBookingData.calculatedFare.match(/Distance:\s*([0-9.]+)/)
-
-    if (!rateMatch || !distanceMatch) return
-
-    const rate = parseFloat(rateMatch[1])
-    const distance = parseFloat(distanceMatch[1])
-
-    let newFareDisplay = ""
     if (currentBookingData.rideType === "shared") {
-      // For shared rides, adjust based on actual seat count vs. standard 4 passengers
       const perPersonFare = (distance * rate) / 4;
       const totalPrice = perPersonFare * seats;
-      newFareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${rate.toFixed(2)} per km<br>👥 Per Person Fare: <span style="color:green;">$${perPersonFare.toFixed(2)}</span><br>📍 Seats: ${seats}<br>💰 Total Price: <span style="color:blue; font-weight: bold;">$${totalPrice.toFixed(2)}</span>`
+      newFareDisplay = `🚗 Distance: ${distance} km<br>👥 Persons: ${seats}<br><span style="color:blue; font-size:18px; font-weight:bold;">Total Price: $${totalPrice.toFixed(
+        2
+      )}</span>`;
     } else {
-      // For personal rides, calculate total based on seats selected
       const totalFare = distance * rate * seats;
-      newFareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${rate.toFixed(2)} per km<br>💰 Total Fare: <span style="color:blue;">$${totalFare.toFixed(2)}</span><br>📍 Seats: ${seats}`
+      newFareDisplay = `🚗 Distance: ${distance} km<br>👥 Persons: ${seats}<br><span style="color:blue; font-size:18px; font-weight:bold;">Total Price: $${totalFare.toFixed(
+        2
+      )}</span>`;
     }
 
-    // Update the current booking data with new calculated fare
-    setCurrentBookingData(prev => prev ? { ...prev, calculatedFare: newFareDisplay } : null)
-  }
+    setCurrentBookingData((prev) => (prev ? { ...prev, calculatedFare: newFareDisplay } : null));
+  };
 
-  // Validation functions
   const validateFormData = () => {
-    const errors: string[] = []
-
-    // Full Name validation
-    const fullName = formData.fullName.trim()
-    if (!fullName) {
-      errors.push("Full name is required")
-    } else if (fullName.length < 2) {
-      errors.push("Full name must be at least 2 characters long")
-    } else if (fullName.length > 100) {
-      errors.push("Full name cannot exceed 100 characters")
-    } else if (!/^[a-zA-Z\s\-']+$/.test(fullName)) {
-      errors.push("Full name can only contain letters, spaces, hyphens, and apostrophes")
-    }
-
-    // Email validation
-    const email = formData.email.trim()
-    if (!email) {
-      errors.push("Email address is required")
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.push("Please enter a valid email address")
-    } else if (email.length > 254) {
-      errors.push("Email address is too long")
-    }
-
-    // Phone validation (Sri Lankan format after +94)
-    const phone = formData.phone.trim()
-    if (!phone) {
-      errors.push("Phone number is required")
-    } else if (!/^\d{8,10}$/.test(phone)) {
-      errors.push("Phone number must be 8-10 digits (Sri Lankan format)")
-    } else if (!/^7[0-9]{7}|^9[0-9]{7}|^6[0-9]{7}|^11[0-9]{6}|^[0-9]{9,10}$/.test(phone)) {
-      errors.push("Please enter a valid Sri Lankan phone number")
-    }
-
-    // Emergency Contact validation (optional but if provided must be valid)
-    const emergencyContact = formData.emergencyContact.trim()
-    if (emergencyContact) {
-      if (!/^\d{8,10}$/.test(emergencyContact)) {
-        errors.push("Emergency contact must be 8-10 digits if provided")
-      } else if (!/^7[0-9]{7}|^9[0-9]{7}|^6[0-9]{7}|^11[0-9]{6}|^[0-9]{9,10}$/.test(emergencyContact)) {
-        errors.push("Emergency contact must be a valid Sri Lankan phone number")
-      }
-    }
-
-    // Special Requests validation (optional, but reasonable length)
-    if (formData.specialRequests.length > 500) {
-      errors.push("Special requests cannot exceed 500 characters")
-    }
-
-    // Seat count validation
-    if (formData.seatCount < 1 || formData.seatCount > 20) {
-      errors.push("Seat count must be between 1 and 20")
-    }
-
-    return errors
-  }
+    const errors: string[] = [];
+    if (!formData.fullName.trim()) errors.push("Full name is required");
+    if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
+      errors.push("Valid email is required");
+    // Compose full phone and validate country + number
+    const fullPhone = `${formData.phoneCountry || ""}${formData.phoneNumber || ""}`;
+    if (!formData.phoneNumber.trim() || !/^\+?\d{7,15}$/.test(formData.phoneNumber))
+      errors.push("Valid phone number required (7-15 digits)");
+    else if (!/^(\+\d{8,15})$/.test(fullPhone))
+      errors.push("Valid phone with country code required (e.g., +94769278958)");
+    if (!formData.paymentMethod.trim()) errors.push("Payment method is required");
+    if (formData.seatCount < 1 || formData.seatCount > TOTAL_SEATS)
+      errors.push(`Person count must be between 1 and ${TOTAL_SEATS}`);
+    if (formData.specialRequests.length > 500) errors.push("Special requests too long");
+    return errors;
+  };
 
   const handleContinueToPayment = () => {
-    setHasAttemptedSubmit(true)
-    const errors = validateFormData()
-
+    console.log("Continue to payment clicked data:", formData, bookingData);
+    setHasAttemptedSubmit(true);
+    const errors = validateFormData();
     if (errors.length > 0) {
-      setValidationErrors(errors)
-      return
+      setValidationErrors(errors);
+      return;
     }
+    setValidationErrors([]);
+    if (bookingData.rideType === "shared") onAddSharedRide?.(bookingData);
+    setShowPaymentPopup(true);
+  };
 
-    setValidationErrors([])
-
-    if (bookingData.rideType === "shared") {
-      onAddSharedRide?.(bookingData)
-      console.log('[v0] Calling onAddSharedRide with data')
-    }
-    setShowPaymentPopup(true)
-  }
-
-  // Clear validation errors when user starts fixing them
   const clearValidationErrors = () => {
-    if (hasAttemptedSubmit) {
-      setValidationErrors([])
-    }
-  }
+    if (hasAttemptedSubmit) setValidationErrors([]);
+  };
 
-  const handleClosePaymentPopup = () => {
-    setShowPaymentPopup(false)
-    onClose() // Close the booking details popup as well to go back to home
-  }
+  const handleClosePaymentPopup = () => setShowPaymentPopup(false);
+
+  // Compose personalData object expected by PaymentDetailsPopup
+  const personalDataForPopup = {
+    fullName: formData.fullName,
+    email: formData.email,
+    // keep phone as local number only (other components prepend +94 or use country separately)
+     phone: `${formData.phoneCountry || ""}${formData.phoneNumber || ""}`,
+    specialRequests: formData.specialRequests,
+    seatCount: formData.seatCount,
+    paymentMethod: formData.paymentMethod,
+  };
 
   return (
     <>
@@ -308,265 +240,505 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
             <h2 className="text-2xl font-bold text-gray-900">Personal Details</h2>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center hover:bg-gray-100"
+              className="w-8 h-8 rounded-full border-2 border-gray-   300 flex items-center justify-center hover:bg-gray-100"
             >
               <X className="h-4 w-4 text-gray-600" />
             </button>
           </div>
 
-          <div className="px-6 py-4">
-            <div className="flex items-center gap-4">
-              <div className="bg-yellow-500 text-white px-6 py-2 rounded-full font-semibold">Personal Details</div>
-              <div className="flex-1 h-1 bg-gray-300 rounded"></div>
-              <div className="bg-yellow-200 text-gray-600 px-6 py-2 rounded-full font-semibold">Payment</div>
-            </div>
-          </div>
-
-          {/* Validation Errors Display */}
+          {/* Errors */}
           {validationErrors.length > 0 && (
-            <Alert variant="destructive" className="mb-6">
+            <Alert variant="destructive" className="m-6">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                <div className="space-y-1">
-                  <strong>Please fix the following errors:</strong>
-                  <ul className="list-disc list-inside mt-2 space-y-1">
-                    {validationErrors.map((error, index) => (
-                      <li key={index}>{error}</li>
-                    ))}
-                  </ul>
-                </div>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  {validationErrors.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
               </AlertDescription>
             </Alert>
           )}
 
-          <div className="p-6 space-y-6">
-            <div className="bg-yellow-50 rounded-2xl p-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Ride Summary</h3>
+          <div className="p-6 space-y-5">
+            {/* Ride Summary */}
+            <div className="bg-slate-50 rounded-lg p-5 border">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Ride Summary</h3>
 
-              <div className="mb-6 text-center">
-                <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-800 px-4 py-2 rounded-full font-semibold text-lg">
-                  {bookingData.rideType === "shared" ? "Shared" : "Personal"} {" "}
-                  {bookingData.tripType === "one-way" ? "One Way" :
-                   bookingData.tripType === "round-trip" ? "Return Trip" :
-                   "Multi-City"} Trip
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
+              {/* Route Info */}
+              <div className="space-y-3 mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                    <MapPin className="h-3 w-3 text-white" />
-                  </div>
+                  <MapPin className="h-4 w-4 text-green-600" />
                   <div>
+                    <p className="text-xs text-gray-500">Pickup</p>
                     <p className="font-semibold text-gray-900">{bookingData.from}</p>
-                    <p className="text-gray-600 text-sm">Pickup point</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-blue-400 rounded-full flex items-center justify-center">
-                    <Clock className="h-3 w-3 text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">{bookingData.time}</p>
-                    <p className="text-gray-600 text-sm">{bookingData.mapDuration || "Estimated duration"}</p>
-                  </div>
+                <div className="flex items-center gap-3 text-gray-400 text-xs ml-1">
+                  ↓
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
-                    <MapPin className="h-3 w-3 text-white" />
-                  </div>
+                  <MapPin className="h-4 w-4 text-red-600" />
                   <div>
+                    <p className="text-xs text-gray-500">Destination</p>
                     <p className="font-semibold text-gray-900">
                       {bookingData.tripType === "multi-city" && bookingData.destinations
-                        ? bookingData.destinations.filter(d => d.location.trim()).map(d => d.location).join(", ")
-                        : bookingData.to
-                      }
-                    </p>
-                    <p className="text-gray-600 text-sm">Destination</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-purple-400 rounded-full flex items-center justify-center">
-                    <Users className="h-3 w-3 text-purple-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">
-                      {formData.seatCount} seats
-                    </p>
-                    <p className="text-gray-600 text-sm">
-                      {bookingData.rideType === "shared" ? "Requested" : "Available"}
+                        ? bookingData.destinations
+                            .filter((d) => d.location.trim())
+                            .map((d) => d.location)
+                            .join(", ")
+                        : bookingData.to}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <hr className="border-gray-200 my-4" />
-
-              {/* Calculated Price Display */}
-              <div className="space-y-2 text-sm">
-                <h4 className="font-semibold text-gray-900">Calculated Price</h4>
-                {currentBookingData?.calculatedFare ? (
-                  <div className="bg-blue-50 p-3 rounded-lg border">
-                    <div
-                      className="text-sm font-medium"
-                      dangerouslySetInnerHTML={{ __html: currentBookingData.calculatedFare }}
-                    />
+              {/* Info Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white rounded-lg p-3 border">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Clock className="h-4 w-4 text-blue-600" />
+                    <p className="text-xs text-gray-600 font-medium">Schedule</p>
                   </div>
-                ) : (
-                  <div className="text-gray-500 italic">
-                    Fare not available. Please return to the booking section and ensure a distance is set for your trip type.
+                  <p className="font-semibold text-gray-900 text-sm">{bookingData.time}</p>
+                  <p className="text-xs text-gray-600">
+                    {new Date(bookingData.date).toLocaleDateString("en-US", { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+
+                <div className="bg-white rounded-lg p-3 border">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users className="h-4 w-4 text-purple-600" />
+                    <p className="text-xs text-gray-600 font-medium">Passengers</p>
                   </div>
-                )}
+                  <p className="font-bold text-gray-900 text-lg">{formData.seatCount}</p>
+                  <p className="text-xs text-gray-600">{bookingData.rideType === "shared" ? "Share ride" : "Personal ride"}</p>
+                </div>
               </div>
-            </div>
+              
+              {/* Vehicle Information */}
+              {(bookingData.vehicleCategory || bookingData.vehicleType) && (
+                <div className="bg-white rounded-lg p-3 border mt-3">
+                  <p className="text-xs text-gray-600 font-medium mb-1">Vehicle</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {bookingData.vehicleCategory === 'small' && 'Small / Private Vehicles'}
+                    {bookingData.vehicleCategory === 'vans' && 'Vans & Medium Vehicles'}
+                    {bookingData.vehicleCategory === 'premium' && 'Premium & Niche'}
+                    {bookingData.vehicleType && ` - ${bookingData.vehicleType}`}
+                  </p>
+                </div>
+              )}
 
-            {/* Form Fields */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Full Name</label>
-                <Input
-                  value={formData.fullName}
-                  onChange={(e) => {
-                    handleInputChange("fullName", e.target.value)
-                    clearValidationErrors()
-                  }}
-                  className={`bg-blue-50 border-0 h-12 ${fieldErrors.fullName ? 'border-red-300' : ''}`}
-                  placeholder="Enter your full name"
-                />
-                {fieldErrors.fullName && (
-                  <p className="text-red-600 text-sm mt-1">{fieldErrors.fullName}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Email Address</label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => {
-                    handleInputChange("email", e.target.value)
-                    clearValidationErrors()
-                  }}
-                  className={`bg-blue-50 border-0 h-12 ${fieldErrors.email ? 'border-red-300' : ''}`}
-                  placeholder="Enter your email"
-                />
-                {fieldErrors.email && (
-                  <p className="text-red-600 text-sm mt-1">{fieldErrors.email}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Phone Number</label>
-                <div className="flex gap-2">
-                  <Input value="+94" readOnly className="bg-blue-50 border-0 h-12 w-20" />
-                  <Input
-                    value={formData.phone}
-                    onChange={(e) => {
-                      handleInputChange("phone", e.target.value)
-                      clearValidationErrors()
+              {/* Fare */}
+              {currentBookingData?.calculatedFare ? (
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mt-3">
+                  <div
+                    className="text-sm"
+                    dangerouslySetInnerHTML={{
+                      __html: currentBookingData.calculatedFare,
                     }}
-                    className={`bg-blue-50 border-0 h-12 flex-1 ${fieldErrors.phone ? 'border-red-300' : ''}`}
-                    placeholder="769278958"
                   />
                 </div>
-                {fieldErrors.phone && (
-                  <p className="text-red-600 text-sm mt-1">{fieldErrors.phone}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Emergency Contact Phone</label>
-                <Input
-                  value={formData.emergencyContact}
-                  onChange={(e) => handleInputChange("emergencyContact", e.target.value)}
-                  className={`bg-blue-50 border-0 h-12 ${fieldErrors.emergencyContact ? 'border-red-300' : ''}`}
-                  placeholder="011258945"
-                />
-                {fieldErrors.emergencyContact && (
-                  <p className="text-red-600 text-sm mt-1">{fieldErrors.emergencyContact}</p>
-                )}
-              </div>
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-3 border mt-3">
+                  <p className="text-gray-500 text-sm italic">Fare calculation not available</p>
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Special Requests or Notes
-                  {formData.specialRequests.length > 0 && (
-                    <span className={`text-xs ml-2 ${formData.specialRequests.length > 500 ? 'text-red-600' : 'text-gray-500'}`}>
-                      {formData.specialRequests.length}/500
-                    </span>
-                  )}
-                </label>
-                <Textarea
-                  value={formData.specialRequests}
-                  onChange={(e) => handleInputChange("specialRequests", e.target.value)}
-                  className="bg-blue-50 border-0 min-h-[100px] resize-none"
-                  placeholder="Enter your special request"
-                />
-                {fieldErrors.specialRequests && (
-                  <p className="text-red-600 text-sm mt-1">{fieldErrors.specialRequests}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Seats count</label>
-                <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
-                  <button
-                    type="button"
-                    onClick={() => handleSeatCountChange(-1)}
-                    disabled={formData.seatCount <= 1}
-                    className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
-                  >
-                    −
-                  </button>
-                  <span className="flex-1 text-center font-semibold text-gray-900">
-                    {formData.seatCount}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleSeatCountChange(1)}
-                    disabled={formData.seatCount >= 20}
-                    className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
-                  >
-                    +
-                  </button>
+            {/* Personal Details Form */}
+            <div className="bg-slate-50 rounded-lg p-5 border">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Information</h3>
+
+              <div className="space-y-3">
+                {/* Name & Email Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">Full Name</label>
+                    <Input
+                      value={formData.fullName}
+                      onChange={(e) => handleInputChange("fullName", e.target.value)}
+                      placeholder="Enter your full name"
+                      className="bg-white border h-10"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">Email Address</label>
+                    <Input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange("email", e.target.value)}
+                      placeholder="Enter your email"
+                      className="bg-white border h-10"
+                    />
+                  </div>
+                </div>
+
+                {/* Phone & Payment Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">Phone Number</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={formData.phoneCountry}
+                        onChange={(e) => handleInputChange("phoneCountry", e.target.value)}
+                        className="w-20 bg-white border h-10 rounded-md px-2 text-sm"
+                        aria-label="Country code"
+                      >
+                    <option value="+93">+93 (AF - Afghanistan)</option>
+                    <option value="+355">+355 (AL - Albania)</option>
+                    <option value="+213">+213 (DZ - Algeria)</option>
+                    <option value="+1-684">+1-684 (AS - American Samoa)</option>
+                    <option value="+376">+376 (AD - Andorra)</option>
+                    <option value="+244">+244 (AO - Angola)</option>
+                    <option value="+1-264">+1-264 (AI - Anguilla)</option>
+                    <option value="+672">+672 (AQ - Antarctica)</option>
+                    <option value="+1-268">
+                      +1-268 (AG - Antigua & Barbuda)
+                    </option>
+                    <option value="+54">+54 (AR - Argentina)</option>
+                    <option value="+374">+374 (AM - Armenia)</option>
+                    <option value="+297">+297 (AW - Aruba)</option>
+                    <option value="+61">+61 (AU - Australia)</option>
+                    <option value="+43">+43 (AT - Austria)</option>
+                    <option value="+994">+994 (AZ - Azerbaijan)</option>
+
+                    <option value="+1-242">+1-242 (BS - Bahamas)</option>
+                    <option value="+973">+973 (BH - Bahrain)</option>
+                    <option value="+880">+880 (BD - Bangladesh)</option>
+                    <option value="+1-246">+1-246 (BB - Barbados)</option>
+                    <option value="+375">+375 (BY - Belarus)</option>
+                    <option value="+32">+32 (BE - Belgium)</option>
+                    <option value="+501">+501 (BZ - Belize)</option>
+                    <option value="+229">+229 (BJ - Benin)</option>
+                    <option value="+1-441">+1-441 (BM - Bermuda)</option>
+                    <option value="+975">+975 (BT - Bhutan)</option>
+                    <option value="+591">+591 (BO - Bolivia)</option>
+                    <option value="+599">
+                      +599 (BQ - Caribbean Netherlands)
+                    </option>
+                    <option value="+387">
+                      +387 (BA - Bosnia & Herzegovina)
+                    </option>
+                    <option value="+267">+267 (BW - Botswana)</option>
+                    <option value="+55">+55 (BR - Brazil)</option>
+                    <option value="+246">
+                      +246 (IO - British Indian Ocean Territory)
+                    </option>
+                    <option value="+1-284">
+                      +1-284 (VG - British Virgin Islands)
+                    </option>
+                    <option value="+673">+673 (BN - Brunei)</option>
+                    <option value="+359">+359 (BG - Bulgaria)</option>
+                    <option value="+226">+226 (BF - Burkina Faso)</option>
+                    <option value="+257">+257 (BI - Burundi)</option>
+
+                    <option value="+855">+855 (KH - Cambodia)</option>
+                    <option value="+237">+237 (CM - Cameroon)</option>
+                    <option value="+1">+1 (CA - Canada)</option>
+                    <option value="+238">+238 (CV - Cape Verde)</option>
+                    <option value="+1-345">+1-345 (KY - Cayman Islands)</option>
+                    <option value="+236">
+                      +236 (CF - Central African Republic)
+                    </option>
+                    <option value="+235">+235 (TD - Chad)</option>
+                    <option value="+56">+56 (CL - Chile)</option>
+                    <option value="+86">+86 (CN - China)</option>
+                    <option value="+61">+61 (CX - Christmas Island)</option>
+                    <option value="+61">+61 (CC - Cocos Islands)</option>
+                    <option value="+57">+57 (CO - Colombia)</option>
+                    <option value="+269">+269 (KM - Comoros)</option>
+                    <option value="+682">+682 (CK - Cook Islands)</option>
+                    <option value="+506">+506 (CR - Costa Rica)</option>
+                    <option value="+385">+385 (HR - Croatia)</option>
+                    <option value="+53">+53 (CU - Cuba)</option>
+                    <option value="+599">+599 (CW - Curaçao)</option>
+                    <option value="+357">+357 (CY - Cyprus)</option>
+                    <option value="+420">+420 (CZ - Czechia)</option>
+
+                    <option value="+243">+243 (CD - DR Congo)</option>
+                    <option value="+45">+45 (DK - Denmark)</option>
+                    <option value="+253">+253 (DJ - Djibouti)</option>
+                    <option value="+1-767">+1-767 (DM - Dominica)</option>
+                    <option value="+1-809">
+                      +1-809 (DO - Dominican Republic)
+                    </option>
+
+                    <option value="+670">+670 (TL - East Timor)</option>
+                    <option value="+593">+593 (EC - Ecuador)</option>
+                    <option value="+20">+20 (EG - Egypt)</option>
+                    <option value="+503">+503 (SV - El Salvador)</option>
+                    <option value="+240">+240 (GQ - Equatorial Guinea)</option>
+                    <option value="+291">+291 (ER - Eritrea)</option>
+                    <option value="+372">+372 (EE - Estonia)</option>
+                    <option value="+268">+268 (SZ - Eswatini)</option>
+                    <option value="+251">+251 (ET - Ethiopia)</option>
+
+                    <option value="+500">+500 (FK - Falkland Islands)</option>
+                    <option value="+298">+298 (FO - Faroe Islands)</option>
+                    <option value="+679">+679 (FJ - Fiji)</option>
+                    <option value="+358">+358 (FI - Finland)</option>
+                    <option value="+33">+33 (FR - France)</option>
+
+                    <option value="+594">+594 (GF - French Guiana)</option>
+                    <option value="+689">+689 (PF - French Polynesia)</option>
+
+                    <option value="+241">+241 (GA - Gabon)</option>
+                    <option value="+220">+220 (GM - Gambia)</option>
+                    <option value="+995">+995 (GE - Georgia)</option>
+                    <option value="+49">+49 (DE - Germany)</option>
+                    <option value="+233">+233 (GH - Ghana)</option>
+                    <option value="+350">+350 (GI - Gibraltar)</option>
+                    <option value="+30">+30 (GR - Greece)</option>
+                    <option value="+299">+299 (GL - Greenland)</option>
+                    <option value="+1-473">+1-473 (GD - Grenada)</option>
+                    <option value="+590">+590 (GP - Guadeloupe)</option>
+                    <option value="+1-671">+1-671 (GU - Guam)</option>
+                    <option value="+502">+502 (GT - Guatemala)</option>
+                    <option value="+44-1481">+44-1481 (GG - Guernsey)</option>
+                    <option value="+224">+224 (GN - Guinea)</option>
+                    <option value="+245">+245 (GW - Guinea-Bissau)</option>
+                    <option value="+592">+592 (GY - Guyana)</option>
+
+                    <option value="+509">+509 (HT - Haiti)</option>
+                    <option value="+504">+504 (HN - Honduras)</option>
+                    <option value="+852">+852 (HK - Hong Kong)</option>
+                    <option value="+36">+36 (HU - Hungary)</option>
+
+                    <option value="+354">+354 (IS - Iceland)</option>
+                    <option value="+91">+91 (IN - India)</option>
+                    <option value="+62">+62 (ID - Indonesia)</option>
+                    <option value="+98">+98 (IR - Iran)</option>
+                    <option value="+964">+964 (IQ - Iraq)</option>
+                    <option value="+353">+353 (IE - Ireland)</option>
+                    <option value="+44-1624">
+                      +44-1624 (IM - Isle of Man)
+                    </option>
+                    <option value="+972">+972 (IL - Israel)</option>
+                    <option value="+39">+39 (IT - Italy)</option>
+
+                    <option value="+225">+225 (CI - Ivory Coast)</option>
+
+                    <option value="+1-876">+1-876 (JM - Jamaica)</option>
+                    <option value="+81">+81 (JP - Japan)</option>
+                    <option value="+44-1534">+44-1534 (JE - Jersey)</option>
+                    <option value="+962">+962 (JO - Jordan)</option>
+
+                    <option value="+7">+7 (KZ - Kazakhstan)</option>
+                    <option value="+254">+254 (KE - Kenya)</option>
+                    <option value="+686">+686 (KI - Kiribati)</option>
+                    <option value="+383">+383 (XK - Kosovo)</option>
+                    <option value="+965">+965 (KW - Kuwait)</option>
+                    <option value="+996">+996 (KG - Kyrgyzstan)</option>
+
+                    <option value="+856">+856 (LA - Laos)</option>
+                    <option value="+371">+371 (LV - Latvia)</option>
+                    <option value="+961">+961 (LB - Lebanon)</option>
+                    <option value="+266">+266 (LS - Lesotho)</option>
+                    <option value="+231">+231 (LR - Liberia)</option>
+                    <option value="+218">+218 (LY - Libya)</option>
+                    <option value="+423">+423 (LI - Liechtenstein)</option>
+                    <option value="+370">+370 (LT - Lithuania)</option>
+                    <option value="+352">+352 (LU - Luxembourg)</option>
+
+                    <option value="+853">+853 (MO - Macau)</option>
+                    <option value="+389">+389 (MK - North Macedonia)</option>
+                    <option value="+261">+261 (MG - Madagascar)</option>
+                    <option value="+265">+265 (MW - Malawi)</option>
+                    <option value="+60">+60 (MY - Malaysia)</option>
+                    <option value="+960">+960 (MV - Maldives)</option>
+                    <option value="+223">+223 (ML - Mali)</option>
+                    <option value="+356">+356 (MT - Malta)</option>
+                    <option value="+692">+692 (MH - Marshall Islands)</option>
+                    <option value="+596">+596 (MQ - Martinique)</option>
+                    <option value="+222">+222 (MR - Mauritania)</option>
+                    <option value="+230">+230 (MU - Mauritius)</option>
+                    <option value="+262">+262 (YT - Mayotte)</option>
+                    <option value="+52">+52 (MX - Mexico)</option>
+                    <option value="+691">+691 (FM - Micronesia)</option>
+                    <option value="+373">+373 (MD - Moldova)</option>
+                    <option value="+377">+377 (MC - Monaco)</option>
+                    <option value="+976">+976 (MN - Mongolia)</option>
+                    <option value="+382">+382 (ME - Montenegro)</option>
+                    <option value="+1-664">+1-664 (MS - Montserrat)</option>
+                    <option value="+212">+212 (MA - Morocco)</option>
+                    <option value="+258">+258 (MZ - Mozambique)</option>
+                    <option value="+95">+95 (MM - Myanmar)</option>
+
+                    <option value="+264">+264 (NA - Namibia)</option>
+                    <option value="+674">+674 (NR - Nauru)</option>
+                    <option value="+977">+977 (NP - Nepal)</option>
+                    <option value="+31">+31 (NL - Netherlands)</option>
+                    <option value="+599">
+                      +599 (AN - Netherlands Antilles)
+                    </option>
+                    <option value="+687">+687 (NC - New Caledonia)</option>
+                    <option value="+64">+64 (NZ - New Zealand)</option>
+                    <option value="+505">+505 (NI - Nicaragua)</option>
+                    <option value="+227">+227 (NE - Niger)</option>
+                    <option value="+234">+234 (NG - Nigeria)</option>
+                    <option value="+683">+683 (NU - Niue)</option>
+                    <option value="+672">+672 (NF - Norfolk Island)</option>
+                    <option value="+850">+850 (KP - North Korea)</option>
+                    <option value="+47">+47 (NO - Norway)</option>
+
+                    <option value="+968">+968 (OM - Oman)</option>
+
+                    <option value="+92">+92 (PK - Pakistan)</option>
+                    <option value="+680">+680 (PW - Palau)</option>
+                    <option value="+970">+970 (PS - Palestine)</option>
+                    <option value="+507">+507 (PA - Panama)</option>
+                    <option value="+675">+675 (PG - Papua New Guinea)</option>
+                    <option value="+595">+595 (PY - Paraguay)</option>
+                    <option value="+51">+51 (PE - Peru)</option>
+                    <option value="+63">+63 (PH - Philippines)</option>
+                    <option value="+870">+870 (PN - Pitcairn)</option>
+                    <option value="+48">+48 (PL - Poland)</option>
+                    <option value="+351">+351 (PT - Portugal)</option>
+                    <option value="+1-787">+1-787 (PR - Puerto Rico)</option>
+
+                    <option value="+974">+974 (QA - Qatar)</option>
+
+                    <option value="+242">
+                      +242 (CG - Republic of the Congo)
+                    </option>
+                    <option value="+40">+40 (RO - Romania)</option>
+                    <option value="+7">+7 (RU - Russia)</option>
+                    <option value="+250">+250 (RW - Rwanda)</option>
+
+                    <option value="+590">+590 (BL - Saint Barthélemy)</option>
+                    <option value="+290">+290 (SH - Saint Helena)</option>
+                    <option value="+1-869">
+                      +1-869 (KN - Saint Kitts & Nevis)
+                    </option>
+                    <option value="+1-758">+1-758 (LC - Saint Lucia)</option>
+                    <option value="+590">+590 (MF - Saint Martin)</option>
+                    <option value="+508">
+                      +508 (PM - Saint Pierre & Miquelon)
+                    </option>
+                    <option value="+1-784">
+                      +1-784 (VC - Saint Vincent & Grenadines)
+                    </option>
+
+                    <option value="+685">+685 (WS - Samoa)</option>
+                    <option value="+378">+378 (SM - San Marino)</option>
+                    <option value="+239">
+                      +239 (ST - Sao Tome & Principe)
+                    </option>
+
+                    <option value="+966">+966 (SA - Saudi Arabia)</option>
+                    <option value="+221">+221 (SN - Senegal)</option>
+                    <option value="+381">+381 (RS - Serbia)</option>
+                    <option value="+248">+248 (SC - Seychelles)</option>
+                    <option value="+232">+232 (SL - Sierra Leone)</option>
+                    <option value="+65">+65 (SG - Singapore)</option>
+                    <option value="+421">+421 (SK - Slovakia)</option>
+                    <option value="+386">+386 (SI - Slovenia)</option>
+                    <option value="+677">+677 (SB - Solomon Islands)</option>
+                    <option value="+252">+252 (SO - Somalia)</option>
+                    <option value="+27">+27 (ZA - South Africa)</option>
+                    <option value="+82">+82 (KR - South Korea)</option>
+                    <option value="+211">+211 (SS - South Sudan)</option>
+                    <option value="+34">+34 (ES - Spain)</option>
+                    <option value="+94">+94 (LK - Sri Lanka)</option>
+                    <option value="+249">+249 (SD - Sudan)</option>
+                    <option value="+597">+597 (SR - Suriname)</option>
+                    <option value="+46">+46 (SE - Sweden)</option>
+                    <option value="+41">+41 (CH - Switzerland)</option>
+                    <option value="+963">+963 (SY - Syria)</option>
+
+                    <option value="+886">+886 (TW - Taiwan)</option>
+                    <option value="+992">+992 (TJ - Tajikistan)</option>
+                    <option value="+255">+255 (TZ - Tanzania)</option>
+                    <option value="+66">+66 (TH - Thailand)</option>
+                    <option value="+228">+228 (TG - Togo)</option>
+                    <option value="+690">+690 (TK - Tokelau)</option>
+                    <option value="+676">+676 (TO - Tonga)</option>
+                    <option value="+1-868">
+                      +1-868 (TT - Trinidad & Tobago)
+                    </option>
+                    <option value="+216">+216 (TN - Tunisia)</option>
+                    <option value="+90">+90 (TR - Turkey)</option>
+                    <option value="+993">+993 (TM - Turkmenistan)</option>
+                    <option value="+1-649">+1-649 (TC - Turks & Caicos)</option>
+                    <option value="+688">+688 (TV - Tuvalu)</option>
+
+                    <option value="+256">+256 (UG - Uganda)</option>
+                    <option value="+380">+380 (UA - Ukraine)</option>
+                    <option value="+971">
+                      +971 (AE - United Arab Emirates)
+                    </option>
+                    <option value="+44">+44 (GB - United Kingdom)</option>
+                    <option value="+1">+1 (US - United States)</option>
+                    <option value="+598">+598 (UY - Uruguay)</option>
+                    <option value="+998">+998 (UZ - Uzbekistan)</option>
+
+                    <option value="+678">+678 (VU - Vanuatu)</option>
+                    <option value="+379">+379 (VA - Vatican)</option>
+                    <option value="+58">+58 (VE - Venezuela)</option>
+                    <option value="+84">+84 (VN - Vietnam)</option>
+                    <option value="+1-284">
+                      +1-284 (VG - British Virgin Islands)
+                    </option>
+                    <option value="+1-340">
+                      +1-340 (VI - US Virgin Islands)
+                    </option>
+
+                    <option value="+681">+681 (WF - Wallis & Futuna)</option>
+                    <option value="+212">+212 (EH - Western Sahara)</option>
+                    <option value="+967">+967 (YE - Yemen)</option>
+
+                    <option value="+260">+260 (ZM - Zambia)</option>
+                    <option value="+263">+263 (ZW - Zimbabwe)</option>
+                  </select>
+                      <Input
+                        value={formData.phoneNumber}
+                        onChange={(e) => handleInputChange("phoneNumber", e.target.value)}
+                        placeholder="Enter local number (digits only)"
+                        className="flex-1 bg-white border h-10"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">Payment Method</label>
+                    <select
+                      value={formData.paymentMethod}
+                      onChange={(e) => handleInputChange("paymentMethod", e.target.value)}
+                      className="w-full bg-white border h-10 rounded-md px-3"
+                    >
+                      <option value="">Select payment method</option>
+                      <option value="Visa Card">Visa Card</option>
+                      <option value="QR Payment">QR Payment</option>
+                      <option value="UPI">UPI</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Via Payment Gateway">Via Payment Gateway</option>
+                      <option value="Cash">Cash</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Special Requests */}
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Special Requests or Notes</label>
+                  <Textarea
+                    value={formData.specialRequests}
+                    onChange={(e) => handleInputChange("specialRequests", e.target.value)}
+                    className="bg-white border min-h-[80px] resize-none"
+                    placeholder="Enter any special requests or notes..."
+                  />
                 </div>
               </div>
             </div>
 
-            {bookingData.rideType === "shared" && (
-              <div className="border-2 border-red-200 rounded-2xl p-6 bg-red-50/30">
-                <h4 className="font-bold text-gray-900 mb-3">Shared Ride Guidelines</h4>
-                <ul className="space-y-2 text-gray-700">
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
-                    <span>Be ready at the pickup point 5 minutes before departure time</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
-                    <span>Respect other passengers and maintain a friendly atmosphere</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
-                    <span>Keep personal belongings secure and within your designated space</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mt-2 flex-shrink-0"></span>
-                    <span>Follow the driver's instructions for safety and comfort</span>
-                  </li>
-                </ul>
-              </div>
-            )}
-
-            {/* Continue Button */}
+            {/* Submit Button */}
             <Button
               onClick={handleContinueToPayment}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white h-14 text-lg font-semibold rounded-2xl"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 font-semibold rounded-lg"
             >
-              Continue To Payment
+              Continue To Create a Ride
             </Button>
           </div>
         </div>
@@ -575,9 +747,10 @@ export function BookingDetailsPopup({ isOpen, onClose, onAddSharedRide, bookingD
       <PaymentDetailsPopup
         isOpen={showPaymentPopup}
         onClose={handleClosePaymentPopup}
+        onBack={handleClosePaymentPopup}
         bookingData={currentBookingData || bookingData}
-        personalData={formData}
+        personalData={personalDataForPopup}
       />
     </>
-  )
+  );
 }

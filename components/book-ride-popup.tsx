@@ -6,6 +6,9 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { X, Users, Briefcase, ShoppingBag, Calendar, ArrowLeft } from "lucide-react"
+import { useRideBooking } from "@/hooks/use-ride-booking"
+import emailjs from "@emailjs/browser"
+import { buildApiUrl } from "@/lib/api-url"
 
 interface Vehicle {
   id: number
@@ -25,36 +28,136 @@ interface BookRidePopupProps {
 }
 
 export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) {
+  const { getCurrentLocation } = useRideBooking();
+  const [loadingLocal, setLoadingLocal] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
+    pickupAddress: "",
+    dropoffAddress: "",
     bookingDate: "",
   })
 
   if (!isOpen || !vehicle) return null
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Create WhatsApp message with booking details
-    const message = `*New Booking Request*%0A%0A` +
-      `*Vehicle:* ${vehicle.name}%0A` +
-      `*Price:* ${vehicle.price}%0A%0A` +
-      `*Customer Details:*%0A` +
-      `*Name:* ${formData.name}%0A` +
-      `*Email:* ${formData.email}%0A` +
-      `*Phone:* +94 ${formData.phone}%0A` +
-      `*Booking Date:* ${formData.bookingDate}%0A%0A` +
-      `Please contact the customer for confirmation.`
+    setLoadingLocal(true)
+    try {
+      // Get current location for pickup
+      const currentLocation = await getCurrentLocation();
 
-    // WhatsApp URL with pre-filled message
-    const whatsappUrl = `https://wa.me/94759627589?text=${message}`
+      const payload = {
+        passengerName: formData.name,
+        passengerPhone: formData.phone,
+        passengerEmail: formData.email,
+        bookingDate: formData.bookingDate,
+        pickupLocation: currentLocation,
+        pickupAddress: formData.pickupAddress,
+        destination: { address: formData.dropoffAddress },
+        destinationAddress: formData.dropoffAddress,
+        vehicle: vehicle.name,
+        passengers: 1,
+        notes: `Vehicle: ${vehicle.name}`,
+      }
 
-    // Open WhatsApp in new window/tab
-    window.open(whatsappUrl, '_blank')
+      const apiUrl = buildApiUrl("/private-rides")
 
-    onClose()
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        console.error('Private ride POST failed', res.status, body)
+        throw new Error(body.message || 'Failed to create private ride')
+      }
+
+      // Send a welcome/under-review email to the customer using the booking template variables
+      try {
+        // Format pickup location string
+        const pickupLocation = payload.pickupAddress || (typeof payload.pickupLocation === 'string' ? payload.pickupLocation : 'N/A');
+
+        // Generate a client-side booking code. Prefer server-generated ID if you have one.
+        const bookingCode = `BK-${Date.now()}`;
+
+        // Confirm / cancel URLs (client-side). Replace with server links if available.
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        const confirmUrl = origin ? `${origin}/booking/confirm?code=${encodeURIComponent(bookingCode)}` : '';
+        const cancelUrl = origin ? `${origin}/booking/cancel?code=${encodeURIComponent(bookingCode)}` : '';
+
+        // Total price (template expects USD value). Use vehicle.price (string) here.
+        const totalPrice = vehicle.price || '';
+
+        // total distance not available here; leave empty or compute if you have a route/distance service
+        const totalDistance = '';
+
+        // Special request / notes
+        const specialRequest = String(payload.notes ?? '');
+
+        await emailjs.send(
+          process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+          {
+            to_email: formData.email,
+            booking_code: bookingCode,
+            total_price: totalPrice,
+            total_distance: totalDistance,
+            from_location: pickupLocation,
+            to_location: formData.dropoffAddress,
+            pickup_date: formData.bookingDate,
+            pickup_time: '',
+            vehicle_type: 'personal',
+            customer_name: formData.name,
+            customer_email: formData.email,
+            personal_email: formData.email,
+            customer_phone: `${formData.phone}`,
+            passenger_count: 1,
+            payment_method: '',
+            special_request: specialRequest,
+            confirm_url: confirmUrl,
+            cancel_url: cancelUrl,
+          },
+          { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
+        );
+      } catch (e) {
+        console.warn('EmailJS send failed (non-blocking):', e);
+      }
+
+      // Open WhatsApp with formatted message
+      const whatsappMessage = `🚖 *Vehicle Request*  
+Name: ${formData.name}  
+Email: ${formData.email}  
+Phone: ${formData.phone}  
+Booking Date: ${formData.bookingDate}  
+Pickup: ${formData.pickupAddress}  
+Dropoff: ${formData.dropoffAddress}  
+Vehicle: ${vehicle.name}`;
+
+      const whatsappLink = `https://wa.me/94774018001?text=${encodeURIComponent(whatsappMessage)}`;
+      window.open(whatsappLink, '_blank');
+
+      // Reset form data
+      setFormData({
+        name: "",
+        email: "",
+        phone: "",
+        pickupAddress: "",
+        dropoffAddress: "",
+        bookingDate: "",
+      });
+
+      // Success — close popup
+      onClose()
+    } catch (error) {
+      console.error('Booking failed:', error)
+    } finally {
+      setLoadingLocal(false)
+    }
   }
 
   const handleInputChange = (field: string, value: string) => {
@@ -81,11 +184,14 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
             <div className="grid md:grid-cols-2 gap-6">
               {/* Vehicle Image */}
               <div className="rounded-xl overflow-hidden">
-                <img
-                  src={vehicle.image || "/placeholder.svg?height=200&width=300&query=white Toyota MPV car"}
-                  alt={vehicle.name}
-                  className="w-full h-48 object-cover"
-                />
+                {/* 
+<img
+  src={vehicle.image || "/placeholder.svg?height=200&width=300&query=white Toyota MPV car"}
+  alt={vehicle.name}
+  className="w-full h-48 object-cover"
+/>
+*/}
+
               </div>
 
               {/* Vehicle Info */}
@@ -157,7 +263,7 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
                 <div className="flex gap-2">
-                  <div className="bg-blue-50 rounded-lg px-3 py-3 text-gray-700 font-medium">+94</div>
+                  
                   <Input
                     type="tel"
                     placeholder="769278958"
@@ -180,17 +286,43 @@ export function BookRidePopup({ isOpen, onClose, vehicle }: BookRidePopupProps) 
                     className="w-full p-3 bg-blue-50 border-0 rounded-lg text-gray-700 placeholder-gray-400"
                     required
                   />
-                  <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
                 </div>
+              </div>
+
+              {/* Pickup Address */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Pickup Location</label>
+                <Input
+                  type="text"
+                  placeholder="Enter pickup address"
+                  value={formData.pickupAddress}
+                  onChange={(e) => handleInputChange("pickupAddress", e.target.value)}
+                  className="w-full p-3 bg-blue-50 border-0 rounded-lg text-gray-700 placeholder-gray-400"
+                  required
+                />
+              </div>
+
+              {/* Dropoff Address */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Dropoff Location</label>
+                <Input
+                  type="text"
+                  placeholder="Enter destination address"
+                  value={formData.dropoffAddress}
+                  onChange={(e) => handleInputChange("dropoffAddress", e.target.value)}
+                  className="w-full p-3 bg-blue-50 border-0 rounded-lg text-gray-700 placeholder-gray-400"
+                  required
+                />
               </div>
             </div>
 
             {/* Submit Button */}
             <Button
               type="submit"
-              className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-4 rounded-xl text-lg"
+              disabled={loadingLocal}
+              className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-4 rounded-xl text-lg disabled:opacity-50"
             >
-              Submit Details and We reach out you
+              {loadingLocal ? "Booking..." : "Submit Details and We reach out you"}
             </Button>
           </form>
         </div>

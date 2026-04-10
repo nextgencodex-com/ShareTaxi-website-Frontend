@@ -1,20 +1,21 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Calendar as CalendarIcon, ChevronDown, Plus, X, MapPin, ChevronUp, AlertTriangle } from "lucide-react"
+import { Calendar as CalendarIcon, ChevronDown, MapPin, ChevronUp, AlertTriangle } from "lucide-react"
 import dynamic from 'next/dynamic'
 import { BookingDetailsPopup } from "./booking-details-popup"
+import { PersonalDetailsPopup } from "./personal-rides/personal-details-popup"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { cn } from "@/lib/utils"
-import { format, parseISO, isAfter, startOfDay } from "date-fns"
+import { format, parseISO, startOfDay, addDays } from "date-fns"
 import { calculateSimpleFare, calculateIndividualFare, getTripMultiplier } from "@/lib/pricing"
+import { buildApiUrl, buildVehicleImageUrl, resolveApiAssetUrl } from "@/lib/api-url"
 
 const Map = dynamic(() => import('./map'), { ssr: false })
 
@@ -24,21 +25,119 @@ interface Destination {
 }
 
 interface BookingSectionProps {
-  onAddSharedRide?: (bookingData: any) => void
+  onAddSharedRide?: (bookingData: unknown) => void
 }
+
+interface PersonalVehicle {
+  id: number
+  name: string
+  ratePerKm: string
+  passengers: string
+  luggage: string
+  image: string
+}
+
+const PERSONAL_VEHICLES_KEY = "admin_personal_vehicle_catalog_v1"
+
+const defaultPersonalVehicles: PersonalVehicle[] = [
+  {
+    id: 1,
+    name: "Mini Car",
+    ratePerKm: "1.00",
+    passengers: "2",
+    luggage: "1",
+    image: buildVehicleImageUrl("mini-car"),
+  },
+  {
+    id: 2,
+    name: "Sedan Car",
+    ratePerKm: "1.20",
+    passengers: "3",
+    luggage: "3",
+    image: buildVehicleImageUrl("sedan-car"),
+  },
+  {
+    id: 3,
+    name: "Van",
+    ratePerKm: "1.50",
+    passengers: "5",
+    luggage: "7",
+    image: buildVehicleImageUrl("van"),
+  },
+  {
+    id: 4,
+    name: "Mini Coach",
+    ratePerKm: "1.80",
+    passengers: "10",
+    luggage: "10",
+    image: buildVehicleImageUrl("mini-coach"),
+  },
+]
+
+const normalizePersonalVehicles = (vehicles: PersonalVehicle[]) =>
+  vehicles.map((vehicle) => ({
+    ...vehicle,
+    image: resolveApiAssetUrl(vehicle.image),
+  }))
 
 export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const isMobile = useIsMobile()
   const [showMapMobile, setShowMapMobile] = useState(false)
 
   const [tripType, setTripType] = useState("one-way")
-  const [rideType, setRideType] = useState("shared")
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState("")
+  const rideType = "shared"
+  const [vehicleType, setVehicleType] = useState<"standard" | "electric" | "vintage" | "camper">("standard")
+  const [personalVehicles, setPersonalVehicles] = useState<PersonalVehicle[]>([])
+  const [selectedPersonalVehicleId, setSelectedPersonalVehicleId] = useState<number | null>(null)
+  const [pickupStart, setPickupStart] = useState("")
+  const [pickupEnd, setPickupEnd] = useState("")
+
+  // Premium vehicle multipliers
+  const VEHICLE_MULTIPLIERS = {
+    standard: 1,
+    electric: 1.3,    // 30% premium for EVs
+    vintage: 2.0,     // 100% premium for vintage/luxury
+    camper: 1.8       // 80% premium for camper vans
+  }
+
+  const selectedPersonalVehicle = useMemo(() => {
+    if (!personalVehicles.length) return null
+    const found = personalVehicles.find((v) => v.id === selectedPersonalVehicleId)
+    return found || personalVehicles[0]
+  }, [personalVehicles, selectedPersonalVehicleId])
+
+  // Helpers to format and compare time values
+  const formatTimeForPayload = (value: string) => {
+    // expects "HH:MM" (24h) or empty string
+    if (!value) return ""
+    const [hhStr, mmStr] = value.split(":")
+    const hh = parseInt(hhStr || "0", 10)
+    const mm = parseInt(mmStr || "0", 10)
+    const hour12 = hh % 12 === 0 ? 12 : hh % 12
+    return `${hour12}.${mm.toString().padStart(2, '0')}`
+  }
   const [passengers, setPassengers] = useState(1)
+  // Total seats available in a vehicle (constant)
+  const TOTAL_SEATS = 10
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
-  const [date, setDate] = useState("2025-09-20")
-  const [customTime, setCustomTime] = useState("")
+  const [fromPlace, setFromPlace] = useState<{
+    placeId?: string
+    lat?: number
+    lng?: number
+    address?: string
+    name?: string
+  } | null>(null)
+  const [toPlace, setToPlace] = useState<{
+    placeId?: string
+    lat?: number
+    lng?: number
+    address?: string
+    name?: string
+  } | null>(null)
+  // default pickup date: tomorrow (local date) in yyyy-MM-dd format
+  const _tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd')
+  const [date, setDate] = useState<string>(_tomorrow)
 
   const [mapDistance, setMapDistance] = useState<string | null>(null)
   const [mapDuration, setMapDuration] = useState<string | null>(null)
@@ -51,6 +150,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const [startingPoint, setStartingPoint] = useState("")
 
   const [showBookingPopup, setShowBookingPopup] = useState(false)
+  const [showPersonalRidesPopup, setShowPersonalRidesPopup] = useState(false)
   const [calendarOpen, setCalendarOpen] = useState(false)
 
   // Fare calculator state for each trip type
@@ -58,15 +158,426 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
   const [roundTripDistance, setRoundTripDistance] = useState("")
   const [multiCityDistance, setMultiCityDistance] = useState("")
   const [fareResults, setFareResults] = useState<{ [key: string]: string }>({})
+  // backend-provided rate (per km) — prefer this over localStorage
+  const [backendRatePerKm, setBackendRatePerKm] = useState<number | null>(null)
+
+  const currentDistanceKm = useMemo(() => {
+    let distance = 0
+    if (tripType === "round-trip" && roundTripDistance) {
+      distance = parseFloat(roundTripDistance)
+    } else if (tripType === "one-way" && oneWayDistance) {
+      distance = parseFloat(oneWayDistance)
+    } else if (tripType === "multi-city" && multiCityDistance) {
+      distance = parseFloat(multiCityDistance)
+    } else if (mapDistance) {
+      distance = parseFloat(mapDistance)
+    }
+
+    return Number.isFinite(distance) && distance > 0 ? distance : 0
+  }, [tripType, roundTripDistance, oneWayDistance, multiCityDistance, mapDistance])
 
   // Validation state
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
 
-  // Auto-calculate fare when relevant values change
   useEffect(() => {
-    const ratePerKm = parseFloat(localStorage.getItem("ratePerKm") || "0")
-    if (!ratePerKm) return
+    try {
+      const raw = localStorage.getItem(PERSONAL_VEHICLES_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as PersonalVehicle[]
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const normalized = normalizePersonalVehicles(parsed)
+          const normalizedRaw = JSON.stringify(normalized)
+          if (normalizedRaw !== raw) {
+            localStorage.setItem(PERSONAL_VEHICLES_KEY, normalizedRaw)
+          }
+          setPersonalVehicles(normalized)
+          setSelectedPersonalVehicleId(normalized[0].id)
+          return
+        }
+      }
+      localStorage.setItem(PERSONAL_VEHICLES_KEY, JSON.stringify(defaultPersonalVehicles))
+      setPersonalVehicles(defaultPersonalVehicles)
+      setSelectedPersonalVehicleId(defaultPersonalVehicles[0].id)
+    } catch {
+      setPersonalVehicles(defaultPersonalVehicles)
+      setSelectedPersonalVehicleId(defaultPersonalVehicles[0].id)
+    }
+  }, [])
+
+  
+  const calculateFareForType = useCallback((tripType: string, distance: number) => {
+    if (!distance || distance <= 0) {
+      setFareResults(prev => ({ ...prev, [tripType]: "⚠️ Please enter a valid distance." }))
+      return
+    }
+
+   
+    const localRate = parseFloat(localStorage.getItem("ratePerKm") || "0")
+    const ratePerKmRaw = typeof backendRatePerKm === 'number' && !isNaN(backendRatePerKm) && backendRatePerKm > 0
+      ? backendRatePerKm
+      : (localRate > 0 ? localRate : 0)
+
+    const ratePerKm = ratePerKmRaw
+
+    const tripMultiplier = getTripMultiplier(tripType as "one-way" | "round-trip" | "multi-city")
+    const vehicleMultiplier = VEHICLE_MULTIPLIERS[vehicleType] ?? 1
+
+    let fareDisplay = ""
+    if (rideType === "shared") {
+      // Shared rides require a configured global/admin rate.
+      if (ratePerKm <= 0) {
+        const currentRate = localStorage.getItem("ratePerKm")
+        const rateInfo = currentRate ? ` (localStorage: ${currentRate})` : ""
+        setFareResults(prev => ({ ...prev, [tripType]: `⚠️ No rate configured. Please set a rate in admin panel first.${rateInfo}` }))
+        return
+      }
+
+      const basePerPersonFare = calculateSimpleFare(distance, ratePerKm)
+      const perPersonFare = basePerPersonFare * tripMultiplier * vehicleMultiplier
+      const totalFare = perPersonFare * passengers
+      
+      const vehicleIcons = {
+        standard: "🚗",
+        electric: "⚡",
+        vintage: "🎩",
+        camper: "🚐"
+      }
+
+      const icon = vehicleIcons[vehicleType] || "🚗"
+
+      fareDisplay = `${icon} Distance: ${distance} km<br>� Seats: ${passengers}<br>💰 Per Person: <span style="color:green; font-size: 16px; font-weight: bold;">$${perPersonFare.toFixed(2)}</span><br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
+      if (tripMultiplier > 1) {
+        fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
+      }
+      if (vehicleMultiplier > 1) {
+        fareDisplay += `<br>✨ Premium vehicle: ${vehicleMultiplier}x multiplier applied`
+      }
+    } else {
+      // Personal ride - distance-based using per-vehicle rate per km
+      const personalRateRaw = selectedPersonalVehicle ? parseFloat(selectedPersonalVehicle.ratePerKm) : NaN
+      const personalRate = Number.isFinite(personalRateRaw) && personalRateRaw > 0 ? personalRateRaw : ratePerKm
+
+      if (!personalRate || personalRate <= 0) {
+        setFareResults(prev => ({ ...prev, [tripType]: "⚠️ No personal-ride rate configured for this vehicle." }))
+        return
+      }
+
+      const totalFare = distance * personalRate * tripMultiplier
+      const formattedDistance = Number.isFinite(distance) ? distance.toFixed(1) : distance
+      const vehicleName = selectedPersonalVehicle?.name || "Vehicle"
+
+      fareDisplay = `🚗 ${vehicleName} • Distance: ${formattedDistance} km<br>💰 Total Price: <span style="color:blue; font-size: 18px; font-weight: bold;">$${totalFare.toFixed(2)}</span>`
+      if (tripMultiplier > 1) {
+        fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
+      }
+    }
+
+    setFareResults(prev => ({ ...prev, [tripType]: fareDisplay }))
+  }, [rideType, backendRatePerKm, passengers, vehicleType, selectedPersonalVehicle])
+
+  // Function to refresh rates from backend and localStorage
+  const refreshRates = useCallback(async () => {
+    console.log("🔄 Refreshing rates...")
+    // Always seed from any locally saved rate so UI is responsive even if backend is down
+    const storedRateStr = localStorage.getItem("ratePerKm")
+    const storedRate = storedRateStr ? parseFloat(storedRateStr) : NaN
+    console.log("📦 localStorage rate:", storedRateStr, "→", storedRate)
+    
+    // Clean up invalid rates from localStorage (0 or negative)
+    if (!isNaN(storedRate) && storedRate <= 0) {
+      console.log("❌ Removing invalid rate from localStorage")
+      localStorage.removeItem("ratePerKm")
+      setBackendRatePerKm(null)
+    }
+    
+    // Use stored rate immediately if valid
+    if (!isNaN(storedRate) && storedRate > 0) {
+      console.log("✅ Using localStorage rate:", storedRate)
+      setBackendRatePerKm(storedRate)
+    }
+
+    try {
+      const res = await fetch(buildApiUrl("/rates"))
+      if (!res.ok) throw new Error(`API ${res.status}`)
+      const json = await res.json()
+      const rates = json?.data?.rates
+      console.log("🌐 Backend rates:", rates)
+
+      const nextRatePerKm = typeof rates?.ratePerKm === 'number' && rates.ratePerKm > 0
+        ? rates.ratePerKm
+        : (!isNaN(storedRate) && storedRate > 0 ? storedRate : null)
+
+      if (typeof nextRatePerKm === 'number' && !isNaN(nextRatePerKm) && nextRatePerKm > 0) {
+        console.log("✅ Setting rate to:", nextRatePerKm)
+        setBackendRatePerKm(nextRatePerKm)
+        // Also update localStorage to keep it in sync
+        localStorage.setItem("ratePerKm", nextRatePerKm.toString())
+      } else {
+        console.log("⚠️ No valid rate available")
+      }
+    } catch (err) {
+      console.log("❌ Failed to fetch rates from backend:", err)
+      if (!isNaN(storedRate) && storedRate > 0) {
+        setBackendRatePerKm(storedRate)
+      }
+    }
+  }, [])
+
+  // load rates from backend on mount
+  useEffect(() => {
+    refreshRates()
+  }, [refreshRates])
+
+  // Listen for localStorage changes (from admin panel in same or different tab)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'ratePerKm') {
+        refreshRates()
+      }
+      if (e.key === PERSONAL_VEHICLES_KEY) {
+        try {
+          const raw = localStorage.getItem(PERSONAL_VEHICLES_KEY)
+          if (raw) {
+            const parsed = JSON.parse(raw) as PersonalVehicle[]
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const normalized = normalizePersonalVehicles(parsed)
+              setPersonalVehicles(normalized)
+              setSelectedPersonalVehicleId(normalized[0].id)
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    
+    // Listen for custom event (same-page updates)
+    const handleCustomRateUpdate = () => {
+      refreshRates()
+    }
+    const handlePersonalVehiclesUpdate = () => {
+      try {
+        const raw = localStorage.getItem(PERSONAL_VEHICLES_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw) as PersonalVehicle[]
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const normalized = normalizePersonalVehicles(parsed)
+            setPersonalVehicles(normalized)
+            setSelectedPersonalVehicleId(normalized[0].id)
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('ratesUpdated', handleCustomRateUpdate)
+    window.addEventListener('personalVehiclesUpdated', handlePersonalVehiclesUpdate)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('ratesUpdated', handleCustomRateUpdate)
+      window.removeEventListener('personalVehiclesUpdated', handlePersonalVehiclesUpdate)
+    }
+  }, [refreshRates])
+
+  // --- Google Places Autocomplete for the "From" input ---
+  // Lightweight typing for the subset of google.maps we use here
+  type GoogleMaps = {
+    maps: {
+      places?: {
+        Autocomplete: new (el: Element, opts?: { types?: string[] }) => {
+          addListener: (event: string, fn: () => void) => void
+          getPlace: () => { formatted_address?: string; name?: string }
+        }
+      }
+      event?: {
+        clearInstanceListeners: (obj: unknown) => void
+      }
+    }
+  }
+  const loadGoogleMapsScript = (apiKey?: string) => {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const existing = ((window as unknown) as Record<string, unknown>)["google"];
+        if (existing && (existing as Record<string, unknown>)["maps"]) {
+          const maps = (existing as Record<string, unknown>)["maps"] as Record<string, unknown> | undefined;
+          if (maps && (maps as Record<string, unknown>)["places"]) {
+            resolve();
+            return;
+          }
+        }
+
+        if (!apiKey) {
+          reject(new Error("Missing Google Maps API key (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)"));
+          return;
+        }
+
+        const scriptId = "google-maps-places-script";
+        if (document.getElementById(scriptId)) {
+          // Wait until the script has initialized google.maps.places
+          const waitFor = () => {
+            const g = ((window as unknown) as Record<string, unknown>)["google"] as Record<string, unknown> | undefined;
+            if (g && (g as Record<string, unknown>)["maps"] && ((g as Record<string, unknown>)["maps"] as Record<string, unknown>)["places"]) {
+              resolve();
+            } else {
+              setTimeout(waitFor, 100);
+            }
+          };
+          waitFor();
+          return;
+        }
+
+        const s = document.createElement("script");
+        s.id = scriptId;
+        // Reverted loading=async as it breaks synchronous availability of google.maps.places without a callback
+        s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+        s.async = true;
+        s.defer = true;
+        s.onload = () => resolve();
+        s.onerror = (err) => reject(err);
+        document.head.appendChild(s);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    let autocompleteFrom: unknown | null = null;
+    let autocompleteTo: unknown | null = null;
+
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    loadGoogleMapsScript(apiKey as string | undefined)
+      .then(() => {
+        if (!mounted) return;
+        try {
+          const g = ((window as unknown) as Record<string, unknown>)["google"] as unknown as GoogleMaps | undefined;
+          const maps = g && (g.maps as GoogleMaps["maps"] | undefined);
+          const places = maps && maps.places;
+          if (!places) return;
+
+          const elFrom = document.getElementById("from") as HTMLInputElement | null;
+          const elTo = document.getElementById("to") as HTMLInputElement | null;
+          if (!elFrom && !elTo) return;
+
+          if (elFrom) {
+            // NOTE: google.maps.places.Autocomplete is deprecated as of March 2025
+            // Migration to PlaceAutocompleteElement is recommended but requires significant refactoring
+            // See: https://developers.google.com/maps/documentation/javascript/places-migration-overview
+            // Current implementation will continue to work with bug fixes for major regressions
+            // @ts-expect-error - runtime google maps types
+            autocompleteFrom = new g!.maps.places.Autocomplete(elFrom, { types: ["geocode"] });
+            // @ts-expect-error - runtime listener provided by google maps
+            autocompleteFrom.addListener("place_changed", () => {
+              try {
+                // @ts-expect-error - runtime type from Google Maps
+                const place = autocompleteFrom.getPlace();
+                if (place) {
+                  const addr = typeof place.formatted_address === "string" && place.formatted_address.trim()
+                    ? place.formatted_address
+                    : typeof place.name === "string"
+                    ? place.name
+                    : ""
+                  if (addr) setFrom(addr)
+
+                  // extract place details if available
+                  try {
+                    const placeTyped = place as unknown as { geometry?: { location?: { lat: () => number; lng: () => number } }; place_id?: string; formatted_address?: string; name?: string }
+                    const loc = placeTyped.geometry && placeTyped.geometry.location
+                    const lat = loc ? loc.lat() : undefined
+                    const lng = loc ? loc.lng() : undefined
+                    setFromPlace({
+                      placeId: (placeTyped.place_id as string) || undefined,
+                      lat,
+                      lng,
+                      address: (placeTyped.formatted_address as string) || undefined,
+                      name: (placeTyped.name as string) || undefined,
+                    })
+                  } catch {
+                    // ignore geometry extraction errors
+                  }
+                }
+              } catch {
+                // ignore
+              }
+            });
+          }
+
+          if (elTo) {
+            // NOTE: Using deprecated Autocomplete API (see note above for elFrom)
+            // @ts-expect-error - runtime google maps types
+            autocompleteTo = new g!.maps.places.Autocomplete(elTo, { types: ["geocode"] });
+            // @ts-expect-error - runtime listener provided by google maps
+            autocompleteTo.addListener("place_changed", () => {
+              try {
+                // @ts-expect-error - runtime type from Google Maps
+                const place = autocompleteTo.getPlace();
+                if (place) {
+                  const addr = typeof place.formatted_address === "string" && place.formatted_address.trim()
+                    ? place.formatted_address
+                    : typeof place.name === "string"
+                    ? place.name
+                    : ""
+                  if (addr) setTo(addr)
+
+                  try {
+                    const placeTyped = place as unknown as { geometry?: { location?: { lat: () => number; lng: () => number } }; place_id?: string; formatted_address?: string; name?: string }
+                    const loc = placeTyped.geometry && placeTyped.geometry.location
+                    const lat = loc ? loc.lat() : undefined
+                    const lng = loc ? loc.lng() : undefined
+                    setToPlace({
+                      placeId: (placeTyped.place_id as string) || undefined,
+                      lat,
+                      lng,
+                      address: (placeTyped.formatted_address as string) || undefined,
+                      name: (placeTyped.name as string) || undefined,
+                    })
+                  } catch {
+                    // ignore geometry extraction errors
+                  }
+                }
+              } catch {
+                // ignore
+              }
+            });
+          }
+        } catch {
+          // ignore initialization errors
+        }
+      })
+      .catch(() => {
+        // If API key missing or script failed, we silently continue without autocomplete
+      });
+
+    return () => {
+      mounted = false;
+      try {
+        const g = ((window as unknown) as Record<string, unknown>)["google"] as unknown as GoogleMaps | undefined;
+        if (g && g.maps && g.maps.event) {
+          if (autocompleteFrom) {
+            g.maps.event.clearInstanceListeners(autocompleteFrom);
+          }
+          if (autocompleteTo) {
+            g.maps.event.clearInstanceListeners(autocompleteTo);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
+
+
+  useEffect(() => {
+    // prefer backend rate when available, otherwise fall back to localStorage
+    const effectiveRate = typeof backendRatePerKm === 'number' && !isNaN(backendRatePerKm)
+      ? backendRatePerKm
+      : parseFloat(localStorage.getItem("ratePerKm") || "0")
+    if (rideType === "shared" && !effectiveRate) return
 
     let distance = 0
     if (tripType === "round-trip" && roundTripDistance) {
@@ -82,50 +593,27 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     if (distance > 0) {
       calculateFareForType(tripType, distance)
     }
-  }, [tripType, rideType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance])
+  }, [tripType, rideType, vehicleType, mapDistance, oneWayDistance, roundTripDistance, multiCityDistance, calculateFareForType, backendRatePerKm])
 
-  const timeSlots = [
-    "6 - 8 am", "8 - 10 am", "10 - 12 pm", "12 - 2 pm", "2 - 4 pm",
-    "4 - 6 pm", "6 - 8 pm", "8 - 10 pm", "10 - 12 am"
-  ]
-
-  const addDestination = () => {
-    const newId = Date.now().toString()
-    setDestinations(prev => [...prev, { id: newId, location: '' }])
-  }
-
-  const removeDestination = (id: string) => {
-    if (destinations.length > 2) {
-      setDestinations(prev => prev.filter(dest => dest.id !== id))
-    }
-  }
-
-  const updateDestination = (id: string, location: string) => {
-    setDestinations(prev => prev.map(dest =>
-      dest.id === id ? { ...dest, location } : dest
-    ))
-  }
-
-  const handlePassengerChange = (change: number) => {
-    setPassengers((prev) => {
-      const newPassengers = Math.max(1, Math.min(20, prev + change));
-      // Recalculate fare when passenger count changes (for multi-city tours)
-      if (tripType === 'multi-city' && multiCityDistance) {
-        calculateFareForType('multi-city', parseFloat(multiCityDistance));
-      }
-      return newPassengers;
-    }); // Allow up to 20 passengers for large bookings
-  }
+  // helper states removed: selectedTimeSlot, customTime
+  // helper functions for dynamically adding/removing destinations and passenger change
+  // were unused in this component and removed to keep the bundle lean.
 
   const handleDistanceChange = (distance: string | null, duration: string | null) => {
     setMapDistance(distance)
     setMapDuration(duration)
+    
+    // Auto-calculate fare when distance changes from map
+    if (distance && parseFloat(distance) > 0) {
+      calculateFareForType(tripType, parseFloat(distance))
+    }
   }
 
   // Validation functions
   const validateBookingData = () => {
     const errors: string[] = []
-    const today = startOfDay(new Date())
+    const currentFare = fareResults[tripType]
+  // calculate today start only when needed via startOfDay below
 
     // Location validations
     if (tripType === 'multi-city') {
@@ -164,26 +652,29 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
       }
     }
 
-    // Time validation
-    if (rideType === "shared") {
-      if (!selectedTimeSlot) {
-        errors.push("Time slot selection is required for shared rides")
-      }
+    // Time validation (start/end)
+    if (!pickupStart || !pickupEnd) {
+      errors.push("Pickup start and end times are required")
     } else {
-      if (!customTime) {
-        errors.push("Pickup time is required for personal rides")
+      // compare minutes
+      const toMinutes = (t: string) => {
+        const [hh, mm] = t.split(":").map(s => parseInt(s || "0", 10))
+        return (isNaN(hh) ? 0 : hh) * 60 + (isNaN(mm) ? 0 : mm)
+      }
+      if (toMinutes(pickupEnd) <= toMinutes(pickupStart)) {
+        errors.push("Pickup end time must be after start time")
       }
     }
 
     // Fare calculation validation
-    const currentFare = fareResults[tripType]
+  // currentFare intentionally not used here
     if (!currentFare || currentFare.includes("⚠️")) {
       errors.push("Please calculate the fare before proceeding")
     }
 
     // Passenger validation (already handled by min/max in onChange)
-    if (passengers < 1 || passengers > 20) {
-      errors.push("Number of passengers must be between 1 and 20")
+    if (passengers < 1 || passengers > TOTAL_SEATS) {
+      errors.push(`Number of passengers must be between 1 and ${TOTAL_SEATS}`)
     }
 
     return errors
@@ -201,24 +692,68 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     setValidationErrors([])
 
     // Get the calculated fare for current trip type
-    const currentFareKey = tripType;
-    const currentFare = fareResults[tripType];
+  const currentFare = fareResults[tripType]
+  
+  // Shared-only flow for now.
+  setShowBookingPopup(true)
 
-    const bookingData = {
+    // Prepare booking payload to send to backend if onAddSharedRide not provided
+    const bookingPayload = {
       from: tripType === 'multi-city' ? startingPoint : from,
       to,
       rideType,
+      vehicleType,
       date,
-      time: rideType === "shared" ? selectedTimeSlot : customTime,
+      time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
       passengers,
       tripType,
       destinations: tripType === 'multi-city' ? destinations : undefined,
       startingPoint: tripType === 'multi-city' ? startingPoint : undefined,
       mapDistance,
       mapDuration,
-      calculatedFare: currentFare, // Pass the fare calculator result
+  calculatedFare: currentFare,
+  fromPlace: fromPlace || undefined,
+  toPlace: toPlace || undefined,
     }
-    setShowBookingPopup(true)
+
+    // If a parent provided onAddSharedRide, prefer that (keeps existing behavior)
+    if (onAddSharedRide && typeof onAddSharedRide === 'function') {
+      try {
+        onAddSharedRide(bookingPayload)
+      } catch (err) {
+        console.error('onAddSharedRide handler threw an error', err)
+      }
+      return
+    }
+
+    // Default behavior: POST to backend endpoints
+  const endpoint = rideType === 'shared' ? buildApiUrl("/shared-rides") : buildApiUrl("/private-rides")
+    ;(async () => {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bookingPayload)
+        })
+
+        if (!res.ok) {
+          const text = await res.text()
+          console.error(`Failed to create booking: ${res.status} ${text}`)
+          // Optionally show a validation/error state here
+        } else {
+          const data = await res.json()
+          console.info('Booking created on server', data)
+          // Optionally dispatch an event to inform other components
+          try {
+            window.dispatchEvent(new CustomEvent('rideBooked', { detail: data }))
+          } catch {
+            // ignore in non-browser environments
+          }
+        }
+      } catch (err) {
+        console.error('Error posting booking to server', err)
+      }
+    })()
   }
 
   // Clear validation errors when user starts fixing them
@@ -228,36 +763,33 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
     }
   }
 
-  const calculateFareForType = (tripType: string, distance: number) => {
-    if (!distance || distance <= 0) {
-      setFareResults(prev => ({ ...prev, [tripType]: "⚠️ Please enter a valid distance." }))
-      return
-    }
-
-    const ratePerKm = parseFloat(localStorage.getItem("ratePerKm") || "0")
-
-    // Apply trip multiplier for return trips and other trip types
-    const tripMultiplier = getTripMultiplier(tripType as "one-way" | "round-trip" | "multi-city")
-
-    let fareDisplay = ""
-    if (rideType === "shared") {
-      const basePerPersonFare = calculateSimpleFare(distance, ratePerKm)
-      const perPersonFare = basePerPersonFare * tripMultiplier
-      fareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${ratePerKm.toFixed(2)} per km<br>👥 Per Person Fare: <span style="color:green;">$${perPersonFare.toFixed(2)}</span>`
-      if (tripMultiplier > 1) {
-        fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
-      }
-    } else {
-      const baseFullFare = calculateIndividualFare(distance, ratePerKm)
-      const fullFare = baseFullFare * tripMultiplier
-      fareDisplay = `🚗 Distance: ${distance} km<br>💲 Rate: $${ratePerKm.toFixed(2)} per km<br>💰 Total Fare: <span style="color:blue;">$${fullFare.toFixed(2)}</span>`
-      if (tripMultiplier > 1) {
-        fareDisplay += `<br>🔄 Return trip: ${tripMultiplier}x multiplier applied`
-      }
-    }
-
-    setFareResults(prev => ({ ...prev, [tripType]: fareDisplay }))
+  // Reset form to initial state
+  const resetForm = () => {
+    setTripType("one-way")
+    setVehicleType("standard")
+    setPickupStart("")
+    setPickupEnd("")
+    setPassengers(1)
+    setFrom("")
+    setTo("")
+  setFromPlace(null)
+  setToPlace(null)
+  setDate(_tomorrow)
+    setMapDistance(null)
+    setMapDuration(null)
+    setDestinations([
+      { id: '1', location: '' },
+      { id: '2', location: '' }
+    ])
+    setStartingPoint("")
+    setOneWayDistance("")
+    setRoundTripDistance("")
+    setMultiCityDistance("")
+    setFareResults({})
+    setValidationErrors([])
+    setHasAttemptedSubmit(false)
   }
+
 
   return (
     <>
@@ -267,7 +799,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
             <h2 className="text-3xl font-bold text-balance mb-4">Book Your Taxi with Ease</h2>
             <p className="text-muted-foreground text-pretty max-w-2xl mx-auto">
               Simple booking process with real-time tracking and instant confirmation. Choose your pickup location and
-              we'll handle the rest.
+              we&apos;ll handle the rest.
             </p>
           </div>
 
@@ -290,8 +822,8 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
           <div className="space-y-8">
             <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:space-y-0 space-y-8">
-              <Card className="bg-white border-gray-200 shadow-lg">
-                <CardContent className="p-8">
+              <Card className="border-gray-200 shadow-lg transition-colors duration-300 bg-white">
+                <CardContent className="p-6 sm:p-8">
                 <div className="space-y-6">
                   <div className="flex items-center justify-center mb-8">
                     <div className="flex items-center space-x-4">
@@ -349,7 +881,42 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                   </div>
 
                   <div className="space-y-6">
-                    <h3 className="text-lg font-semibold text-gray-800">Tour Details</h3>
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold text-gray-800">Ride Details</h3>
+                      
+                      {/* Elegant Ride Type Selection Buttons */}
+                      <div className="flex gap-3">
+                        <Button
+                          type="button"
+                          variant={rideType === "shared" ? "default" : "outline"}
+                          onClick={() => {}}
+                          className={`flex-1 h-12 text-base font-medium transition-all duration-300 ${
+                            rideType === "shared"
+                              ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                              : "bg-white hover:bg-blue-50 text-gray-700 border-2 border-gray-300 hover:border-blue-400"
+                          }`}
+                        >
+                          <span className="mr-2">🚗</span>
+                          Share Ride
+                        </Button>
+                        {/*
+                        <Button
+                          type="button"
+                          variant={rideType === "personal" ? "default" : "outline"}
+                          onClick={() => setRideType("personal")}
+                          className={`flex-1 h-12 text-base font-medium transition-all duration-300 ${
+                            rideType === "personal"
+                              ? "bg-yellow-500 hover:bg-yellow-600 text-white shadow-md"
+                              : "bg-white hover:bg-yellow-50 text-gray-700 border-2 border-gray-300 hover:border-yellow-400"
+                          }`}
+                        >
+                          <span className="mr-2">👤</span>
+                          Personal Ride
+                        </Button>
+                        */}
+                      </div>
+                    </div>
+
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="from" className="text-gray-700 font-medium">
@@ -380,36 +947,6 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           />
                         </div>
                       </div>
-                      <div className="flex items-center space-x-6">
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="radio"
-                            id="shared"
-                            name="rideType"
-                            value="shared"
-                            checked={rideType === "shared"}
-                            onChange={(e) => setRideType(e.target.value)}
-                            className="w-4 h-4 text-blue-500 border-gray-300 focus:ring-blue-500"
-                          />
-                          <Label htmlFor="shared" className="text-gray-700 font-medium">
-                            Shared
-                          </Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="radio"
-                            id="personal"
-                            name="rideType"
-                            value="personal"
-                            checked={rideType === "personal"}
-                            onChange={(e) => setRideType(e.target.value)}
-                            className="w-4 h-4 text-blue-500 border-gray-300 focus:ring-blue-500"
-                          />
-                          <Label htmlFor="personal" className="text-gray-700 font-medium">
-                            Personal
-                          </Label>
-                        </div>
-                      </div>
                       <div className="space-y-2">
                         <Label htmlFor="pickup-date" className="text-gray-700 font-medium">
                           Pickup Date
@@ -420,9 +957,12 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                               <Input
                                 id="pickup-date"
                                 type="text"
+                                // Display a friendly formatted date but keep `date` state in ISO yyyy-MM-dd
                                 value={date ? format(parseISO(date), "PPP") : ""}
-                                onChange={(e) => setDate(e.target.value)}
-                                className="bg-blue-50 border-blue-200 text-gray-800 h-12"
+                                // Prevent manual typing to keep canonical ISO date format; open calendar instead
+                                onChange={() => { /* read-only - use calendar picker */ }}
+                                readOnly
+                                className="bg-blue-50 border-blue-200 text-gray-800 h-12 cursor-pointer"
                                 placeholder="Select a date"
                               />
                               <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 cursor-pointer" onClick={() => setCalendarOpen(true)} />
@@ -445,36 +985,64 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                       </div>
                       <div className="space-y-2">
                         <Label className="text-gray-700 font-medium">Pickup Time</Label>
-                        {rideType === "shared" ? (
-                          <div className="relative">
-                            <select
-                              value={selectedTimeSlot}
-                              onChange={(e) => setSelectedTimeSlot(e.target.value)}
-                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 appearance-none pr-10"
-                            >
-                              <option value="">Select a time slot</option>
-                              {timeSlots.map((slot) => (
-                                <option key={slot} value={slot}>
-                                  {slot}
-                                </option>
-                              ))}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <div className="relative flex-1">
+                            <Input
+                              type="time"
+                              value={pickupStart}
+                              onChange={(e) => setPickupStart(e.target.value)}
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 h-12 text-base [appearance:auto]"
+                              inputMode="numeric"
+                              aria-label="Pickup start time"
+                            />
                           </div>
-                        ) : (
-                          <Input
-                            type="time"
-                            value={customTime}
-                            onChange={(e) => setCustomTime(e.target.value)}
-                            className="bg-blue-50 border-blue-200 text-gray-800 h-12"
-                          />
-                        )}
+                          <div className="relative flex-1">
+                            <Input
+                              type="time"
+                              value={pickupEnd}
+                              onChange={(e) => setPickupEnd(e.target.value)}
+                              className="w-full p-3 bg-blue-50 border border-blue-200 rounded-md text-gray-800 h-12 text-base [appearance:auto]"
+                              inputMode="numeric"
+                              aria-label="Pickup end time"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500">Enter start and end time (will be saved as e.g. 12.30 - 2.00)</p>
                       </div>
+                      
+                      {rideType === "shared" ? (
+                        <div className="space-y-2">
+                          <Label className="text-gray-700 font-medium">Seats to Book</Label>
+                          <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-2 h-12">
+                            <button
+                              type="button"
+                              onClick={() => setPassengers(Math.max(1, passengers - 1))}
+                              disabled={passengers <= 1}
+                              className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
+                            >
+                              -
+                            </button>
+                            <span className="flex-1 text-center font-semibold text-gray-900">
+                              {passengers}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPassengers(Math.min(TOTAL_SEATS, passengers + 1))}
+                              disabled={passengers >= TOTAL_SEATS}
+                              className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-600 font-bold"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <p className="text-sm text-gray-600">Available seats: <span className="font-semibold">{Math.max(0, TOTAL_SEATS - passengers)}/{TOTAL_SEATS}</span></p>
+                        </div>
+                      ) : null}
 
-                      {/* Fare Calculator for One-Way/Round-Trip */}
-                      <div className="space-y-3 bg-gray-50 p-4 rounded-lg border">
-                        <h4 className="flex items-center gap-2 font-semibold">
-                          <span className="text-lg">📍</span> Fare Calculator
+                      {/* Fare Calculator for One-Way/Round-Trip - MOBILE RESPONSIVE FIX */}
+                      {/*
+                      <div className="space-y-3 bg-gray-50 p-3 sm:p-4 rounded-lg border">
+                        <h4 className="flex items-center gap-2 font-semibold text-sm sm:text-base">
+                          <span className="text-lg"> Per-person price</span> 
                         </h4>
                         <div className="flex gap-2">
                           <Input
@@ -500,24 +1068,104 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                           </Button>
                         </div>
                         {(fareResults["one-way"] || fareResults["round-trip"]) && (
-                          <div
-                            className="p-2 bg-white border rounded text-sm"
-                            dangerouslySetInnerHTML={{
-                              __html: fareResults[tripType] || ""
-                            }}
-                          />
+                          <div className="p-2 sm:p-3 bg-white border rounded text-xs sm:text-sm">
+                            <div className="space-y-1.5 sm:space-y-2 break-words">
+                              {fareResults[tripType]?.split('<br>').map((line, idx) => (
+                                <div
+                                  key={idx}
+                                  dangerouslySetInnerHTML={{ __html: line }}
+                                  className="break-words"
+                                />
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
+                      */}
+
+                      {/* Vehicle Type Selection - Personal Rides Only - Before Continue Button */}
+                      {false && (
+                        <div className="space-y-3">
+                          <Label className="text-gray-700 font-medium">Select Vehicle</Label>
+                          <div className="space-y-3">
+                            {personalVehicles.map((vehicle) => {
+                              const rate = parseFloat(vehicle.ratePerKm)
+                              const hasRate = Number.isFinite(rate) && rate > 0
+                              const hasDistance = currentDistanceKm > 0
+                              const perPersonPrice = hasRate && hasDistance ? currentDistanceKm * rate : null
+
+                              return (
+                                <button
+                                  key={vehicle.id}
+                                  type="button"
+                                  onClick={() => setSelectedPersonalVehicleId(vehicle.id)}
+                                  className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all duration-300 ${
+                                    (selectedPersonalVehicleId ?? personalVehicles[0]?.id) === vehicle.id
+                                      ? "border-blue-500 bg-blue-50"
+                                      : "border-gray-200 bg-white hover:border-gray-300"
+                                  }`}
+                                >
+                                  <img
+                                    src={vehicle.image}
+                                    alt={vehicle.name}
+                                    className="w-14 h-12 object-cover rounded flex-shrink-0 bg-gray-100"
+                                  />
+                                  <div className="flex flex-col min-w-[140px]">
+                                    <h4 className="font-semibold text-gray-900 text-sm text-left">{vehicle.name}</h4>
+                                  </div>
+                                  <div className="flex-1 flex flex-col items-center justify-center text-xs text-gray-600">
+                                    <span className="flex items-center gap-1">👤 x {vehicle.passengers}</span>
+                                    <span className="flex items-center gap-1">🎒 x {vehicle.luggage}</span>
+                                  </div>
+                                  <div className="flex flex-col gap-1 text-xs text-gray-600 items-end text-right">
+                                    <span className="flex items-center gap-1">
+                                      💰 Price:&nbsp;
+                                      {perPersonPrice !== null ? (
+                                        <span className="font-bold text-green-700 text-sm">${perPersonPrice.toFixed(2)}</span>
+                                      ) : (
+                                        <span className="text-gray-400">Add route</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </button>
+                              )
+                            })}
+                            {personalVehicles.length === 0 && (
+                              <div className="text-sm text-gray-500">No personal ride vehicles available.</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                     </div>
 
+                  {fareResults[tripType] && (
+                    <div
+                      className={`mb-4 rounded-lg border p-3 text-sm ${
+                        fareResults[tripType].includes("⚠️")
+                          ? "bg-amber-50 border-amber-200 text-amber-800"
+                          : "bg-green-50 border-green-200 text-green-800"
+                      }`}
+                    >
+                      <p className="font-semibold mb-2">Calculated Price</p>
+                      <div className="space-y-1 break-words">
+                        {fareResults[tripType].split('<br>').map((line, idx) => (
+                          <div
+                            key={idx}
+                            dangerouslySetInnerHTML={{ __html: line }}
+                            className="break-words"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <Button
                     onClick={handleNextClick}
-                    disabled={!(fareResults[tripType] && !fareResults[tripType].includes("⚠️"))}
-                    className="w-full bg-blue-500 text-white hover:bg-blue-600 py-3 text-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-blue-500 text-white hover:bg-blue-600 py-3 text-base sm:text-lg font-medium"
                     size="lg"
                   >
-                    {!fareResults[tripType] || fareResults[tripType].includes("⚠️") ? "Calculate Fare First →" : "Next →"}
+                    {!fareResults[tripType] || fareResults[tripType].includes("⚠️") ? "Continue Ride →" : "Next →"}
                   </Button>
                 </div>
               </CardContent>
@@ -532,7 +1180,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                     <p className="text-muted-foreground text-sm">Track available rides in real-time</p>
                   </div>
                   <div className="h-[500px] relative">
-                    <Map from={from} to={to} onDistanceChange={handleDistanceChange} />
+                    <Map from={from} to={to} onDistanceChange={handleDistanceChange} key={`${from}-${to}`} />
                     <div className="absolute inset-0 bg-gradient-to-t from-background/10 to-transparent pointer-events-none" />
                   </div>
                   {mapDistance && mapDuration && (
@@ -566,6 +1214,13 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
               </div>
             )}
 
+            {/* Hidden Map for Mobile - Calculates distance in background */}
+            {isMobile && !showMapMobile && from && to && (
+              <div className="hidden">
+                <Map from={from} to={to} onDistanceChange={handleDistanceChange} key={`hidden-${from}-${to}`} />
+              </div>
+            )}
+
             {/* Mobile Map - Show When Toggled */}
             {isMobile && showMapMobile && (
               <Card className="bg-card/50 backdrop-blur-sm border-border/50 shadow-xl overflow-hidden transition-all duration-500 ease-in-out">
@@ -575,7 +1230,7 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
                     <p className="text-muted-foreground text-sm">Track available rides in real-time</p>
                   </div>
                   <div className="h-[400px] relative">
-                    <Map from={from} to={to} onDistanceChange={handleDistanceChange} />
+                    <Map from={from} to={to} onDistanceChange={handleDistanceChange} key={`mobile-${from}-${to}`} />
                     <div className="absolute inset-0 bg-gradient-to-t from-background/10 to-transparent pointer-events-none" />
                   </div>
                   {mapDistance && mapDuration && (
@@ -596,14 +1251,47 @@ export function BookingSection({ onAddSharedRide }: BookingSectionProps) {
 
       <BookingDetailsPopup
         isOpen={showBookingPopup}
-        onClose={() => setShowBookingPopup(false)}
+        onClose={() => {
+          setShowBookingPopup(false)
+          resetForm()
+        }}
         onAddSharedRide={onAddSharedRide}
         bookingData={showBookingPopup ? {
           from: tripType === 'multi-city' ? startingPoint : from,
           to,
           rideType,
+          vehicleType,
           date,
-          time: rideType === "shared" ? selectedTimeSlot : customTime,
+          time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
+          passengers,
+          tripType,
+          destinations: tripType === 'multi-city' ? destinations : undefined,
+          startingPoint: tripType === 'multi-city' ? startingPoint : undefined,
+          mapDistance,
+          mapDuration,
+          calculatedFare: fareResults[tripType],
+        } : null}
+      />
+
+      <PersonalDetailsPopup
+        isOpen={showPersonalRidesPopup}
+        onClose={() => {
+          setShowPersonalRidesPopup(false)
+          resetForm()
+        }}
+        bookingData={showPersonalRidesPopup ? {
+          from: tripType === 'multi-city' ? startingPoint : from,
+          to,
+          rideType: "personal",
+          vehicleType,
+          vehicleId: selectedPersonalVehicle?.id,
+          vehicleName: selectedPersonalVehicle?.name,
+          vehicleImage: selectedPersonalVehicle?.image,
+          vehiclePassengers: selectedPersonalVehicle?.passengers,
+          vehicleLuggage: selectedPersonalVehicle?.luggage,
+          vehicleRatePerKm: selectedPersonalVehicle?.ratePerKm,
+          date,
+          time: `${formatTimeForPayload(pickupStart)} - ${formatTimeForPayload(pickupEnd)}`,
           passengers,
           tripType,
           destinations: tripType === 'multi-city' ? destinations : undefined,

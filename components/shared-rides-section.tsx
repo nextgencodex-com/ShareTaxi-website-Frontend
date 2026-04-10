@@ -7,11 +7,19 @@ import { Badge } from "@/components/ui/badge"
 import { Clock, Users, MapPin, ChevronLeft, ChevronRight } from "lucide-react"
 import { JoinRidePopup } from "./join-ride-popup"
 
+// 🧭 For mobile swipe view
+import Slider from "react-slick"
+import "slick-carousel/slick/slick.css"
+import "slick-carousel/slick/slick-theme.css"
+import { da } from "date-fns/locale"
+import { buildApiUrl } from "@/lib/api-url"
+
 interface Ride {
   id: number
   timeAgo: string
   postedDate: Date
   frequency: string
+  rawPayload?: Record<string, unknown>
   driver: {
     name: string
     image: string
@@ -24,270 +32,141 @@ interface Ride {
   destination: {
     location: string
     type: string
-  }
+  },
   time: string
   duration: string
   seats: {
     available: number
     total: number
-  }
+  },
   price: string
+  pickupDate?: Date | null
+  pickupDateFormatted?: string
 }
 
 interface SharedRidesSectionProps {
   initialRides?: Ride[]
+  backendDown?: boolean
 }
 
-export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProps) {
-  const defaultRides = useMemo(() => [
-    {
-      id: 1,
-      timeAgo: "10 min ago",
-      postedDate: new Date(Date.now() - 10 * 60 * 1000),
-      frequency: "one-time",
-      driver: {
-      name: "Alex Chen",
-      image: "/professional-driver-headshot.jpg",
-      },
-      vehicle: "Toyota Alphard",
-      pickup: {
-        location: "Downtown Plaza",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Airport Terminal 1",
-        type: "Destination",
-      },
-      time: "02-04 pm",
-      duration: "45 min",
-      seats: {
-        available: 3,
-        total: 6,
-      },
-      price: "$20.00",
-    },
-    {
-      id: 2,
-      timeAgo: "25 min ago",
-      postedDate: new Date(Date.now() - 25 * 60 * 1000),
-      frequency: "daily",
-      driver: {
-        name: "Sarah Wilson",
-        image: "/female-professional-driver.jpg",
-      },
-      vehicle: "Hyundai Starex",
-      pickup: {
-        location: "Galle Fort",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Colombo City Center",
-        type: "Destination",
-      },
-      time: "06-08 am",
-      duration: "2 hours",
-      seats: {
-        available: 4,
-        total: 8,
-      },
-      price: "$15.00",
-    },
-    {
-      id: 3,
-      timeAgo: "1 hour ago",
-      postedDate: new Date(Date.now() - 60 * 60 * 1000),
-      frequency: "monthly",
-      driver: {
-        name: "Michael Chen",
-        image: "/professional-driver-headshot.jpg",
-      },
-      vehicle: "Toyota Innova",
-      pickup: {
-        location: "Kandy Central",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Nuwara Eliya",
-        type: "Destination",
-      },
-      time: "08-10 am",
-      duration: "3 hours",
-      seats: {
-        available: 2,
-        total: 6,
-      },
-      price: "$25.00",
-    },
-    {
-      id: 4,
-      timeAgo: "2 hours ago",
-      postedDate: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      frequency: "daily",
-      driver: {
-        name: "David Kim",
-      image: "/professional-driver-headshot.jpg",
-      },
-      vehicle: "Toyota Alphard",
-      pickup: {
-        location: "Negombo Beach",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Airport Terminal 2",
-        type: "Destination",
-      },
-      time: "04-06 pm",
-      duration: "30 min",
-      seats: {
-        available: 5,
-        total: 6,
-      },
-      price: "$10.00",
-    },
-    {
-      id: 5,
-      timeAgo: "3 hours ago",
-      postedDate: new Date(Date.now() - 3 * 60 * 60 * 1000),
-      frequency: "yearly",
-      driver: {
-        name: "Emma Johnson",
-      image: "/young-professional-woman.png",
-      },
-      vehicle: "Hyundai Starex",
-      pickup: {
-        location: "Downtown Plaza",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Sigiriya Rock",
-        type: "Destination",
-      },
-      time: "05-07 am",
-      duration: "4 hours",
-      seats: {
-        available: 3,
-        total: 8,
-      },
-      price: "$35.00",
-    },
-    {
-      id: 6,
-      timeAgo: "5 hours ago",
-      postedDate: new Date(Date.now() - 5 * 60 * 60 * 1000),
-      frequency: "one-time",
-      driver: {
-        name: "James Brown",
-        image: "/images/james-brown-driver.jpg",
-      },
-      vehicle: "Toyota Innova",
-      pickup: {
-        location: "Colombo Fort",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Galle Face",
-        type: "Destination",
-      },
-      time: "12-02 pm",
-      duration: "20 min",
-      seats: {
-        available: 4,
-        total: 6,
-      },
-      price: "$2.00",
-    },
-    {
-      id: 7,
-      timeAgo: "6 hours ago",
-      postedDate: new Date(Date.now() - 6 * 60 * 60 * 1000),
-      frequency: "monthly",
-      driver: {
-        name: "Lisa Anderson",
-        image: "/images/lisa-anderson-driver.jpg",
-      },
-      vehicle: "Toyota Alphard",
-      pickup: {
-        location: "Airport Terminal 1",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Bentota Beach",
-        type: "Destination",
-      },
-      time: "10-12 am",
-      duration: "2.5 hours",
-      seats: {
-        available: 2,
-        total: 6,
-      },
-      price: "$22.00",
-    },
-    {
-      id: 8,
-      timeAgo: "8 hours ago",
-      postedDate: new Date(Date.now() - 8 * 60 * 60 * 1000),
-      frequency: "daily",
-      driver: {
-        name: "Robert Taylor",
-        image: "/images/robert-taylor-driver.jpg",
-      },
-      vehicle: "Hyundai Starex",
-      pickup: {
-        location: "Kandy Lake",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Temple of Tooth",
-        type: "Destination",
-      },
-      time: "03-05 pm",
-      duration: "15 min",
-      seats: {
-        available: 6,
-        total: 8,
-      },
-      price: "$5.00",
-    },
-    {
-      id: 9,
-      timeAgo: "10 hours ago",
-      postedDate: new Date(Date.now() - 10 * 60 * 60 * 1000),
-      frequency: "yearly",
-      driver: {
-        name: "Maria Garcia",
-        image: "/images/maria-garcia-driver.jpg",
-      },
-      vehicle: "Toyota Innova",
-      pickup: {
-        location: "Ella Station",
-        type: "Pickup point",
-      },
-      destination: {
-        location: "Nine Arch Bridge",
-        type: "Destination",
-      },
-      time: "07-09 am",
-      duration: "1 hour",
-      seats: {
-        available: 3,
-        total: 6,
-      },
-      price: "$18.00",
-    },
-  ], [])
+export function SharedRidesSection({ initialRides = [], backendDown = false }: SharedRidesSectionProps) {
 
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null)
   const [oneTimePage, setOneTimePage] = useState(0)
   const [dailyPage, setDailyPage] = useState(0)
   const [rides, setRides] = useState<Ride[]>([])
+  const [loadingRides, setLoadingRides] = useState<boolean>(false)
 
   useEffect(() => {
-    setRides([...initialRides, ...defaultRides])
+    const fetchRides = async () => {
+      try {
+        setLoadingRides(true)
+        const res = await fetch(buildApiUrl("/shared-rides"), { cache: 'no-store', headers: { 'Accept': 'application/json' } })
+        if (!res.ok) {
+          const text = await res.text()
+          console.error('Failed to fetch shared rides:', res.status, text)
+          setRides(initialRides)
+          return
+        }
+
+        const json = await res.json()
+        const payload = json as unknown
+        const items = Array.isArray(payload)
+          ? payload as unknown[]
+          : (typeof payload === 'object' && payload !== null && Array.isArray((payload as Record<string, unknown>)['rides']))
+            ? (payload as Record<string, unknown>)['rides'] as unknown[]
+            : (typeof payload === 'object' && payload !== null && Array.isArray(((payload as Record<string, unknown>)['data'] as Record<string, unknown>)?.['rides']))
+              ? (((payload as Record<string, unknown>)['data'] as Record<string, unknown>)['rides'] as unknown[])
+              : []
+
+        const parsed: Ride[] = (items as unknown[]).map((item) => {
+          const r = item as Record<string, unknown>
+          const frequencyVal = (r.frequency as string) ?? ((r.rawPayload && (r.rawPayload as Record<string, unknown>)['frequency']) as string) ?? 'one-time'
+
+          const pickupObj = (r.pickup && typeof r.pickup === 'object')
+            ? (r.pickup as Record<string, unknown>)
+            : { location: String(r['pickupLocation'] ?? ''), type: String(r['pickupType'] ?? 'Pickup point') }
+
+          const destinationObj = (r.destination && typeof r.destination === 'object')
+            ? (r.destination as Record<string, unknown>)
+            : { location: String(r['destinationLocation'] ?? ''), type: String(r['destinationType'] ?? 'Destination') }
+
+          const seatsObj = (r.seats && typeof r.seats === 'object')
+            ? (r.seats as Record<string, unknown>)
+            : { available: Number(r['availableSeats'] ?? 0), total: Number(r['totalSeats'] ?? 0) }
+
+          let postedDate: Date
+          if (r.createdAt !== undefined && r.createdAt !== null) {
+            const createdAt = r.createdAt
+            if (typeof createdAt === 'object' && 'seconds' in (createdAt as Record<string, unknown>)) {
+              const secs = Number((createdAt as Record<string, unknown>)['seconds'])
+              postedDate = new Date(Number(secs) * 1000)
+            } else {
+              postedDate = new Date(String(createdAt))
+            }
+          } else if (r.postedDate !== undefined && r.postedDate !== null) {
+            postedDate = new Date(String(r.postedDate))
+          } else {
+            postedDate = new Date()
+          }
+
+          let pickupDate: Date | null = null
+          let pickupDateFormatted = ''
+          const rawPayload = r.rawPayload as Record<string, unknown> | undefined
+          const rawPdFromPayload = rawPayload ? rawPayload['pickupDate'] : undefined
+          if (rawPdFromPayload !== undefined && rawPdFromPayload !== null) {
+            const rawPdStr = String(rawPdFromPayload)
+            const d = new Date(rawPdStr)
+            if (!isNaN(d.getTime())) {
+              pickupDate = d
+              pickupDateFormatted = d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+            }
+          }
+          if (!pickupDate && r.pickupDate !== undefined && r.pickupDate !== null) {
+            const pd = r.pickupDate
+            if (typeof pd === 'object' && ('seconds' in (pd as Record<string, unknown>) || '_seconds' in (pd as Record<string, unknown>))) {
+              const secs = Number((pd as Record<string, unknown>)['seconds'] ?? (pd as Record<string, unknown>)['_seconds'])
+              if (!isNaN(secs)) {
+                pickupDate = new Date(secs * 1000)
+                pickupDateFormatted = pickupDate.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+              }
+            } else {
+              const d = new Date(String(pd))
+              if (!isNaN(d.getTime())) {
+                pickupDate = d
+                pickupDateFormatted = d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+              }
+            }
+          }
+
+          return Object.assign({}, r, { postedDate, pickupDate, pickupDateFormatted, frequency: frequencyVal, pickup: pickupObj, destination: destinationObj, seats: seatsObj, rawPayload: rawPayload ?? (r as Record<string, unknown>) }) as unknown as Ride
+        })
+
+        parsed.sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime())
+        setRides(parsed)
+      } catch (err) {
+        console.error('Error fetching shared rides:', err)
+        setRides(initialRides)
+      } finally {
+        setLoadingRides(false)
+      }
+    }
+
+    fetchRides()
+
+    const handleRideBooked = () => {
+      fetchRides()
+    }
+
+    window.addEventListener('rideBooked', handleRideBooked)
+    return () => window.removeEventListener('rideBooked', handleRideBooked)
   }, [initialRides])
 
-  const oneTimeRides = useMemo(() => rides.filter((ride) => ride.frequency === "one-time"), [rides])
-  const dailyRides = useMemo(() => rides.filter((ride) => ride.frequency === "daily"), [rides])
+  const oneTimeRides = useMemo(() =>
+    rides.filter((ride) => ride.frequency === "one-time" && (ride.seats?.available ?? 0) > 0), [rides])
+  const dailyRides = useMemo(() =>
+    rides.filter((ride) => ride.frequency === "daily" && (ride.seats?.available ?? 0) > 0), [rides])
 
   const ridesPerPage = 3
   const oneTimeTotalPages = Math.ceil(oneTimeRides.length / ridesPerPage)
@@ -296,30 +175,6 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
   const dailyStartIndex = dailyPage * ridesPerPage
   const displayedOneTimeRides = oneTimeRides.slice(oneTimeStartIndex, oneTimeStartIndex + ridesPerPage)
   const displayedDailyRides = dailyRides.slice(dailyStartIndex, dailyStartIndex + ridesPerPage)
-
-  const handleOneTimePrevPage = () => {
-    setOneTimePage((prev) => Math.max(0, prev - 1))
-  }
-
-  const handleOneTimeNextPage = () => {
-    setOneTimePage((prev) => Math.min(oneTimeTotalPages - 1, prev + 1))
-  }
-
-  const handleOneTimePageChange = (page: number) => {
-    setOneTimePage(page)
-  }
-
-  const handleDailyPrevPage = () => {
-    setDailyPage((prev) => Math.max(0, prev - 1))
-  }
-
-  const handleDailyNextPage = () => {
-    setDailyPage((prev) => Math.min(dailyTotalPages - 1, prev + 1))
-  }
-
-  const handleDailyPageChange = (page: number) => {
-    setDailyPage(page)
-  }
 
   const handleJoinRide = (ride: Ride) => {
     setSelectedRide(ride)
@@ -331,6 +186,15 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
     setSelectedRide(null)
   }
 
+  const sliderSettings = {
+    dots: true,
+    infinite: false,
+    speed: 400,
+    slidesToShow: 1,
+    slidesToScroll: 1,
+    arrows: false
+  }
+
   const renderRideCards = (rides: Ride[]) => (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
       {rides.map((ride) => (
@@ -338,11 +202,13 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
           <CardContent className="p-6">
             <div className="space-y-4">
               <div className="flex justify-center mb-4 space-x-2">
-                <Badge className="bg-blue-100 text-blue-600 hover:bg-blue-100 rounded-full px-3 py-1 text-sm">
-                  {ride.timeAgo}
-                </Badge>
-                <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100 rounded-full px-3 py-1 text-sm">
-                  {new Date(ride.postedDate).toLocaleDateString()} at {new Date(ride.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {ride.frequency !== 'daily' && (
+                  <Badge className="bg-blue-100 text-blue-600 rounded-full px-3 py-1 text-sm">
+                    Date: {ride.pickupDateFormatted || ride.postedDate.toLocaleDateString()}
+                  </Badge>
+                )}
+                <Badge className="bg-gray-100 text-gray-600 rounded-full px-3 py-1 text-sm">
+                  Pickup Time: {ride.time || (ride.rawPayload?.['pickupTime'] ? String((ride.rawPayload as Record<string, unknown>)['pickupTime']) : 'N/A')}
                 </Badge>
               </div>
 
@@ -352,8 +218,8 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
                     <MapPin className="h-2 w-2 text-white" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">{ride.pickup.location}</p>
-                    <p className="text-gray-500 text-sm">{ride.pickup.type}</p>
+                    <p className="font-semibold text-gray-900">{ride.pickup?.location || 'Unknown'}</p>
+                    <p className="text-gray-500 text-sm">{ride.pickup?.type || 'Pickup point'}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -361,8 +227,8 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
                     <MapPin className="h-2 w-2 text-white" />
                   </div>
                   <div>
-                    <p className="font-bold text-xl text-gray-900">{ride.destination.location}</p>
-                    <p className="text-gray-500">{ride.destination.type}</p>
+                    <p className="font-bold text-xl text-gray-900">{ride.destination?.location || 'Unknown'}</p>
+                    <p className="text-gray-500">{ride.destination?.type || 'Destination'}</p>
                   </div>
                 </div>
               </div>
@@ -374,7 +240,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">{ride.time}</p>
-                    <p className="text-gray-500 text-sm">{ride.duration}</p>
+                    <p className="text-gray-500 text-sm">Pickup Time</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -383,7 +249,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
                   </div>
                   <div>
                     <p className="font-semibold text-gray-900">
-                      {ride.seats.available}/{ride.seats.total} seats
+                      {(ride.seats?.available ?? 0)}/{(ride.seats?.total ?? 0)} Persons
                     </p>
                     <p className="text-gray-500 text-sm">Available</p>
                   </div>
@@ -394,8 +260,10 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
 
               <div className="flex items-center justify-between pt-4">
                 <div>
-                  <p className="text-xl font-bold text-gray-900">{ride.price}</p>
-                  <p className="text-gray-500 text-sm">per seat</p>
+                  <p className="text-xl font-bold text-gray-900">
+                    {ride.price && !ride.price.startsWith('$') ? `$${ride.price}` : ride.price}
+                  </p>
+                  <p className="text-gray-500 text-sm">per person</p>
                 </div>
                 <Button
                   onClick={() => handleJoinRide(ride)}
@@ -413,13 +281,7 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
 
   const renderPagination = (totalPages: number, currentPage: number, onPrev: () => void, onNext: () => void, onPageClick: (page: number) => void) => (
     <div className="flex items-center justify-center gap-4">
-      <Button
-        onClick={onPrev}
-        disabled={currentPage === 0}
-        variant="ghost"
-        size="icon"
-        className="rounded-full disabled:opacity-30"
-      >
+      <Button onClick={onPrev} disabled={currentPage === 0} variant="ghost" size="icon" className="rounded-full disabled:opacity-30">
         <ChevronLeft className="h-6 w-6" />
       </Button>
 
@@ -428,21 +290,13 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
           <button
             key={index}
             onClick={() => onPageClick(index)}
-            className={`w-3 h-3 rounded-full transition-colors ${
-              index === currentPage ? "bg-yellow-500" : "bg-gray-300"
-            }`}
+            className={`w-3 h-3 rounded-full transition-colors ${index === currentPage ? "bg-yellow-500" : "bg-gray-300"}`}
             aria-label={`Go to page ${index + 1}`}
           />
         ))}
       </div>
 
-      <Button
-        onClick={onNext}
-        disabled={currentPage === totalPages - 1}
-        variant="ghost"
-        size="icon"
-        className="rounded-full disabled:opacity-30"
-      >
+      <Button onClick={onNext} disabled={currentPage === totalPages - 1} variant="ghost" size="icon" className="rounded-full disabled:opacity-30">
         <ChevronRight className="h-6 w-6" />
       </Button>
     </div>
@@ -453,51 +307,77 @@ export function SharedRidesSection({ initialRides = [] }: SharedRidesSectionProp
       <section id="shared-rides-section" className="py-16 bg-gray-50">
         <div className="container mx-auto px-4">
           <div className="text-center mb-8">
-            <h2 className="text-5xl font-bold text-yellow-500 mb-4">Available Shared Rides</h2>
+            <h2 className="text-5xl font-bold text-yellow-500 mb-4">Available Share Rides</h2>
             <p className="text-gray-600 text-lg mb-2">Join other passengers and save money while traveling.</p>
-            <p className="text-gray-600 text-lg mb-8">Real-time updates show live availability</p>
+            <p className="text-gray-600 text-lg mb-2">Real-time updates show live availability</p>
+            {backendDown && (
+              <p className="text-red-600 text-sm mt-2">Backend appears to be offline — live share rides are unavailable.</p>
+            )}
           </div>
 
           {/* One Time Rides Section */}
           <div className="mb-12">
             <h3 className="text-center text-3xl font-bold text-gray-900 mb-6">One Time Rides</h3>
-            {displayedOneTimeRides.length > 0 ? (
-              <>
-                {renderRideCards(displayedOneTimeRides)}
-                {renderPagination(
-                  oneTimeTotalPages,
-                  oneTimePage,
-                  handleOneTimePrevPage,
-                  handleOneTimeNextPage,
-                  handleOneTimePageChange
-                )}
-              </>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-gray-500 text-lg">No one-time rides available.</p>
-              </div>
-            )}
+
+            {/* ✅ Mobile Swipe View */}
+            <div className="block md:hidden">
+              <Slider {...sliderSettings}>
+                {oneTimeRides.map((ride) => (
+                  <div key={ride.id} className="px-3">{renderRideCards([ride])}</div>
+                ))}
+              </Slider>
+            </div>
+
+            {/* ✅ Desktop Grid */}
+            <div className="hidden md:block">
+              {displayedOneTimeRides.length > 0 ? (
+                <>
+                  {renderRideCards(displayedOneTimeRides)}
+                  {renderPagination(oneTimeTotalPages, oneTimePage, () => setOneTimePage(Math.max(0, oneTimePage - 1)), () => setOneTimePage(Math.min(oneTimeTotalPages - 1, oneTimePage + 1)), (p) => setOneTimePage(p))}
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  {loadingRides ? (
+                    <>
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                      <p className="mt-4 text-gray-600">Loading one-time rides...</p>
+                    </>
+                  ) : (
+                    <p className="text-gray-500 text-lg">No one-time rides available.</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Daily Rides Section */}
           <div className="mb-12">
             <h3 className="text-center text-3xl font-bold text-gray-900 mb-6">Daily Rides</h3>
-            {displayedDailyRides.length > 0 ? (
-              <>
-                {renderRideCards(displayedDailyRides)}
-                {renderPagination(
-                  dailyTotalPages,
-                  dailyPage,
-                  handleDailyPrevPage,
-                  handleDailyNextPage,
-                  handleDailyPageChange
-                )}
-              </>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-gray-500 text-lg">No daily rides available.</p>
-              </div>
-            )}
+
+            {/* ✅ Mobile Swipe View */}
+            <div className="block md:hidden">
+              <Slider {...sliderSettings}>
+                {
+                dailyRides.map((ride) => (
+                  <div key={ride.id} className="px-3">{renderRideCards([ride])}</div>
+            
+                ))}
+              </Slider>
+            </div>
+
+            {/* ✅ Desktop Grid */}
+            <div className="hidden md:block">
+              {displayedDailyRides.length > 0 ? (
+                <>
+                  {renderRideCards(displayedDailyRides)}
+                  {renderPagination(dailyTotalPages, dailyPage, () => setDailyPage(Math.max(0, dailyPage - 1)), () => setDailyPage(Math.min(dailyTotalPages - 1, dailyPage + 1)), (p) => setDailyPage(p))}
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-500 text-lg">No daily rides available.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>

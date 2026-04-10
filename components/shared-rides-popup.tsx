@@ -1,15 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Clock, Users, MapPin, X, CreditCard, Share2, ChevronDown, ArrowLeft } from "lucide-react"
 import { JoinRidePopup } from "./join-ride-popup"
-import { PaymentDetailsPopup } from "./payment-popup"
 import { BookingDetailsPopup } from "./booking-details-popup"
-import { calculateTotalPrice, formatPriceUSD, getPerKmRate, getTripMultiplier } from "@/lib/pricing"
+import { calculateTotalPrice, formatPriceUSD } from "@/lib/pricing"
+import { buildApiUrl } from "@/lib/api-url"
 
 const DEFAULT_SHARED_DISTANCE = 45; // km
 const DEFAULT_PASSENGERS_FOR_CALC = 6; // for medium vehicle
@@ -100,8 +99,43 @@ interface SharedRidesPopupProps {
 export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
   const [isJoinRideOpen, setIsJoinRideOpen] = useState(false)
   const [isBookingDetailsOpen, setIsBookingDetailsOpen] = useState(false)
-  const [selectedRide, setSelectedRide] = useState<(typeof sharedRides)[0] | null>(null)
-  const [selectedSeats, setSelectedSeats] = useState(1)
+  const [selectedRide, setSelectedRide] = useState<RideData | null>(null)
+  const [rides, setRides] = useState<Array<Record<string, unknown>>>([])
+
+  // Local RideData shape (matches JoinRidePopup's expected type)
+  interface RideData {
+    id: number
+    driver: { name: string; image: string }
+    vehicle: string
+    pickup: { location: string; type: string }
+    destination: { location: string; type: string }
+    time: string
+    duration: string
+    seats: { available: number; total: number }
+    price: string
+    distanceKm?: number
+  }
+
+  const toRideData = (rr: Record<string, unknown>): RideData => {
+    const pickup = rr['pickup'] as Record<string, unknown> | undefined
+    const destination = rr['destination'] as Record<string, unknown> | undefined
+    const seats = rr['seats'] as Record<string, unknown> | undefined
+    return {
+      id: Number(rr['id'] ?? Date.now()),
+      driver: {
+        name: String((rr['driver'] && (rr['driver'] as Record<string, unknown>)['name']) ?? rr['driverName'] ?? 'Driver'),
+        image: String((rr['driver'] && (rr['driver'] as Record<string, unknown>)['image']) ?? rr['driverImage'] ?? '/professional-driver-headshot.jpg')
+      },
+      vehicle: String(rr['vehicle'] ?? rr['vehicleName'] ?? 'Assigned Vehicle'),
+      pickup: { location: String((pickup && pickup['location']) ?? rr['pickupLocation'] ?? 'Unknown'), type: String((pickup && pickup['type']) ?? 'Pickup point') },
+      destination: { location: String((destination && destination['location']) ?? rr['destinationLocation'] ?? 'Unknown'), type: String((destination && destination['type']) ?? 'Destination') },
+      time: String(rr['time'] ?? rr['timeAgo'] ?? ''),
+      duration: String(rr['duration'] ?? '45 min'),
+      seats: { available: Number((seats && seats['available']) ?? rr['availableSeats'] ?? 0), total: Number((seats && seats['total']) ?? rr['totalSeats'] ?? 1) },
+      price: String(rr['price'] ?? '$0.00'),
+      distanceKm: rr['distanceKm'] ? Number(rr['distanceKm']) : undefined
+    }
+  }
 
   // Booking form state
   const [tripType, setTripType] = useState("one-way")
@@ -117,8 +151,44 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
     setPassengers((prev) => Math.max(1, Math.min(20, prev + change))); // Allow up to 20 passengers for large bookings
   }
 
-  if (!isOpen) return null
+  useEffect(() => {
+    let mounted = true
+    const fetchRides = async () => {
+      try {
+        console.log('Fetching shared rides from API...')
+          const res = await fetch(buildApiUrl("/shared-rides"), { 
+            cache: 'no-store', headers: { 'Accept': 'application/json' } })
+        if (!res.ok) return
+        const json = await res.json()
+        if (!mounted) return
+        // normalize pickupDate if Firestore Timestamps are present
+        const list = (json.rides || json || []) as Array<Record<string, unknown>>
+        const normalized = list.map((r) => {
+          const raw = r as Record<string, unknown>
+          const pd = raw['pickupDate'] ?? raw['pickup_date'] ?? (raw['rawPayload'] && (raw['rawPayload'] as Record<string, unknown>)['pickupDate'])
+          let pickupDateStr = ''
+          if (pd) {
+            if (typeof pd === 'string') pickupDateStr = pd
+            else if (typeof pd === 'object' && pd !== null) {
+              const secs = (pd as Record<string, unknown>)['_seconds'] ?? (pd as Record<string, unknown>)['seconds']
+              if (typeof secs === 'number') pickupDateStr = new Date(secs * 1000).toISOString().split('T')[0]
+            }
+          }
+          return { ...raw, pickupDateStr }
+        })
+        setRides(normalized)
+      } catch (err) {
+        // ignore errors for now
+        console.error('Failed to fetch shared rides', err)
+      }
+    }
 
+  fetchRides()
+
+    return () => { mounted = false }
+  }, [])
+
+  if (!isOpen) return null
 
 
   const handleCloseJoinRide = () => {
@@ -129,7 +199,7 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
   const handleCloseBookingDetails = () => {
     setIsBookingDetailsOpen(false)
     setSelectedRide(null)
-    setSelectedSeats(1)
+    // reset selection state
   }
 
   const timeSlots = [
@@ -143,7 +213,7 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
         DEFAULT_SHARED_DISTANCE,
         passengers,
         passengers,
-        tripType as any
+        (tripType as "one-way" | "round-trip" | "multi-city")
       )
     )
   )
@@ -160,7 +230,7 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
             >
               <ArrowLeft className="h-4 w-4 text-gray-600" />
             </button>
-            <h2 className="text-2xl font-bold text-gray-900">Available Shared Rides</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Available Share Rides</h2>
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center hover:bg-gray-100"
@@ -219,6 +289,44 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Available Rides (fetched from backend; fallback to sample data) */}
+              <div className="space-y-4">
+                <h4 className="text-lg font-semibold">Available Rides</h4>
+                {(() => {
+                  const list = (rides.length ? rides : (sharedRides as unknown as Array<Record<string, unknown>>))
+                  return list.map((item, idx) => {
+                    const rr = item as Record<string, unknown>
+                    const pickup = rr['pickup'] as Record<string, unknown> | undefined
+                    const destination = rr['destination'] as Record<string, unknown> | undefined
+                    const seats = rr['seats'] as Record<string, unknown> | undefined
+                    const available = seats ? (seats['available'] as number | undefined) : (rr['availableSeats'] as number | undefined)
+                    const total = seats ? (seats['total'] as number | undefined) : (rr['totalSeats'] as number | undefined)
+                    const price = (rr['price'] as string) || ''
+                    const time = (rr['time'] as string) || (rr['timeAgo'] as string) || ''
+                    const pickupDateStr = rr['pickupDateStr'] as string | undefined
+
+                    return (
+                      <div key={(rr['id'] as string) || time || idx} className="flex items-center justify-between p-3 border rounded">
+                        <div>
+                          <div className="font-semibold">{(pickup && (pickup['location'] as string)) || (rr['pickupLocation'] as string) || 'Unknown'} → {(destination && (destination['location'] as string)) || (rr['destinationLocation'] as string) || 'Unknown'}</div>
+                          <div className="text-sm text-gray-600">{time} • {available}/{total} seats</div>
+                          {pickupDateStr && <div className="text-sm text-gray-500">Pickup Date: {pickupDateStr}</div>}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="font-semibold text-gray-900">{price}</div>
+                          <button
+                            onClick={() => { setSelectedRide(toRideData(item as Record<string, unknown>)); setIsJoinRideOpen(true) }}
+                            className="px-3 py-1 bg-blue-500 text-white rounded"
+                          >
+                            Join ride
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })
+                })()}
               </div>
 
               {/* Booking Form */}
@@ -315,7 +423,7 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
                               className="w-4 h-4 text-blue-500 border-gray-300 focus:ring-blue-500"
                             />
                             <Label htmlFor="shared" className="text-gray-700 font-medium">
-                              Shared
+                              Share
                             </Label>
                           </div>
                           <div className="flex items-center space-x-2">
@@ -424,7 +532,7 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
                     // Share functionality with form data
                     if (navigator.share) {
                       navigator.share({
-                        title: 'Shared Ride Available',
+                        title: 'Share Ride Available',
                         text: `Join ride from ${from} to ${to} for ${calculatedPriceForShare}`,
                         url: window.location.href,
                       })
@@ -446,7 +554,7 @@ export function SharedRidesPopup({ isOpen, onClose }: SharedRidesPopupProps) {
         </div>
       </div>
 
-      <JoinRidePopup isOpen={isJoinRideOpen} onClose={handleCloseJoinRide} rideData={selectedRide} />
+  <JoinRidePopup isOpen={isJoinRideOpen} onClose={handleCloseJoinRide} rideData={selectedRide} />
       <BookingDetailsPopup
         isOpen={isBookingDetailsOpen}
         onClose={handleCloseBookingDetails}
