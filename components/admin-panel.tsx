@@ -865,7 +865,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       const payload = {
         pickupLocation: rideForm.pickupLocation.trim(),
         destinationLocation: rideForm.destinationLocation.trim(),
-        ...(rideForm.frequency === "one-time" && { rideDate: rideForm.rideDate }),
+        ...(rideForm.frequency === "one-time" && { 
+          rideDate: rideForm.rideDate,
+          pickupDate: rideForm.rideDate
+        }),
         pickupTime: rideForm.pickupTime,
         ampm: rideForm.ampm,
         luggage: rideForm.luggage,
