@@ -1693,20 +1693,20 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             <table className="w-full text-sm">
               <thead className="bg-slate-50/50">
                 <tr>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Booking ID</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700 min-w-[140px]">Date & Time</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Route</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Customer</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700 hidden lg:table-cell">Seats</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Status</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Actions</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Booking ID</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Date & Time</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Route</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Customer</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700 hidden lg:table-cell">Seats</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Status</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((it) => (
                   <tr key={it.id} className="border-b border-slate-100 hover:bg-blue-50/20 transition-colors">
-                    <td className="py-4 px-6 text-slate-600 font-mono text-xs">{it.bookingId}</td>
-                    <td className="py-4 px-6 text-slate-700">
+                    <td className="py-3 px-4 text-slate-600 font-mono text-xs">{it.bookingId}</td>
+                    <td className="py-3 px-4 text-slate-700">
                       <div className="flex flex-col">
                         {/* Prefer server-provided pickupDate when available; it may be an ISO string or a Firestore Timestamp-like object */}
                         {(() => {
@@ -1737,16 +1737,19 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         })()}
                       </div>
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <MapPin className="h-3 w-3 text-green-500 flex-shrink-0" />
-                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.pickup)}</span>
-                        <span className="text-slate-400 mx-1">→</span>
-                        <MapPin className="h-3 w-3 text-red-500 flex-shrink-0" />
-                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.destination)}</span>
+                    <td className="py-3 px-4">
+                      <div className="flex flex-col gap-1 min-w-[150px]">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <MapPin className="h-3 w-3 text-green-500 flex-shrink-0" />
+                          <span className="text-slate-700 text-sm truncate max-w-[150px] lg:max-w-[250px]">{formatLocation(it.pickup)}</span>
+                        </div>
+                        <div className="flex items-center gap-1 min-w-0">
+                          <MapPin className="h-3 w-3 text-red-500 flex-shrink-0" />
+                          <span className="text-slate-700 text-sm truncate max-w-[150px] lg:max-w-[250px]">{formatLocation(it.destination)}</span>
+                        </div>
                       </div>
                     </td>
-                    <td className="py-4 px-6 hidden md:table-cell text-slate-600">
+                    <td className="py-3 px-4 hidden md:table-cell text-slate-600">
                       <div className="min-w-0">
                         {(() => {
                           const rec = it as unknown as Record<string, unknown>;
@@ -1762,21 +1765,21 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         })()}
                       </div>
                     </td>
-                    <td className="py-4 px-6 hidden lg:table-cell">
+                    <td className="py-3 px-4 hidden lg:table-cell">
                       <div className="flex items-center gap-1">
                         <span className="badge bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-medium">
                           {it.seats.available}/{it.seats.total}
                         </span>
                       </div>
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
+                    <td className="py-3 px-4">
+                      <div className="flex flex-col gap-1">
                         {getStatusBadge(it.status)}
                         <Select
                           value={it.status || "Pending"}
                           onValueChange={(value) => updateSharedRideStatus(it.id, value)}
                         >
-                          <SelectTrigger className="w-32">
+                          <SelectTrigger className="w-28 h-8 text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -1788,9 +1791,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         </Select>
                       </div>
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="flex gap-2 flex-wrap">
-                        <Button size="sm" onClick={() => onOpen?.(it)} className="bg-blue-500 hover:bg-blue-600">
+                    <td className="py-3 px-4">
+                      <div className="flex gap-2 flex-wrap max-w-[200px]">
+                        <Button size="sm" onClick={() => onOpen?.(it)} className="bg-blue-500 hover:bg-blue-600 h-8 px-3 text-xs">
                           <Eye className="h-3 w-3 mr-1" />
                           View
                         </Button>
@@ -1827,7 +1830,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                           
                           if (hasBookings) {
                             return (
-                              <Button size="sm" onClick={() => onViewPassengers?.(it)} className="bg-green-500 hover:bg-green-600 text-white">
+                              <Button size="sm" onClick={() => onViewPassengers?.(it)} className="bg-green-500 hover:bg-green-600 text-white h-8 px-3 text-xs">
                                 <Users className="h-3 w-3 mr-1" />
                                 Passengers ({bookingsArray.length})
                               </Button>
@@ -1835,7 +1838,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                           }
                           return null;
                         })()}
-                        <Button size="sm" variant="ghost" onClick={() => onDelete?.(it.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                        <Button size="sm" variant="ghost" onClick={() => onDelete?.(it.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 px-3 text-xs">
                           <Trash2 className="h-3 w-3 mr-1" />
                           Delete
                         </Button>
