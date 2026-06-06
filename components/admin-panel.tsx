@@ -1393,7 +1393,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
         // determine date/time
         let dateObj: Date | null = null;
-        const pdRaw = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.pickupDate) ?? rec.pickupDate ?? rec.postedDate;
+        const rpObj = rec.rawPayload as Record<string, unknown> | undefined;
+        const bdObj = rpObj?.bookingData as Record<string, unknown> | undefined;
+        const pdRaw = (rpObj?.pickupDate) ?? (rpObj?.rideDate) ?? (rpObj?.date) ?? (bdObj?.date) ?? rec.pickupDate ?? rec.postedDate;
         if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
         else if (pdRaw && typeof pdRaw === 'object') {
           const pRec = pdRaw as Record<string, unknown>;
@@ -1730,8 +1732,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         {/* Prefer server-provided pickupDate when available; it may be an ISO string or a Firestore Timestamp-like object */}
                         {(() => {
                           const rec = it as unknown as Record<string, unknown>;
-                          // Prefer rawPayload.pickupDate (string) first, then top-level pickupDate (timestamp), then postedDate
-                          const pdRaw = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.pickupDate) ?? rec.pickupDate ?? rec.postedDate;
+                          const rpObj = rec.rawPayload as Record<string, unknown> | undefined;
+                          const bdObj = rpObj?.bookingData as Record<string, unknown> | undefined;
+                          const pdRaw = (rpObj?.pickupDate) ?? (rpObj?.rideDate) ?? (rpObj?.date) ?? (bdObj?.date) ?? rec.pickupDate ?? rec.postedDate;
                           // normalize Firestore timestamp-like objects
                           let dateObj: Date | null = null;
                           if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
@@ -1915,8 +1918,30 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <td className="py-4 px-6 text-slate-600 font-mono text-xs">{it.bookingId}</td>
                     <td className="py-4 px-6 text-slate-700">
                       <div className="flex flex-col">
-                        <span className="font-medium">{it.postedDate ? new Date(it.postedDate).toLocaleDateString() : "N/A"}</span>
-                        <span className="text-xs text-slate-500">{it.postedDate ? new Date(it.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
+                        {(() => {
+                          const rec = it as unknown as Record<string, unknown>;
+                          const rpObj = rec.rawPayload as Record<string, unknown> | undefined;
+                          const bdObj = rpObj?.bookingData as Record<string, unknown> | undefined;
+                          const pdRaw = (rpObj?.pickupDate) ?? (rpObj?.rideDate) ?? (rpObj?.date) ?? (bdObj?.date) ?? rec.pickupDate ?? rec.postedDate;
+                          let dateObj: Date | null = null;
+                          if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
+                          else if (pdRaw && typeof pdRaw === 'object') {
+                            const pRec = pdRaw as Record<string, unknown>;
+                            const secs = typeof pRec._seconds === 'number' ? pRec._seconds : (typeof pRec.seconds === 'number' ? pRec.seconds : undefined);
+                            if (typeof secs === 'number') dateObj = new Date(secs * 1000);
+                          } else if (pdRaw instanceof Date) dateObj = pdRaw;
+                          if (!dateObj && typeof rec.postedDate === 'string') dateObj = new Date(rec.postedDate as string);
+
+                          const dateStr = dateObj ? dateObj.toLocaleDateString() : 'N/A';
+                          const timeStr = (it.time && String(it.time).trim() !== '') ? String(it.time) : (dateObj ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
+                          return (
+                            <>
+                              <span className="font-medium">{dateStr}</span>
+                              <span className="text-xs text-slate-500">{timeStr}</span>
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="py-4 px-6 text-slate-700 font-medium">{it.notes || it.vehicle}</td>
@@ -2055,7 +2080,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         {(() => {
                           const rec = it as unknown as Record<string, unknown>;
                           // Prefer rawPayload.pickupDate (string) first, then top-level pickupDate (timestamp), then postedDate
-                          const pdRaw = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.pickupDate) ?? rec.pickupDate ?? rec.postedDate;
+                          const rpObj = rec.rawPayload as Record<string, unknown> | undefined;
+                          const bdObj = rpObj?.bookingData as Record<string, unknown> | undefined;
+                          const pdRaw = (rpObj?.pickupDate) ?? (rpObj?.rideDate) ?? (rpObj?.date) ?? (bdObj?.date) ?? rec.pickupDate ?? rec.postedDate;
                           // normalize Firestore timestamp-like objects
                           let dateObj: Date | null = null;
                           if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
@@ -3174,14 +3201,15 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
                 // passenger id and pickup date (from raw payload or item)
                 const passengerId = item.passengerId ?? rp.passengerId ?? 'N/A'
-                const pickupDateRaw = rp.pickupDate ?? item.pickupDate ?? null
+                const bdObj = rp?.bookingData as Record<string, unknown> | undefined;
+                const pickupDateRaw = (rp?.pickupDate) ?? (rp?.rideDate) ?? (rp?.date) ?? (bdObj?.date) ?? item.pickupDate ?? null;
                 let pickupDateFormatted = 'N/A'
                 if (pickupDateRaw) {
                   try {
-                    if (typeof pickupDateRaw === 'string') pickupDateFormatted = new Date(pickupDateRaw).toLocaleString()
+                    if (typeof pickupDateRaw === 'string') pickupDateFormatted = new Date(pickupDateRaw).toLocaleDateString()
                     else if (typeof pickupDateRaw === 'object' && (pickupDateRaw._seconds || pickupDateRaw.seconds)) {
                       const secs = Number(pickupDateRaw._seconds ?? pickupDateRaw.seconds)
-                      pickupDateFormatted = new Date(secs * 1000).toLocaleString()
+                      pickupDateFormatted = new Date(secs * 1000).toLocaleDateString()
                     } else pickupDateFormatted = String(pickupDateRaw)
                   } catch {
                     pickupDateFormatted = String(pickupDateRaw)
