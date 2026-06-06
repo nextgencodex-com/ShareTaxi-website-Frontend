@@ -169,6 +169,24 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const [selectedItem, setSelectedItem] = useState<RideData | null>(null);
   const [passengersDialogOpen, setPassengersDialogOpen] = useState(false);
   const [selectedRideForPassengers, setSelectedRideForPassengers] = useState<RideData | null>(null);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ id: number; type: 'shared' | 'vehicle' | 'personal' } | null>(null);
+
+  const confirmDelete = (id: number, type: 'shared' | 'vehicle' | 'personal') => {
+    setItemToDelete({ id, type });
+    setDeleteDialogOpen(true);
+  };
+
+  const executeDelete = () => {
+    if (!itemToDelete) return;
+    if (itemToDelete.type === 'shared') handleDeleteShared(itemToDelete.id);
+    else if (itemToDelete.type === 'vehicle') handleDeleteVehicleBooking(itemToDelete.id);
+    else if (itemToDelete.type === 'personal') handleDeletePersonal(itemToDelete.id);
+    setDeleteDialogOpen(false);
+    setItemToDelete(null);
+  };
+
   // Helper to safely extract a location string from either a string or an object like {location: string}
   const formatLocation = (v: unknown) => {
     if (!v && v !== 0) return 'N/A'
@@ -2572,14 +2590,14 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             {/* Shared Requests */}
             {activePage === "sharedRequests" && (
               <>
-                <SharedRidesTable items={sharedRides} onDelete={handleDeleteShared} onOpen={openViewDialog} onViewPassengers={openPassengersDialog} />
+                <SharedRidesTable items={sharedRides} onDelete={(id) => confirmDelete(id, 'shared')} onOpen={openViewDialog} onViewPassengers={openPassengersDialog} />
               </>
             )}
 
             {/* Vehicle Bookings */}
             {activePage === "vehicleBookings" && (
               <>
-                <VehicleBookingsTable items={vehicleBookings} onDelete={handleDeleteVehicleBooking} />
+                <VehicleBookingsTable items={vehicleBookings} onDelete={(id) => confirmDelete(id, 'vehicle')} />
                 <div className="mt-4">
                   <Card>
                     <CardHeader>
@@ -2625,7 +2643,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             {/* Personal Rides */}
             {activePage === "personalRides" && (
               <>
-                <PersonalRidesTable items={personalRides} onDelete={handleDeletePersonal} />
+                <PersonalRidesTable items={personalRides} onDelete={(id) => confirmDelete(id, 'personal')} />
                 <div className="mt-4">
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
@@ -3441,6 +3459,26 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
               })()}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Deletion</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-gray-700">
+            Are you sure you want to delete this {itemToDelete?.type === 'shared' ? 'share ride' : itemToDelete?.type === 'vehicle' ? 'vehicle booking' : 'personal ride'}? This action cannot be undone.
+          </div>
+          <div className="flex justify-end gap-3 mt-4">
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={executeDelete}>
+              Delete
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
