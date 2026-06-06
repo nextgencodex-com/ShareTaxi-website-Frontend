@@ -218,12 +218,13 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const toISOStringSafe = (v: unknown) => {
     if (typeof v === 'string') return v;
     if (v instanceof Date) return v.toISOString();
-    if (v && typeof (v as Record<string, unknown>).toDate === 'function') {
-      try {
-        return (v as { toDate: () => Date }).toDate().toISOString();
-      } catch {
-        return new Date().toISOString();
+    if (v && typeof v === 'object') {
+      const rec = v as Record<string, unknown>;
+      if (typeof rec.toDate === 'function') {
+        try { return (rec as { toDate: () => Date }).toDate().toISOString(); } catch { }
       }
+      if (typeof rec._seconds === 'number') return new Date(rec._seconds * 1000).toISOString();
+      if (typeof rec.seconds === 'number') return new Date(rec.seconds * 1000).toISOString();
     }
     return new Date().toISOString();
   };
@@ -346,6 +347,20 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       console.error("Failed to load admin data:", err);
     }
   }, []);
+
+  // Calculate time ago based on posted/created date
+  const calculateTimeAgo = (dateInput: string | Date | null | undefined): string => {
+    if (!dateInput) return "just now";
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return "just now";
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    if (diffInSeconds < 60) return "just now";
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hour${Math.floor(diffInSeconds / 3600) > 1 ? 's' : ''} ago`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} day${Math.floor(diffInSeconds / 86400) > 1 ? 's' : ''} ago`;
+    return `${Math.floor(diffInSeconds / 2592000)} month${Math.floor(diffInSeconds / 2592000) > 1 ? 's' : ''} ago`;
+  };
 
   /* ---------- save helpers ---------- */
   const persistSharedRides = (list: RideData[]) => {
@@ -494,7 +509,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             const rideData = {
               id,
               bookingId,
-              timeAgo: "just now",
+              timeAgo: calculateTimeAgo(postedDateIso),
               postedDate: postedDateIso,
               frequency: typeof r.frequency === 'string' ? r.frequency : "one-time",
               status: typeof r.status === 'string' ? r.status : "Pending",
@@ -569,7 +584,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             return {
               id,
               bookingId,
-              timeAgo: 'just now',
+              timeAgo: calculateTimeAgo(postedDate),
               postedDate,
               frequency: typeof r.frequency === 'string' ? r.frequency : 'one-time',
               status: typeof r.status === 'string' ? r.status : 'Pending',
@@ -679,7 +694,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             return {
               id,
               bookingId,
-              timeAgo: 'just now',
+              timeAgo: calculateTimeAgo(postedDate),
               postedDate,
               frequency: typeof r.frequency === 'string' ? r.frequency : 'one-time',
               status: typeof r.status === 'string' ? r.status : 'Pending',
@@ -3130,7 +3145,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                 const seatsAvailable = (rp.seats && typeof rp.seats.available === 'number') ? rp.seats.available : ((item.seats && typeof item.seats.available === 'number') ? item.seats.available : (item.availableSeats ?? 'N/A'))
                 const seatsTotal = (rp.seats && typeof rp.seats.total === 'number') ? rp.seats.total : ((item.seats && typeof item.seats.total === 'number') ? item.seats.total : (item.totalSeats ?? 'N/A'))
                 const price = (item.price && String(item.price)) || (rp.price && String(rp.price)) || 'N/A'
-                const notes = item.notes || rp.notes || item.specialRequests || 'None'
+                const notes = item.notes || rp.notes || item.specialRequests || rp?.rawPayload?.personalData?.specialRequests || rp?.personalData?.specialRequests || 'None'
 
                 // created/posted date - support Firestore timestamp shapes
                 const createdAtRaw = item.createdAt || item.postedDate || rp.postedDate || rp.createdAt || null
@@ -3275,7 +3290,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                             <label className="text-xs font-medium text-gray-600 block mb-2">Customer</label>
                             {(() => {
                               // Helper: return a non-empty trimmed string or undefined
-                              const maybeStr = (val: unknown) => (typeof val === 'string' && val.trim() !== '' ? val.trim() : undefined)
+                              const maybeStr = (val: unknown) => (typeof val === 'string' && val.trim() !== '' && val.trim() !== 'N/A' ? val.trim() : undefined)
 
                               // Recursive shallow scanner to find first matching key among targets
                               const findInObj = (obj: unknown, targets: string[], depth = 0): string | undefined => {
@@ -3311,10 +3326,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                               const emailTargets = ['email', 'customeremail', 'customerEmail']
                               const phoneTargets = ['phone', 'customerphone', 'customerPhone', 'mobile']
 
-                              // Check explicit top-level fields first
-                              const explicitName = maybeStr(item?.customer?.fullName) || maybeStr(item?.customerName) || maybeStr(item?.customer?.name)
-                              const explicitEmail = maybeStr(item?.customer?.email) || maybeStr(item?.customerEmail)
-                              const explicitPhone = maybeStr(item?.customer?.phone) || maybeStr(item?.customerPhone)
+                              // Check explicit payload and top-level fields first to avoid matching generic "name" fields (which may contain booking IDs)
+                              const explicitName = maybeStr(rp?.rawPayload?.personalData?.fullName) || maybeStr(rp?.personalData?.fullName) || maybeStr(rp?.customerName) || maybeStr(item?.customer?.fullName) || maybeStr(item?.customerName) || maybeStr(item?.customer?.name)
+                              const explicitEmail = maybeStr(rp?.rawPayload?.personalData?.email) || maybeStr(rp?.personalData?.email) || maybeStr(rp?.customerEmail) || maybeStr(item?.customer?.email) || maybeStr(item?.customerEmail)
+                              const explicitPhone = maybeStr(rp?.rawPayload?.personalData?.phone) || maybeStr(rp?.personalData?.phone) || maybeStr(rp?.customerPhone) || maybeStr(item?.customer?.phone) || maybeStr(item?.customerPhone)
 
                               // Compose search roots: item, rp, rp.rawPayload (if present)
                               const roots = [item, rp, rp && rp.rawPayload, rp && rp.rawPayload && rp.rawPayload.rawPayload]
