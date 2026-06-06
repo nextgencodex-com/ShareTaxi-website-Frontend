@@ -163,6 +163,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
   const [activePage, setActivePage] = useState<typeof pages[number]["key"]>("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [recentActivityCategory, setRecentActivityCategory] = useState<"all" | "shared" | "private" | "personal">("all");
 
   // ---- Dialog states ---
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -2545,18 +2546,41 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
                 {/* Recent Activity */}
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <CardTitle className="flex items-center gap-2">
                       <Clock className="h-5 w-5" />
                       Recent Activity
                     </CardTitle>
+                    <Select value={recentActivityCategory} onValueChange={(val: any) => setRecentActivityCategory(val)}>
+                      <SelectTrigger className="w-[150px] h-8 text-xs">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Rides</SelectItem>
+                        <SelectItem value="shared">Share Rides</SelectItem>
+                        <SelectItem value="private">Vehicle Bookings</SelectItem>
+                        <SelectItem value="personal">Personal Rides</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3 max-h-96 overflow-y-auto">
-                      {[...sharedRides, ...vehicleBookings, ...personalRides]
-                        .sort((a, b) => new Date(b.postedDate || 0).getTime() - new Date(a.postedDate || 0).getTime())
-                        .slice(0, 5)
-                        .map((activity) => (
+                      {(() => {
+                        const filtered = [...sharedRides, ...vehicleBookings, ...personalRides]
+                          .filter((activity) => recentActivityCategory === "all" || activity.type === recentActivityCategory)
+                          .sort((a, b) => new Date(b.postedDate || 0).getTime() - new Date(a.postedDate || 0).getTime())
+                          .slice(0, 5);
+
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="text-center py-8 text-slate-500">
+                              <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                              <p>No recent activity for this category</p>
+                            </div>
+                          );
+                        }
+
+                        return filtered.map((activity) => (
                           <div key={activity.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg">
                             <div className="p-2 bg-blue-100 rounded-full">
                               {activity.type === "shared" ? (
@@ -2590,13 +2614,8 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                               <p className="text-xs text-slate-500">{activity.timeAgo}</p>
                             </div>
                           </div>
-                        ))}
-                      {sharedRides.length === 0 && vehicleBookings.length === 0 && personalRides.length === 0 && (
-                        <div className="text-center py-8 text-slate-500">
-                          <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          <p>No recent activity</p>
-                        </div>
-                      )}
+                        ));
+                      })()}
                     </div>
                   </CardContent>
                 </Card>
