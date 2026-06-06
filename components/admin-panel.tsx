@@ -2599,7 +2599,15 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         }
 
                         return filtered.map((activity) => (
-                          <div key={activity.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg">
+                          <div 
+                            key={activity.id} 
+                            onClick={() => {
+                              if (activity.type === 'shared') setActivePage('sharedRequests');
+                              else if (activity.type === 'vehicle') setActivePage('vehicleBookings');
+                              else if (activity.type === 'personal') setActivePage('personalRides');
+                            }}
+                            className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"
+                          >
                             <div className="p-2 bg-blue-100 rounded-full">
                               {activity.type === "shared" ? (
                                 <Users className="h-4 w-4 text-blue-600" />
