@@ -2563,14 +2563,27 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900 truncate">
-                                {activity.bookingId} - {activity.vehicle}
-                              </p>
-                              <p className="text-xs text-slate-500">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm font-medium text-slate-900 truncate">
+                                  {activity.bookingId} - {activity.vehicle}
+                                </p>
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                  activity.status?.toLowerCase() === 'confirmed' ? 'bg-green-100 text-green-700' :
+                                  activity.status?.toLowerCase() === 'completed' ? 'bg-blue-100 text-blue-700' :
+                                  activity.status?.toLowerCase() === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                  'bg-yellow-100 text-yellow-700'
+                                }`}>
+                                  {activity.status || 'Pending'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 mb-0.5 truncate">
                                 {formatLocation(activity.pickup)} → {formatLocation(activity.destination)}
                               </p>
+                              <p className="text-[10px] text-slate-400">
+                                {new Date(activity.postedDate).toLocaleString()}
+                              </p>
                             </div>
-                            <div className="text-right">
+                            <div className="text-right whitespace-nowrap ml-2">
                               <p className="text-xs text-slate-500">{activity.timeAgo}</p>
                             </div>
                           </div>
