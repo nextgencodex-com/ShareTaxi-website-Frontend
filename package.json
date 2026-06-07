@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
-    "dev": "next dev",
+    "build": "node init && next build",
+    "dev": "node init && next dev",
     "lint": "next lint",
-    "start": "next start",
+    "start": "node init && next start",
     "export": "next export",
-    "build:static": "next build && next export"
+    "build:static": "node init && next build && next export"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
