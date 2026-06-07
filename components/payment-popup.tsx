@@ -533,6 +533,7 @@ export function PaymentDetailsPopup({
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
   const [bookingInProgress, setBookingInProgress] = useState(false);
+  const [clickedMethod, setClickedMethod] = useState<"email" | "whatsapp" | null>(null);
 
   // Admin notification email (centralized) — avoid sending duplicate notifications
   const ADMIN_NOTIFICATION_EMAIL = "info@sharetaxisrilanka.com";
@@ -1179,6 +1180,8 @@ export function PaymentDetailsPopup({
   };
 
   const handleEmailBooking = async () => {
+    setClickedMethod("email");
+    setBookingInProgress(true);
 
     // Set submit attempt flag (tracked via validationErrors state)
 
@@ -1189,6 +1192,8 @@ export function PaymentDetailsPopup({
     // Stop if validation failed
     if (errors.length > 0) {
       console.log("Validation errors:", errors);
+      setClickedMethod(null);
+      setBookingInProgress(false);
       return;
     }
 
@@ -1463,6 +1468,7 @@ export function PaymentDetailsPopup({
             window.location.reload();
           }, 2000);
         } catch (error) {
+          setClickedMethod(null);
           setBookingInProgress(false);
           console.error("Error booking shared ride:", error);
           setValidationErrors([
@@ -2219,20 +2225,42 @@ Please confirm this booking. Thank you!
 
               <Button
                 onClick={handleEmailBooking}
-                disabled={bookingInProgress}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white h-14 text-lg font-semibold rounded-2xl flex items-center justify-center gap-3"
+                disabled={bookingInProgress || clickedMethod !== null}
+                className={`w-full text-white h-14 text-lg font-semibold rounded-2xl flex items-center justify-center gap-3 transition-all ${
+                  clickedMethod === "email" ? "bg-blue-800 opacity-80" : "bg-blue-600 hover:bg-blue-700"
+                }`}
               >
-                <Mail className="h-5 w-5" />
-                Book with Email
+                {clickedMethod === "email" ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Processing...
+                  </div>
+                ) : (
+                  <>
+                    <Mail className="h-5 w-5" />
+                    Book with Email
+                  </>
+                )}
               </Button>
 
               <Button
                 onClick={handleWhatsAppBooking}
-                disabled={bookingInProgress}
-                className="w-full bg-green-600 hover:bg-green-700 text-white h-14 text-lg font-semibold rounded-2xl flex items-center justify-center gap-3"
+                disabled={bookingInProgress || clickedMethod !== null}
+                className={`w-full text-white h-14 text-lg font-semibold rounded-2xl flex items-center justify-center gap-3 transition-all ${
+                  clickedMethod === "whatsapp" ? "bg-green-800 opacity-80" : "bg-green-600 hover:bg-green-700"
+                }`}
               >
-                <MessageCircle className="h-5 w-5" />
-                Book via WhatsApp
+                {clickedMethod === "whatsapp" ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Processing...
+                  </div>
+                ) : (
+                  <>
+                    <MessageCircle className="h-5 w-5" />
+                    Book via WhatsApp
+                  </>
+                )}
               </Button>
             </div>
           </div>
