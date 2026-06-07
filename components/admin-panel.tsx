@@ -1363,9 +1363,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       );
 
       if (!customerEmail) {
-        console.warn('No valid customer email found for status notification');
+        console.warn('[Status Email] No valid customer email found. ride:', JSON.stringify(rec).slice(0, 300));
         return;
       }
+      console.log('[Status Email] Sending to:', customerEmail, '| Status:', newStatus, '| Template:', process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID_STATUS || 'template_xd6ospg (fallback)');
 
       const customerName = pickNonPlaceholder(
         nestedPD && typeof nestedPD.fullName === 'string' ? nestedPD.fullName as string : undefined,
@@ -1376,11 +1377,67 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       ) || 'Valued Customer';
 
       const statusMessages: Record<string, string> = {
-        'Confirmed': 'Great news! Your ride has been confirmed. We will contact you shortly with further details.',
-        'Cancelled': 'Your ride has been cancelled. If you have any questions, please contact us.',
-        'Completed': 'Thank you for riding with us! Your ride has been completed. We hope to serve you again soon.',
-        'In Progress': 'Your ride is now in progress. Your driver is on the way!',
-        'Pending': 'Your ride is pending confirmation. We will update you soon.'
+        'Confirmed': 'Great news! Your ride has been confirmed by our team. Please use the buttons below to confirm your acceptance or let us know if you need to cancel.',
+        'Cancelled': 'Your ride booking has been cancelled. If you believe this is a mistake or would like to rebook, please contact us.',
+        'Completed': 'Thank you for riding with ShareTaxi Sri Lanka! We hope you had a smooth journey. We would love to hear your feedback.',
+        'In Progress': 'Your ride is now in progress. Your driver is on the way — please be ready at your pickup location!',
+        'Pending': 'Your ride is pending confirmation. Our team is reviewing your request and will update you shortly.'
+      };
+
+      const statusHeaders: Record<string, string> = {
+        'Confirmed': 'Your ride has<br>been confirmed',
+        'Cancelled': 'Your ride has<br>been cancelled',
+        'Completed': 'Your ride is<br>complete',
+        'In Progress': 'Your ride is<br>in progress',
+        'Pending': 'Your ride is<br>pending review',
+      };
+
+      const statusTags: Record<string, string> = {
+        'Confirmed': '✓ Confirmed',
+        'Cancelled': '✕ Cancelled',
+        'Completed': '✓ Completed',
+        'In Progress': '⟳ In Progress',
+        'Pending': '⏳ Pending',
+      };
+
+      const statusTagColors: Record<string, string> = {
+        'Confirmed': '#16a34a',
+        'Cancelled': '#dc2626',
+        'Completed': '#2563eb',
+        'In Progress': '#d97706',
+        'Pending': '#eab308',
+      };
+
+      const statusTagTextColors: Record<string, string> = {
+        'Confirmed': '#ffffff',
+        'Cancelled': '#ffffff',
+        'Completed': '#ffffff',
+        'In Progress': '#ffffff',
+        'Pending': '#000000',
+      };
+
+      const statusBoxColors: Record<string, string> = {
+        'Confirmed': '#f0fdf4',
+        'Cancelled': '#fef2f2',
+        'Completed': '#eff6ff',
+        'In Progress': '#fffbeb',
+        'Pending': '#fefce8',
+      };
+
+      const statusBoxBorders: Record<string, string> = {
+        'Confirmed': '#16a34a',
+        'Cancelled': '#dc2626',
+        'Completed': '#2563eb',
+        'In Progress': '#d97706',
+        'Pending': '#eab308',
+      };
+
+      const statusBoxTextColors: Record<string, string> = {
+        'Confirmed': '#15803d',
+        'Cancelled': '#b91c1c',
+        'Completed': '#1d4ed8',
+        'In Progress': '#92400e',
+        'Pending': '#854d0e',
       };
 
       const statusMessage = statusMessages[newStatus] || `Your ride status has been updated to: ${newStatus}`;
@@ -1440,7 +1497,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         const passengerDisplay = passengersFromBookingData !== undefined
           ? String((passengersFromBookingData as any))
           : personalName;
-        const priceDisplay = priceFromBookingData !== undefined ? String(priceFromBookingData) : (price ? String(price) : '');
+        let priceDisplay = priceFromBookingData !== undefined ? String(priceFromBookingData) : (price ? String(price) : '');
+        if (priceDisplay && !priceDisplay.startsWith('$')) {
+          priceDisplay = '$' + priceDisplay;
+        }
 
         const bookingDetails = [
           `Booking ID: ${bookingIdStr}`,
@@ -1454,83 +1514,193 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           priceDisplay ? `Price: ${priceDisplay}` : null,
         ].filter(Boolean).join('\n');
 
+        // Extract distance and perPerson aggressively from the payload
+        const rawDist = bookingDataInRaw?.mapDistance ?? bookingDataInRaw?.distanceKm ?? bookingDataInRaw?.distance ?? (rp as any)?.mapDistance ?? (rp as any)?.distanceKm ?? (rp as any)?.distance ?? rec.mapDistance ?? rec.distanceKm ?? rec.distance;
+        let formattedDist = rawDist ? String(rawDist).trim() : '';
+        if (formattedDist && /^\d+(?:\.\d+)?$/.test(formattedDist)) {
+          formattedDist += ' km';
+        }
+
+        const rawPerPerson = bookingDataInRaw?.perPersonFare ?? bookingDataInRaw?.perPerson ?? (rp as any)?.perPersonFare ?? (rp as any)?.perPerson ?? bookingDataInRaw?.calculatedFare ?? (rp as any)?.calculatedFare ?? rec.perPersonFare ?? rec.perPerson;
+        const perPersonStr = rawPerPerson ? (String(rawPerPerson).startsWith('$') ? String(rawPerPerson) : '$' + String(rawPerPerson)) : null;
+
+        // Build premium price table matching the design
+        const priceHtmlForEmail = `<table style="width:100%; border-collapse:collapse; margin-top:8px;">
+          ${formattedDist ? `<tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding:8px 0; border-bottom:1px solid #374151;">Distance</td><td style="color:#ffffff; font-size:14px; text-align:right; font-weight:500; border-bottom:1px solid #374151;">${formattedDist}</td></tr>` : ''}
+          <tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding:8px 0; border-bottom:1px solid #374151;">Seats</td><td style="color:#ffffff; font-size:14px; text-align:right; font-weight:500; border-bottom:1px solid #374151;">${passengerDisplay || "1"}</td></tr>
+          ${perPersonStr ? `<tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding:8px 0; border-bottom:1px solid #374151;">Per Person</td><td style="color:#ffffff; font-size:14px; text-align:right; font-weight:500; border-bottom:1px solid #374151;">${perPersonStr}</td></tr>` : ''}
+          <tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding-top:12px;">Total Price</td><td style="color:#facc15; font-size:22px; text-align:right; font-weight:600; padding-top:12px;">${priceDisplay || "N/A"}</td></tr>
+        </table>`;
+
         // Append booking details to the status message so template variable 'status_message' contains both
         const fullStatusMessage = `${statusMessage}\n\nBooking details:\n${bookingDetails}`;
         const bookingCode = `BK-${Date.now()}`;
-        // Pre-fill mailto links that admins can click to notify the customer directly
-        const subjectConfirm = encodeURIComponent(`Booking ${bookingCode} - Confirmed`);
-        const subjectCancel = encodeURIComponent(`Booking ${bookingCode} - Cancelled`);
-        const bodyConfirm = encodeURIComponent([
-          `Booking ID: ${bookingCode}`,
-          `Name: ${customerName}`,
-          `Route: ${pickupStr} → ${destStr}`,
-          `Status: Confirmed`,
-        ].join('\n'));
-        const bodyCancel = encodeURIComponent([
-          `Booking ID: ${bookingCode}`,
-          `Name: ${customerName}`,
-          `Route: ${pickupStr} → ${destStr}`,
-          `Status: Cancelled`,
-        ].join('\n'));
+        const ADMIN_EMAIL = "info@sharetaxisrilanka.com";
 
-        const confirmUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectConfirm}&body=${bodyConfirm}`;
-        const cancelUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectCancel}&body=${bodyCancel}`;
+        // Confirm/Cancel buttons email the ADMIN so they know customer's choice
+        const subjectConfirm = encodeURIComponent(`✅ CONFIRMED: Booking ${bookingCode} - ${customerName}`);
+        const subjectCancel = encodeURIComponent(`❌ CANCELLED: Booking ${bookingCode} - ${customerName}`);
+        const bodyConfirm = encodeURIComponent([
+          `Hello ShareTaxi Team,`,
+          ``,
+          `I am writing to confirm my ride acceptance for the following booking:`,
+          ``,
+          `Booking Reference: ${bookingCode}`,
+          `Passenger Name: ${customerName}`,
+          `Contact Number: ${personalPhone}`,
+          `Route: ${pickupStr} → ${destStr}`,
+          `Scheduled Date: ${dateStr} at ${timeStr}`,
+          ``,
+          `Please proceed with the dispatch process. Thank you!`,
+          ``,
+          `Best regards,`,
+          `${customerName}`
+        ].join('\r\n'));
+
+        const bodyCancel = encodeURIComponent([
+          `Hello ShareTaxi Team,`,
+          ``,
+          `I would like to cancel my ride request for the following booking:`,
+          ``,
+          `Booking Reference: ${bookingCode}`,
+          `Passenger Name: ${customerName}`,
+          `Contact Number: ${personalPhone}`,
+          `Route: ${pickupStr} → ${destStr}`,
+          `Scheduled Date: ${dateStr} at ${timeStr}`,
+          ``,
+          `Please let me know if any further action is required from my side.`,
+          ``,
+          `Best regards,`,
+          `${customerName}`
+        ].join('\r\n'));
+
+        // Only include confirm/cancel buttons when status is Confirmed
+        const confirmUrl = newStatus === 'Confirmed' ? `mailto:${ADMIN_EMAIL}?subject=${subjectConfirm}&body=${bodyConfirm}` : '';
+        const cancelUrl = newStatus === 'Confirmed' ? `mailto:${ADMIN_EMAIL}?subject=${subjectCancel}&body=${bodyCancel}` : '';
+
+        // Build button HTML in code — EmailJS free plan doesn't support {{#if}} conditionals
+        const actionButtonsHtml = newStatus === 'Confirmed' ? `
+          <div style="text-align:center; margin-bottom:32px;">
+            <div style="font-size:12px; text-transform:uppercase; letter-spacing:1px; color:#6b7280; margin-bottom:16px;">Please confirm your ride status below</div>
+            <a href="${confirmUrl}" style="display:inline-block; background-color:#16a34a; color:#ffffff; font-size:14px; font-weight:600; padding:14px 28px; text-decoration:none; margin-right:8px; margin-bottom:8px; letter-spacing:0.3px;">✓ &nbsp; Confirm My Ride</a>
+            <a href="${cancelUrl}" style="display:inline-block; background-color:#111827; color:#ffffff; font-size:14px; font-weight:600; padding:14px 28px; text-decoration:none; margin-bottom:8px; letter-spacing:0.3px; border:1px solid #374151;">✕ &nbsp; Cancel My Ride</a>
+          </div>` : '';
 
         await emailjs.send(
           process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
-          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID2!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID_STATUS || "template_xd6ospg",
           {
             to_email: customerEmail,
-            subject: `🚖 Ride Status Update: ${newStatus}`,
+            subject: newStatus === 'Confirmed' ? `✅ Your ShareTaxi Ride is Confirmed!` : `🚖 Ride Status Update: ${newStatus}`,
+            customer_name: customerName,
+            personal_email: personalEmail,
+            customer_phone: personalPhone,
             name: customerName,
             from: pickupStr,
+            from_location: pickupStr,
             to: destStr,
+            to_location: destStr,
             taxi_type: taxiType,
+            vehicle_type: taxiType,
             date: dateStr,
+            pickup_date: dateStr,
             time: timeStr,
-            passengers: ride.passengers || ride.seats?.total || '',
+            pickup_time: timeStr,
+            passengers: String(passengerCount || ''),
+            passenger_count: String(passengerCount || ''),
+            price_html: priceHtmlForEmail,
             status_message: fullStatusMessage,
-            confirm_url: confirmUrl,
-        cancel_url: cancelUrl,
+            booking_code: bookingCode,
+            status_header: statusHeaders[newStatus] || `Ride Status: ${newStatus}`,
+            status_title: (statusHeaders[newStatus] || `Ride Status: ${newStatus}`).replace('<br>', ' '),
+            status_tag: statusTags[newStatus] || newStatus,
+            status_tag_color: statusTagColors[newStatus] || '#eab308',
+            status_tag_text: statusTagTextColors[newStatus] || '#000000',
+            status_box_bg: statusBoxColors[newStatus] || '#fefce8',
+            status_box_border: statusBoxBorders[newStatus] || '#eab308',
+            status_box_text: statusBoxTextColors[newStatus] || '#854d0e',
+            action_buttons_html: actionButtonsHtml,
           },
           { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
         );
       } catch (innerErr) {
         // If building booking details fails for any reason, fall back to sending the basic status message
         console.warn('Failed to build booking details for status email, sending basic message instead.', innerErr);
-        const bookingCode = `BK-${Date.now()}`;
-        const subjectConfirmFallback = encodeURIComponent(`Booking ${bookingCode} - Confirmed`);
-        const subjectCancelFallback = encodeURIComponent(`Booking ${bookingCode} - Cancelled`);
+        const bookingCode2 = `BK-${Date.now()}`;
+        const ADMIN_EMAIL2 = "info@sharetaxisrilanka.com";
+        const subjectConfirmFallback = encodeURIComponent(`✅ CONFIRMED: Booking ${bookingCode2} - ${customerName}`);
+        const subjectCancelFallback = encodeURIComponent(`❌ CANCELLED: Booking ${bookingCode2} - ${customerName}`);
         const bodyConfirmFallback = encodeURIComponent([
-          `Booking ID: ${bookingCode}`,
-          `Name: ${customerName}`,
+          `Hello ShareTaxi Team,`,
+          ``,
+          `I am writing to confirm my ride acceptance for the following booking:`,
+          ``,
+          `Booking Reference: ${bookingCode2}`,
+          `Passenger Name: ${customerName}`,
           `Route: ${formatLocation(ride.pickup)} → ${formatLocation(ride.destination)}`,
-          `Status: Confirmed`,
-        ].join('\n'));
+          ``,
+          `Please proceed with the dispatch process. Thank you!`,
+          ``,
+          `Best regards,`,
+          `${customerName}`
+        ].join('\r\n'));
+
         const bodyCancelFallback = encodeURIComponent([
-          `Booking ID: ${bookingCode}`,
-          `Name: ${customerName}`,
+          `Hello ShareTaxi Team,`,
+          ``,
+          `I would like to cancel my ride request for the following booking:`,
+          ``,
+          `Booking Reference: ${bookingCode2}`,
+          `Passenger Name: ${customerName}`,
           `Route: ${formatLocation(ride.pickup)} → ${formatLocation(ride.destination)}`,
-          `Status: Cancelled`,
-        ].join('\n'));
-        const confirmUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectConfirmFallback}&body=${bodyConfirmFallback}`;
-        const cancelUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectCancelFallback}&body=${bodyCancelFallback}`;
+          ``,
+          `Please let me know if any further action is required from my side.`,
+          ``,
+          `Best regards,`,
+          `${customerName}`
+        ].join('\r\n'));
+        const confirmUrl2 = newStatus === 'Confirmed' ? `mailto:${ADMIN_EMAIL2}?subject=${subjectConfirmFallback}&body=${bodyConfirmFallback}` : '';
+        const cancelUrl2 = newStatus === 'Confirmed' ? `mailto:${ADMIN_EMAIL2}?subject=${subjectCancelFallback}&body=${bodyCancelFallback}` : '';
+
+        const actionButtonsHtml2 = newStatus === 'Confirmed' ? `
+          <div style="text-align:center; margin-bottom:32px;">
+            <div style="font-size:12px; text-transform:uppercase; letter-spacing:1px; color:#6b7280; margin-bottom:16px;">Please confirm your ride status below</div>
+            <a href="${confirmUrl2}" style="display:inline-block; background-color:#16a34a; color:#ffffff; font-size:14px; font-weight:600; padding:14px 28px; text-decoration:none; margin-right:8px; margin-bottom:8px; letter-spacing:0.3px;">✓ &nbsp; Confirm My Ride</a>
+            <a href="${cancelUrl2}" style="display:inline-block; background-color:#111827; color:#ffffff; font-size:14px; font-weight:600; padding:14px 28px; text-decoration:none; margin-bottom:8px; letter-spacing:0.3px; border:1px solid #374151;">✕ &nbsp; Cancel My Ride</a>
+          </div>` : '';
+
         await emailjs.send(
           process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
-          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID2!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID_STATUS || "template_xd6ospg",
           {
             to_email: customerEmail,
-            subject: `🚖 Ride Status Update: ${newStatus}`,
+            subject: newStatus === 'Confirmed' ? `✅ Your ShareTaxi Ride is Confirmed!` : `🚖 Ride Status Update: ${newStatus}`,
+            customer_name: customerName,
             name: customerName,
             from: formatLocation(ride.pickup),
+            from_location: formatLocation(ride.pickup),
             to: formatLocation(ride.destination),
+            to_location: formatLocation(ride.destination),
             taxi_type: ride.type || 'ride',
+            vehicle_type: ride.type || 'ride',
             date: typeof ride.postedDate === 'string' ? new Date(ride.postedDate).toLocaleDateString() : '',
+            pickup_date: typeof ride.postedDate === 'string' ? new Date(ride.postedDate).toLocaleDateString() : '',
             time: ride.time || '',
-            passengers: ride.passengers || ride.seats?.total || '',
+            pickup_time: ride.time || '',
+            passengers: String(ride.passengers || ride.seats?.total || ''),
+            passenger_count: String(ride.passengers || ride.seats?.total || ''),
+            price_html: '',
             status_message: statusMessage,
-            confirm_url: confirmUrl,
-            cancel_url: cancelUrl,
+            booking_code: bookingCode2,
+            status_header: statusHeaders[newStatus] || `Ride Status: ${newStatus}`,
+            status_title: (statusHeaders[newStatus] || `Ride Status: ${newStatus}`).replace('<br>', ' '),
+            status_tag: statusTags[newStatus] || newStatus,
+            status_tag_color: statusTagColors[newStatus] || '#eab308',
+            status_tag_text: statusTagTextColors[newStatus] || '#000000',
+            status_box_bg: statusBoxColors[newStatus] || '#fefce8',
+            status_box_border: statusBoxBorders[newStatus] || '#eab308',
+            status_box_text: statusBoxTextColors[newStatus] || '#854d0e',
+            action_buttons_html: actionButtonsHtml2,
           },
           { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
         );

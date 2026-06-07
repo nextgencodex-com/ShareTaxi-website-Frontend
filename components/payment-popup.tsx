@@ -266,7 +266,7 @@ Price: ${extractedTotal} for ${extractedSeats} persons
   // Generate a booking code and helpful URLs for confirm/cancel (client-side)
   const bookingCode = `BK-${Date.now()}`;
   // Create mailto links so clicking Confirm/Cancel in the email opens an email to the admin
-  const adminNotificationEmail = "bookingsharetaxisrilanka@gmail.com";
+  const adminNotificationEmail = "info@sharetaxisrilanka.com";
   const nameForBody = personalData?.fullName ? String(personalData.fullName) : "N/A";
   const baseBody = `Booking ID: ${bookingCode}\nName: ${nameForBody}\n`;
   const confirmSubject = encodeURIComponent(`Booking ${bookingCode} - Confirm`);
@@ -332,9 +332,20 @@ Price: ${extractedTotal} for ${extractedSeats} persons
     })();
     const specialRequest = personalData?.specialRequests || "";
     const toEmail = recipientEmail || customerEmail;
+
+    const priceHtml = `<table style="width:100%; border-collapse:collapse; margin-top:8px;">
+      <tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding:8px 0; border-bottom:1px solid #374151;">Distance</td><td style="color:#ffffff; font-size:14px; text-align:right; font-weight:500; border-bottom:1px solid #374151;">${totalDistance || "N/A"}</td></tr>
+      <tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding:8px 0; border-bottom:1px solid #374151;">Seats</td><td style="color:#ffffff; font-size:14px; text-align:right; font-weight:500; border-bottom:1px solid #374151;">${extractedSeats || personalData?.seatCount || "1"}</td></tr>
+      <tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding:8px 0; border-bottom:1px solid #374151;">Per Person</td><td style="color:#ffffff; font-size:14px; text-align:right; font-weight:500; border-bottom:1px solid #374151;">${(displayPerPerson || extractedPerPersonFare) ? '$' + String(displayPerPerson || extractedPerPersonFare).replace('$', '') : "N/A"}</td></tr>
+      <tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding-top:12px;">Total Price</td><td style="color:#facc15; font-size:22px; text-align:right; font-weight:600; padding-top:12px;">${(displayTotal || extractedTotal) ? '$' + String(displayTotal || extractedTotal).replace('$', '') : "N/A"}</td></tr>
+    </table>`;
+
+    const _svcId = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID || "service_fjdhppf";
+    const _tplId = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID || "template_977heoe";
+    console.log("[EmailJS] sendConfirmationEmail using serviceId:", _svcId, "templateId:", _tplId);
     const result = await emailjs.send(
-      process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
-      process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+      _svcId,
+      _tplId,
       {
         // Basic recipient / subject
         to_email: toEmail,
@@ -375,6 +386,7 @@ Price: ${extractedTotal} for ${extractedSeats} persons
         luggage: specialRequest,
         seats: extractedSeats,
   per_person_fare: displayPerPerson || extractedPerPersonFare,
+        price_html: priceHtml,
         booking_details: bookingDetails,
         status_message:
           "Your booking request has been received and is currently under review. We will contact you soon to confirm and share next steps.",
@@ -414,6 +426,7 @@ const sendWelcomeEmail = async (
       bookingData.rideType === "personal"
         ? "🚖 Thanks! Your personal ride request is under review"
         : "🚖 Thanks! Your shared ride request is under review";
+    console.log("SENDING CUSTOMER EMAIL! Loaded Service ID:", process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID);
     await emailjs.send(
       process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
       process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
@@ -522,7 +535,7 @@ export function PaymentDetailsPopup({
   const [bookingInProgress, setBookingInProgress] = useState(false);
 
   // Admin notification email (centralized) — avoid sending duplicate notifications
-  const ADMIN_NOTIFICATION_EMAIL = "bookingsharetaxisrilanka@gmail.com";
+  const ADMIN_NOTIFICATION_EMAIL = "info@sharetaxisrilanka.com";
   // Constant total seats for vehicles; entered seat count is how many seats the user is booking
   const TOTAL_SEATS = 10;
 
@@ -659,10 +672,10 @@ export function PaymentDetailsPopup({
               };
               // Non-blocking admin send via EmailJS
               try {
-                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                console.log("SENDING ADMIN EMAIL! Loaded Service ID:", process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID);
                 await emailjs.send(
                   process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
-                  process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+                  process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID_ADMIN || process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
                   adminPayload,
                   { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
                 );
@@ -1520,7 +1533,7 @@ export function PaymentDetailsPopup({
       //     regularPerPersonFare,
       //   ],
       //   adminSubject: "[Admin] New Booking Request",
-      //   adminEmail: "bookingsharetaxisrilanka@gmail.com",
+      //   adminEmail: "info@sharetaxisrilanka.com",
       // });
 
       // Persist booked ride unless we already created the ride above
