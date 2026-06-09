@@ -163,12 +163,31 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
   const [activePage, setActivePage] = useState<typeof pages[number]["key"]>("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [recentActivityCategory, setRecentActivityCategory] = useState<"all" | "shared" | "private" | "personal">("all");
 
   // ---- Dialog states ---
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<RideData | null>(null);
   const [passengersDialogOpen, setPassengersDialogOpen] = useState(false);
   const [selectedRideForPassengers, setSelectedRideForPassengers] = useState<RideData | null>(null);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ id: number; type: 'shared' | 'vehicle' | 'personal' } | null>(null);
+
+  const confirmDelete = (id: number, type: 'shared' | 'vehicle' | 'personal') => {
+    setItemToDelete({ id, type });
+    setDeleteDialogOpen(true);
+  };
+
+  const executeDelete = () => {
+    if (!itemToDelete) return;
+    if (itemToDelete.type === 'shared') handleDeleteShared(itemToDelete.id);
+    else if (itemToDelete.type === 'vehicle') handleDeleteVehicleBooking(itemToDelete.id);
+    else if (itemToDelete.type === 'personal') handleDeletePersonal(itemToDelete.id);
+    setDeleteDialogOpen(false);
+    setItemToDelete(null);
+  };
+
   // Helper to safely extract a location string from either a string or an object like {location: string}
   const formatLocation = (v: unknown) => {
     if (!v && v !== 0) return 'N/A'
@@ -199,12 +218,13 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
   const toISOStringSafe = (v: unknown) => {
     if (typeof v === 'string') return v;
     if (v instanceof Date) return v.toISOString();
-    if (v && typeof (v as Record<string, unknown>).toDate === 'function') {
-      try {
-        return (v as { toDate: () => Date }).toDate().toISOString();
-      } catch {
-        return new Date().toISOString();
+    if (v && typeof v === 'object') {
+      const rec = v as Record<string, unknown>;
+      if (typeof rec.toDate === 'function') {
+        try { return (rec as { toDate: () => Date }).toDate().toISOString(); } catch { }
       }
+      if (typeof rec._seconds === 'number') return new Date(rec._seconds * 1000).toISOString();
+      if (typeof rec.seconds === 'number') return new Date(rec.seconds * 1000).toISOString();
     }
     return new Date().toISOString();
   };
@@ -327,6 +347,20 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       console.error("Failed to load admin data:", err);
     }
   }, []);
+
+  // Calculate time ago based on posted/created date
+  const calculateTimeAgo = (dateInput: string | Date | null | undefined): string => {
+    if (!dateInput) return "just now";
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return "just now";
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    if (diffInSeconds < 60) return "just now";
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hour${Math.floor(diffInSeconds / 3600) > 1 ? 's' : ''} ago`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} day${Math.floor(diffInSeconds / 86400) > 1 ? 's' : ''} ago`;
+    return `${Math.floor(diffInSeconds / 2592000)} month${Math.floor(diffInSeconds / 2592000) > 1 ? 's' : ''} ago`;
+  };
 
   /* ---------- save helpers ---------- */
   const persistSharedRides = (list: RideData[]) => {
@@ -475,7 +509,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             const rideData = {
               id,
               bookingId,
-              timeAgo: "just now",
+              timeAgo: calculateTimeAgo(postedDateIso),
               postedDate: postedDateIso,
               frequency: typeof r.frequency === 'string' ? r.frequency : "one-time",
               status: typeof r.status === 'string' ? r.status : "Pending",
@@ -550,7 +584,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             return {
               id,
               bookingId,
-              timeAgo: 'just now',
+              timeAgo: calculateTimeAgo(postedDate),
               postedDate,
               frequency: typeof r.frequency === 'string' ? r.frequency : 'one-time',
               status: typeof r.status === 'string' ? r.status : 'Pending',
@@ -660,7 +694,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             return {
               id,
               bookingId,
-              timeAgo: 'just now',
+              timeAgo: calculateTimeAgo(postedDate),
               postedDate,
               frequency: typeof r.frequency === 'string' ? r.frequency : 'one-time',
               status: typeof r.status === 'string' ? r.status : 'Pending',
@@ -846,7 +880,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       const payload = {
         pickupLocation: rideForm.pickupLocation.trim(),
         destinationLocation: rideForm.destinationLocation.trim(),
-        ...(rideForm.frequency === "one-time" && { rideDate: rideForm.rideDate }),
+        ...(rideForm.frequency === "one-time" && { 
+          rideDate: rideForm.rideDate,
+          pickupDate: rideForm.rideDate
+        }),
         pickupTime: rideForm.pickupTime,
         ampm: rideForm.ampm,
         luggage: rideForm.luggage,
@@ -1326,9 +1363,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       );
 
       if (!customerEmail) {
-        console.warn('No valid customer email found for status notification');
+        console.warn('[Status Email] No valid customer email found. ride:', JSON.stringify(rec).slice(0, 300));
         return;
       }
+      console.log('[Status Email] Sending to:', customerEmail, '| Status:', newStatus, '| Template:', process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID_STATUS || 'template_xd6ospg (fallback)');
 
       const customerName = pickNonPlaceholder(
         nestedPD && typeof nestedPD.fullName === 'string' ? nestedPD.fullName as string : undefined,
@@ -1339,11 +1377,67 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
       ) || 'Valued Customer';
 
       const statusMessages: Record<string, string> = {
-        'Confirmed': 'Great news! Your ride has been confirmed. We will contact you shortly with further details.',
-        'Cancelled': 'Your ride has been cancelled. If you have any questions, please contact us.',
-        'Completed': 'Thank you for riding with us! Your ride has been completed. We hope to serve you again soon.',
-        'In Progress': 'Your ride is now in progress. Your driver is on the way!',
-        'Pending': 'Your ride is pending confirmation. We will update you soon.'
+        'Confirmed': 'Great news! Your ride has been confirmed by our team. Please use the buttons below to confirm your acceptance or let us know if you need to cancel.',
+        'Cancelled': 'Your ride booking has been cancelled. If you believe this is a mistake or would like to rebook, please contact us.',
+        'Completed': 'Thank you for riding with ShareTaxi Sri Lanka! We hope you had a smooth journey. We would love to hear your feedback.',
+        'In Progress': 'Your ride is now in progress. Your driver is on the way — please be ready at your pickup location!',
+        'Pending': 'Your ride is pending confirmation. Our team is reviewing your request and will update you shortly.'
+      };
+
+      const statusHeaders: Record<string, string> = {
+        'Confirmed': 'Your ride has<br>been confirmed',
+        'Cancelled': 'Your ride has<br>been cancelled',
+        'Completed': 'Your ride is<br>complete',
+        'In Progress': 'Your ride is<br>in progress',
+        'Pending': 'Your ride is<br>pending review',
+      };
+
+      const statusTags: Record<string, string> = {
+        'Confirmed': '✓ Confirmed',
+        'Cancelled': '✕ Cancelled',
+        'Completed': '✓ Completed',
+        'In Progress': '⟳ In Progress',
+        'Pending': '⏳ Pending',
+      };
+
+      const statusTagColors: Record<string, string> = {
+        'Confirmed': '#16a34a',
+        'Cancelled': '#dc2626',
+        'Completed': '#2563eb',
+        'In Progress': '#d97706',
+        'Pending': '#eab308',
+      };
+
+      const statusTagTextColors: Record<string, string> = {
+        'Confirmed': '#ffffff',
+        'Cancelled': '#ffffff',
+        'Completed': '#ffffff',
+        'In Progress': '#ffffff',
+        'Pending': '#000000',
+      };
+
+      const statusBoxColors: Record<string, string> = {
+        'Confirmed': '#f0fdf4',
+        'Cancelled': '#fef2f2',
+        'Completed': '#eff6ff',
+        'In Progress': '#fffbeb',
+        'Pending': '#fefce8',
+      };
+
+      const statusBoxBorders: Record<string, string> = {
+        'Confirmed': '#16a34a',
+        'Cancelled': '#dc2626',
+        'Completed': '#2563eb',
+        'In Progress': '#d97706',
+        'Pending': '#eab308',
+      };
+
+      const statusBoxTextColors: Record<string, string> = {
+        'Confirmed': '#15803d',
+        'Cancelled': '#b91c1c',
+        'Completed': '#1d4ed8',
+        'In Progress': '#92400e',
+        'Pending': '#854d0e',
       };
 
       const statusMessage = statusMessages[newStatus] || `Your ride status has been updated to: ${newStatus}`;
@@ -1356,7 +1450,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
         // determine date/time
         let dateObj: Date | null = null;
-        const pdRaw = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.pickupDate) ?? rec.pickupDate ?? rec.postedDate;
+        const rpObj = rec.rawPayload as Record<string, unknown> | undefined;
+        const bdObj = rpObj?.bookingData as Record<string, unknown> | undefined;
+        const pdRaw = (rpObj?.pickupDate) ?? (rpObj?.rideDate) ?? (rpObj?.date) ?? (bdObj?.date) ?? rec.pickupDate ?? rec.postedDate;
         if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
         else if (pdRaw && typeof pdRaw === 'object') {
           const pRec = pdRaw as Record<string, unknown>;
@@ -1401,7 +1497,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
         const passengerDisplay = passengersFromBookingData !== undefined
           ? String((passengersFromBookingData as any))
           : personalName;
-        const priceDisplay = priceFromBookingData !== undefined ? String(priceFromBookingData) : (price ? String(price) : '');
+        let priceDisplay = priceFromBookingData !== undefined ? String(priceFromBookingData) : (price ? String(price) : '');
+        if (priceDisplay && !priceDisplay.startsWith('$')) {
+          priceDisplay = '$' + priceDisplay;
+        }
 
         const bookingDetails = [
           `Booking ID: ${bookingIdStr}`,
@@ -1415,83 +1514,193 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
           priceDisplay ? `Price: ${priceDisplay}` : null,
         ].filter(Boolean).join('\n');
 
+        // Extract distance and perPerson aggressively from the payload
+        const rawDist = bookingDataInRaw?.mapDistance ?? bookingDataInRaw?.distanceKm ?? bookingDataInRaw?.distance ?? (rp as any)?.mapDistance ?? (rp as any)?.distanceKm ?? (rp as any)?.distance ?? rec.mapDistance ?? rec.distanceKm ?? rec.distance;
+        let formattedDist = rawDist ? String(rawDist).trim() : '';
+        if (formattedDist && /^\d+(?:\.\d+)?$/.test(formattedDist)) {
+          formattedDist += ' km';
+        }
+
+        const rawPerPerson = bookingDataInRaw?.perPersonFare ?? bookingDataInRaw?.perPerson ?? (rp as any)?.perPersonFare ?? (rp as any)?.perPerson ?? bookingDataInRaw?.calculatedFare ?? (rp as any)?.calculatedFare ?? rec.perPersonFare ?? rec.perPerson;
+        const perPersonStr = rawPerPerson ? (String(rawPerPerson).startsWith('$') ? String(rawPerPerson) : '$' + String(rawPerPerson)) : null;
+
+        // Build premium price table matching the design
+        const priceHtmlForEmail = `<table style="width:100%; border-collapse:collapse; margin-top:8px;">
+          ${formattedDist ? `<tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding:8px 0; border-bottom:1px solid #374151;">Distance</td><td style="color:#ffffff; font-size:14px; text-align:right; font-weight:500; border-bottom:1px solid #374151;">${formattedDist}</td></tr>` : ''}
+          <tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding:8px 0; border-bottom:1px solid #374151;">Seats</td><td style="color:#ffffff; font-size:14px; text-align:right; font-weight:500; border-bottom:1px solid #374151;">${passengerDisplay || "1"}</td></tr>
+          ${perPersonStr ? `<tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding:8px 0; border-bottom:1px solid #374151;">Per Person</td><td style="color:#ffffff; font-size:14px; text-align:right; font-weight:500; border-bottom:1px solid #374151;">${perPersonStr}</td></tr>` : ''}
+          <tr><td style="color:#9ca3af; font-size:13px; text-align:left; padding-top:12px;">Total Price</td><td style="color:#facc15; font-size:22px; text-align:right; font-weight:600; padding-top:12px;">${priceDisplay || "N/A"}</td></tr>
+        </table>`;
+
         // Append booking details to the status message so template variable 'status_message' contains both
         const fullStatusMessage = `${statusMessage}\n\nBooking details:\n${bookingDetails}`;
         const bookingCode = `BK-${Date.now()}`;
-        // Pre-fill mailto links that admins can click to notify the customer directly
-        const subjectConfirm = encodeURIComponent(`Booking ${bookingCode} - Confirmed`);
-        const subjectCancel = encodeURIComponent(`Booking ${bookingCode} - Cancelled`);
-        const bodyConfirm = encodeURIComponent([
-          `Booking ID: ${bookingCode}`,
-          `Name: ${customerName}`,
-          `Route: ${pickupStr} → ${destStr}`,
-          `Status: Confirmed`,
-        ].join('\n'));
-        const bodyCancel = encodeURIComponent([
-          `Booking ID: ${bookingCode}`,
-          `Name: ${customerName}`,
-          `Route: ${pickupStr} → ${destStr}`,
-          `Status: Cancelled`,
-        ].join('\n'));
+        const ADMIN_EMAIL = "info@sharetaxisrilanka.com";
 
-        const confirmUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectConfirm}&body=${bodyConfirm}`;
-        const cancelUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectCancel}&body=${bodyCancel}`;
+        // Confirm/Cancel buttons email the ADMIN so they know customer's choice
+        const subjectConfirm = encodeURIComponent(`✅ CONFIRMED: Booking ${bookingCode} - ${customerName}`);
+        const subjectCancel = encodeURIComponent(`❌ CANCELLED: Booking ${bookingCode} - ${customerName}`);
+        const bodyConfirm = encodeURIComponent([
+          `Hello ShareTaxi Team,`,
+          ``,
+          `I am writing to confirm my ride acceptance for the following booking:`,
+          ``,
+          `Booking Reference: ${bookingCode}`,
+          `Passenger Name: ${customerName}`,
+          `Contact Number: ${personalPhone}`,
+          `Route: ${pickupStr} → ${destStr}`,
+          `Scheduled Date: ${dateStr} at ${timeStr}`,
+          ``,
+          `Please proceed with the dispatch process. Thank you!`,
+          ``,
+          `Best regards,`,
+          `${customerName}`
+        ].join('\r\n'));
+
+        const bodyCancel = encodeURIComponent([
+          `Hello ShareTaxi Team,`,
+          ``,
+          `I would like to cancel my ride request for the following booking:`,
+          ``,
+          `Booking Reference: ${bookingCode}`,
+          `Passenger Name: ${customerName}`,
+          `Contact Number: ${personalPhone}`,
+          `Route: ${pickupStr} → ${destStr}`,
+          `Scheduled Date: ${dateStr} at ${timeStr}`,
+          ``,
+          `Please let me know if any further action is required from my side.`,
+          ``,
+          `Best regards,`,
+          `${customerName}`
+        ].join('\r\n'));
+
+        // Only include confirm/cancel buttons when status is Confirmed
+        const confirmUrl = newStatus === 'Confirmed' ? `mailto:${ADMIN_EMAIL}?subject=${subjectConfirm}&body=${bodyConfirm}` : '';
+        const cancelUrl = newStatus === 'Confirmed' ? `mailto:${ADMIN_EMAIL}?subject=${subjectCancel}&body=${bodyCancel}` : '';
+
+        // Build button HTML in code — EmailJS free plan doesn't support {{#if}} conditionals
+        const actionButtonsHtml = newStatus === 'Confirmed' ? `
+          <div style="text-align:center; margin-bottom:32px;">
+            <div style="font-size:12px; text-transform:uppercase; letter-spacing:1px; color:#6b7280; margin-bottom:16px;">Please confirm your ride status below</div>
+            <a href="${confirmUrl}" style="display:inline-block; background-color:#16a34a; color:#ffffff; font-size:14px; font-weight:600; padding:14px 28px; text-decoration:none; margin-right:8px; margin-bottom:8px; letter-spacing:0.3px;">✓ &nbsp; Confirm My Ride</a>
+            <a href="${cancelUrl}" style="display:inline-block; background-color:#111827; color:#ffffff; font-size:14px; font-weight:600; padding:14px 28px; text-decoration:none; margin-bottom:8px; letter-spacing:0.3px; border:1px solid #374151;">✕ &nbsp; Cancel My Ride</a>
+          </div>` : '';
 
         await emailjs.send(
           process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
-          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID2!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID_STATUS || "template_xd6ospg",
           {
             to_email: customerEmail,
-            subject: `🚖 Ride Status Update: ${newStatus}`,
+            subject: newStatus === 'Confirmed' ? `✅ Your ShareTaxi Ride is Confirmed!` : `🚖 Ride Status Update: ${newStatus}`,
+            customer_name: customerName,
+            personal_email: personalEmail,
+            customer_phone: personalPhone,
             name: customerName,
             from: pickupStr,
+            from_location: pickupStr,
             to: destStr,
+            to_location: destStr,
             taxi_type: taxiType,
+            vehicle_type: taxiType,
             date: dateStr,
+            pickup_date: dateStr,
             time: timeStr,
-            passengers: ride.passengers || ride.seats?.total || '',
+            pickup_time: timeStr,
+            passengers: String(passengerCount || ''),
+            passenger_count: String(passengerCount || ''),
+            price_html: priceHtmlForEmail,
             status_message: fullStatusMessage,
-            confirm_url: confirmUrl,
-        cancel_url: cancelUrl,
+            booking_code: bookingCode,
+            status_header: statusHeaders[newStatus] || `Ride Status: ${newStatus}`,
+            status_title: (statusHeaders[newStatus] || `Ride Status: ${newStatus}`).replace('<br>', ' '),
+            status_tag: statusTags[newStatus] || newStatus,
+            status_tag_color: statusTagColors[newStatus] || '#eab308',
+            status_tag_text: statusTagTextColors[newStatus] || '#000000',
+            status_box_bg: statusBoxColors[newStatus] || '#fefce8',
+            status_box_border: statusBoxBorders[newStatus] || '#eab308',
+            status_box_text: statusBoxTextColors[newStatus] || '#854d0e',
+            action_buttons_html: actionButtonsHtml,
           },
           { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
         );
       } catch (innerErr) {
         // If building booking details fails for any reason, fall back to sending the basic status message
         console.warn('Failed to build booking details for status email, sending basic message instead.', innerErr);
-        const bookingCode = `BK-${Date.now()}`;
-        const subjectConfirmFallback = encodeURIComponent(`Booking ${bookingCode} - Confirmed`);
-        const subjectCancelFallback = encodeURIComponent(`Booking ${bookingCode} - Cancelled`);
+        const bookingCode2 = `BK-${Date.now()}`;
+        const ADMIN_EMAIL2 = "info@sharetaxisrilanka.com";
+        const subjectConfirmFallback = encodeURIComponent(`✅ CONFIRMED: Booking ${bookingCode2} - ${customerName}`);
+        const subjectCancelFallback = encodeURIComponent(`❌ CANCELLED: Booking ${bookingCode2} - ${customerName}`);
         const bodyConfirmFallback = encodeURIComponent([
-          `Booking ID: ${bookingCode}`,
-          `Name: ${customerName}`,
+          `Hello ShareTaxi Team,`,
+          ``,
+          `I am writing to confirm my ride acceptance for the following booking:`,
+          ``,
+          `Booking Reference: ${bookingCode2}`,
+          `Passenger Name: ${customerName}`,
           `Route: ${formatLocation(ride.pickup)} → ${formatLocation(ride.destination)}`,
-          `Status: Confirmed`,
-        ].join('\n'));
+          ``,
+          `Please proceed with the dispatch process. Thank you!`,
+          ``,
+          `Best regards,`,
+          `${customerName}`
+        ].join('\r\n'));
+
         const bodyCancelFallback = encodeURIComponent([
-          `Booking ID: ${bookingCode}`,
-          `Name: ${customerName}`,
+          `Hello ShareTaxi Team,`,
+          ``,
+          `I would like to cancel my ride request for the following booking:`,
+          ``,
+          `Booking Reference: ${bookingCode2}`,
+          `Passenger Name: ${customerName}`,
           `Route: ${formatLocation(ride.pickup)} → ${formatLocation(ride.destination)}`,
-          `Status: Cancelled`,
-        ].join('\n'));
-        const confirmUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectConfirmFallback}&body=${bodyConfirmFallback}`;
-        const cancelUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${subjectCancelFallback}&body=${bodyCancelFallback}`;
+          ``,
+          `Please let me know if any further action is required from my side.`,
+          ``,
+          `Best regards,`,
+          `${customerName}`
+        ].join('\r\n'));
+        const confirmUrl2 = newStatus === 'Confirmed' ? `mailto:${ADMIN_EMAIL2}?subject=${subjectConfirmFallback}&body=${bodyConfirmFallback}` : '';
+        const cancelUrl2 = newStatus === 'Confirmed' ? `mailto:${ADMIN_EMAIL2}?subject=${subjectCancelFallback}&body=${bodyCancelFallback}` : '';
+
+        const actionButtonsHtml2 = newStatus === 'Confirmed' ? `
+          <div style="text-align:center; margin-bottom:32px;">
+            <div style="font-size:12px; text-transform:uppercase; letter-spacing:1px; color:#6b7280; margin-bottom:16px;">Please confirm your ride status below</div>
+            <a href="${confirmUrl2}" style="display:inline-block; background-color:#16a34a; color:#ffffff; font-size:14px; font-weight:600; padding:14px 28px; text-decoration:none; margin-right:8px; margin-bottom:8px; letter-spacing:0.3px;">✓ &nbsp; Confirm My Ride</a>
+            <a href="${cancelUrl2}" style="display:inline-block; background-color:#111827; color:#ffffff; font-size:14px; font-weight:600; padding:14px 28px; text-decoration:none; margin-bottom:8px; letter-spacing:0.3px; border:1px solid #374151;">✕ &nbsp; Cancel My Ride</a>
+          </div>` : '';
+
         await emailjs.send(
           process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
-          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID2!,
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID_STATUS || "template_xd6ospg",
           {
             to_email: customerEmail,
-            subject: `🚖 Ride Status Update: ${newStatus}`,
+            subject: newStatus === 'Confirmed' ? `✅ Your ShareTaxi Ride is Confirmed!` : `🚖 Ride Status Update: ${newStatus}`,
+            customer_name: customerName,
             name: customerName,
             from: formatLocation(ride.pickup),
+            from_location: formatLocation(ride.pickup),
             to: formatLocation(ride.destination),
+            to_location: formatLocation(ride.destination),
             taxi_type: ride.type || 'ride',
+            vehicle_type: ride.type || 'ride',
             date: typeof ride.postedDate === 'string' ? new Date(ride.postedDate).toLocaleDateString() : '',
+            pickup_date: typeof ride.postedDate === 'string' ? new Date(ride.postedDate).toLocaleDateString() : '',
             time: ride.time || '',
-            passengers: ride.passengers || ride.seats?.total || '',
+            pickup_time: ride.time || '',
+            passengers: String(ride.passengers || ride.seats?.total || ''),
+            passenger_count: String(ride.passengers || ride.seats?.total || ''),
+            price_html: '',
             status_message: statusMessage,
-            confirm_url: confirmUrl,
-            cancel_url: cancelUrl,
+            booking_code: bookingCode2,
+            status_header: statusHeaders[newStatus] || `Ride Status: ${newStatus}`,
+            status_title: (statusHeaders[newStatus] || `Ride Status: ${newStatus}`).replace('<br>', ' '),
+            status_tag: statusTags[newStatus] || newStatus,
+            status_tag_color: statusTagColors[newStatus] || '#eab308',
+            status_tag_text: statusTagTextColors[newStatus] || '#000000',
+            status_box_bg: statusBoxColors[newStatus] || '#fefce8',
+            status_box_border: statusBoxBorders[newStatus] || '#eab308',
+            status_box_text: statusBoxTextColors[newStatus] || '#854d0e',
+            action_buttons_html: actionButtonsHtml2,
           },
           { publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY! }
         );
@@ -1675,26 +1884,27 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             <table className="w-full text-sm">
               <thead className="bg-slate-50/50">
                 <tr>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Booking ID</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700 min-w-[140px]">Date & Time</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Route</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Customer</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700 hidden lg:table-cell">Seats</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Status</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Actions</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Booking ID</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Date & Time</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Route</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Customer</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700 hidden lg:table-cell">Seats</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Status</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((it) => (
                   <tr key={it.id} className="border-b border-slate-100 hover:bg-blue-50/20 transition-colors">
-                    <td className="py-4 px-6 text-slate-600 font-mono text-xs">{it.bookingId}</td>
-                    <td className="py-4 px-6 text-slate-700">
+                    <td className="py-3 px-4 text-slate-600 font-mono text-xs">{it.bookingId}</td>
+                    <td className="py-3 px-4 text-slate-700">
                       <div className="flex flex-col">
                         {/* Prefer server-provided pickupDate when available; it may be an ISO string or a Firestore Timestamp-like object */}
                         {(() => {
                           const rec = it as unknown as Record<string, unknown>;
-                          // Prefer rawPayload.pickupDate (string) first, then top-level pickupDate (timestamp), then postedDate
-                          const pdRaw = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.pickupDate) ?? rec.pickupDate ?? rec.postedDate;
+                          const rpObj = rec.rawPayload as Record<string, unknown> | undefined;
+                          const bdObj = rpObj?.bookingData as Record<string, unknown> | undefined;
+                          const pdRaw = (rpObj?.pickupDate) ?? (rpObj?.rideDate) ?? (rpObj?.date) ?? (bdObj?.date) ?? rec.pickupDate ?? rec.postedDate;
                           // normalize Firestore timestamp-like objects
                           let dateObj: Date | null = null;
                           if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
@@ -1719,16 +1929,19 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         })()}
                       </div>
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <MapPin className="h-3 w-3 text-green-500 flex-shrink-0" />
-                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.pickup)}</span>
-                        <span className="text-slate-400 mx-1">→</span>
-                        <MapPin className="h-3 w-3 text-red-500 flex-shrink-0" />
-                        <span className="text-slate-700 truncate max-w-sm lg:max-w-md">{formatLocation(it.destination)}</span>
+                    <td className="py-3 px-4">
+                      <div className="flex flex-col gap-1 min-w-[150px]">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <MapPin className="h-3 w-3 text-green-500 flex-shrink-0" />
+                          <span className="text-slate-700 text-sm truncate max-w-[150px] lg:max-w-[250px]">{formatLocation(it.pickup)}</span>
+                        </div>
+                        <div className="flex items-center gap-1 min-w-0">
+                          <MapPin className="h-3 w-3 text-red-500 flex-shrink-0" />
+                          <span className="text-slate-700 text-sm truncate max-w-[150px] lg:max-w-[250px]">{formatLocation(it.destination)}</span>
+                        </div>
                       </div>
                     </td>
-                    <td className="py-4 px-6 hidden md:table-cell text-slate-600">
+                    <td className="py-3 px-4 hidden md:table-cell text-slate-600">
                       <div className="min-w-0">
                         {(() => {
                           const rec = it as unknown as Record<string, unknown>;
@@ -1744,21 +1957,21 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         })()}
                       </div>
                     </td>
-                    <td className="py-4 px-6 hidden lg:table-cell">
+                    <td className="py-3 px-4 hidden lg:table-cell">
                       <div className="flex items-center gap-1">
                         <span className="badge bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-medium">
                           {it.seats.available}/{it.seats.total}
                         </span>
                       </div>
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
+                    <td className="py-3 px-4">
+                      <div className="flex flex-col gap-1">
                         {getStatusBadge(it.status)}
                         <Select
                           value={it.status || "Pending"}
                           onValueChange={(value) => updateSharedRideStatus(it.id, value)}
                         >
-                          <SelectTrigger className="w-32">
+                          <SelectTrigger className="w-28 h-8 text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -1770,9 +1983,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         </Select>
                       </div>
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="flex gap-2 flex-wrap">
-                        <Button size="sm" onClick={() => onOpen?.(it)} className="bg-blue-500 hover:bg-blue-600">
+                    <td className="py-3 px-4">
+                      <div className="flex gap-2 flex-wrap max-w-[200px]">
+                        <Button size="sm" onClick={() => onOpen?.(it)} className="bg-blue-500 hover:bg-blue-600 h-8 px-3 text-xs">
                           <Eye className="h-3 w-3 mr-1" />
                           View
                         </Button>
@@ -1809,7 +2022,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                           
                           if (hasBookings) {
                             return (
-                              <Button size="sm" onClick={() => onViewPassengers?.(it)} className="bg-green-500 hover:bg-green-600 text-white">
+                              <Button size="sm" onClick={() => onViewPassengers?.(it)} className="bg-green-500 hover:bg-green-600 text-white h-8 px-3 text-xs">
                                 <Users className="h-3 w-3 mr-1" />
                                 Passengers ({bookingsArray.length})
                               </Button>
@@ -1817,7 +2030,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                           }
                           return null;
                         })()}
-                        <Button size="sm" variant="ghost" onClick={() => onDelete?.(it.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                        <Button size="sm" variant="ghost" onClick={() => onDelete?.(it.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 px-3 text-xs">
                           <Trash2 className="h-3 w-3 mr-1" />
                           Delete
                         </Button>
@@ -1875,8 +2088,30 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                     <td className="py-4 px-6 text-slate-600 font-mono text-xs">{it.bookingId}</td>
                     <td className="py-4 px-6 text-slate-700">
                       <div className="flex flex-col">
-                        <span className="font-medium">{it.postedDate ? new Date(it.postedDate).toLocaleDateString() : "N/A"}</span>
-                        <span className="text-xs text-slate-500">{it.postedDate ? new Date(it.postedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
+                        {(() => {
+                          const rec = it as unknown as Record<string, unknown>;
+                          const rpObj = rec.rawPayload as Record<string, unknown> | undefined;
+                          const bdObj = rpObj?.bookingData as Record<string, unknown> | undefined;
+                          const pdRaw = (rpObj?.pickupDate) ?? (rpObj?.rideDate) ?? (rpObj?.date) ?? (bdObj?.date) ?? rec.pickupDate ?? rec.postedDate;
+                          let dateObj: Date | null = null;
+                          if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
+                          else if (pdRaw && typeof pdRaw === 'object') {
+                            const pRec = pdRaw as Record<string, unknown>;
+                            const secs = typeof pRec._seconds === 'number' ? pRec._seconds : (typeof pRec.seconds === 'number' ? pRec.seconds : undefined);
+                            if (typeof secs === 'number') dateObj = new Date(secs * 1000);
+                          } else if (pdRaw instanceof Date) dateObj = pdRaw;
+                          if (!dateObj && typeof rec.postedDate === 'string') dateObj = new Date(rec.postedDate as string);
+
+                          const dateStr = dateObj ? dateObj.toLocaleDateString() : 'N/A';
+                          const timeStr = (it.time && String(it.time).trim() !== '') ? String(it.time) : (dateObj ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
+                          return (
+                            <>
+                              <span className="font-medium">{dateStr}</span>
+                              <span className="text-xs text-slate-500">{timeStr}</span>
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="py-4 px-6 text-slate-700 font-medium">{it.notes || it.vehicle}</td>
@@ -2015,7 +2250,9 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                         {(() => {
                           const rec = it as unknown as Record<string, unknown>;
                           // Prefer rawPayload.pickupDate (string) first, then top-level pickupDate (timestamp), then postedDate
-                          const pdRaw = (rec.rawPayload && (rec.rawPayload as Record<string, unknown>)?.pickupDate) ?? rec.pickupDate ?? rec.postedDate;
+                          const rpObj = rec.rawPayload as Record<string, unknown> | undefined;
+                          const bdObj = rpObj?.bookingData as Record<string, unknown> | undefined;
+                          const pdRaw = (rpObj?.pickupDate) ?? (rpObj?.rideDate) ?? (rpObj?.date) ?? (bdObj?.date) ?? rec.pickupDate ?? rec.postedDate;
                           // normalize Firestore timestamp-like objects
                           let dateObj: Date | null = null;
                           if (typeof pdRaw === 'string') dateObj = new Date(pdRaw);
@@ -2524,19 +2761,50 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
                 {/* Recent Activity */}
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <CardTitle className="flex items-center gap-2">
                       <Clock className="h-5 w-5" />
                       Recent Activity
                     </CardTitle>
+                    <Select value={recentActivityCategory} onValueChange={(val: any) => setRecentActivityCategory(val)}>
+                      <SelectTrigger className="w-[150px] h-8 text-xs">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Rides</SelectItem>
+                        <SelectItem value="shared">Share Rides</SelectItem>
+                        <SelectItem value="private">Vehicle Bookings</SelectItem>
+                        <SelectItem value="personal">Personal Rides</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3 max-h-96 overflow-y-auto">
-                      {[...sharedRides, ...vehicleBookings, ...personalRides]
-                        .sort((a, b) => new Date(b.postedDate || 0).getTime() - new Date(a.postedDate || 0).getTime())
-                        .slice(0, 5)
-                        .map((activity) => (
-                          <div key={activity.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg">
+                      {(() => {
+                        const filtered = [...sharedRides, ...vehicleBookings, ...personalRides]
+                          .filter((activity) => recentActivityCategory === "all" || activity.type === recentActivityCategory)
+                          .sort((a, b) => new Date(b.postedDate || 0).getTime() - new Date(a.postedDate || 0).getTime())
+                          .slice(0, 5);
+
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="text-center py-8 text-slate-500">
+                              <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                              <p>No recent activity for this category</p>
+                            </div>
+                          );
+                        }
+
+                        return filtered.map((activity) => (
+                          <div 
+                            key={activity.id} 
+                            onClick={() => {
+                              if (activity.type === 'shared') setActivePage('sharedRequests');
+                              else if (activity.type === 'vehicle') setActivePage('vehicleBookings');
+                              else if (activity.type === 'personal') setActivePage('personalRides');
+                            }}
+                            className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"
+                          >
                             <div className="p-2 bg-blue-100 rounded-full">
                               {activity.type === "shared" ? (
                                 <Users className="h-4 w-4 text-blue-600" />
@@ -2545,24 +2813,32 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900 truncate">
-                                {activity.bookingId} - {activity.vehicle}
-                              </p>
-                              <p className="text-xs text-slate-500">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm font-medium text-slate-900 truncate">
+                                  {activity.bookingId} - {activity.vehicle}
+                                </p>
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                  activity.status?.toLowerCase() === 'confirmed' ? 'bg-green-100 text-green-700' :
+                                  activity.status?.toLowerCase() === 'completed' ? 'bg-blue-100 text-blue-700' :
+                                  activity.status?.toLowerCase() === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                  'bg-yellow-100 text-yellow-700'
+                                }`}>
+                                  {activity.status || 'Pending'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 mb-0.5 truncate">
                                 {formatLocation(activity.pickup)} → {formatLocation(activity.destination)}
                               </p>
+                              <p className="text-[10px] text-slate-400">
+                                {new Date(activity.postedDate).toLocaleString()}
+                              </p>
                             </div>
-                            <div className="text-right">
+                            <div className="text-right whitespace-nowrap ml-2">
                               <p className="text-xs text-slate-500">{activity.timeAgo}</p>
                             </div>
                           </div>
-                        ))}
-                      {sharedRides.length === 0 && vehicleBookings.length === 0 && personalRides.length === 0 && (
-                        <div className="text-center py-8 text-slate-500">
-                          <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          <p>No recent activity</p>
-                        </div>
-                      )}
+                        ));
+                      })()}
                     </div>
                   </CardContent>
                 </Card>
@@ -2572,14 +2848,14 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             {/* Shared Requests */}
             {activePage === "sharedRequests" && (
               <>
-                <SharedRidesTable items={sharedRides} onDelete={handleDeleteShared} onOpen={openViewDialog} onViewPassengers={openPassengersDialog} />
+                <SharedRidesTable items={sharedRides} onDelete={(id) => confirmDelete(id, 'shared')} onOpen={openViewDialog} onViewPassengers={openPassengersDialog} />
               </>
             )}
 
             {/* Vehicle Bookings */}
             {activePage === "vehicleBookings" && (
               <>
-                <VehicleBookingsTable items={vehicleBookings} onDelete={handleDeleteVehicleBooking} />
+                <VehicleBookingsTable items={vehicleBookings} onDelete={(id) => confirmDelete(id, 'vehicle')} />
                 <div className="mt-4">
                   <Card>
                     <CardHeader>
@@ -2625,7 +2901,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
             {/* Personal Rides */}
             {activePage === "personalRides" && (
               <>
-                <PersonalRidesTable items={personalRides} onDelete={handleDeletePersonal} />
+                <PersonalRidesTable items={personalRides} onDelete={(id) => confirmDelete(id, 'personal')} />
                 <div className="mt-4">
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
@@ -3046,7 +3322,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
       {/* View Details Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={closeViewDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-track]:my-2 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300">
           <DialogHeader className="border-b pb-4">
             <DialogTitle className="text-xl font-semibold text-gray-800">
               Booking Details - {selectedItem?.bookingId}
@@ -3074,7 +3350,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                 const seatsAvailable = (rp.seats && typeof rp.seats.available === 'number') ? rp.seats.available : ((item.seats && typeof item.seats.available === 'number') ? item.seats.available : (item.availableSeats ?? 'N/A'))
                 const seatsTotal = (rp.seats && typeof rp.seats.total === 'number') ? rp.seats.total : ((item.seats && typeof item.seats.total === 'number') ? item.seats.total : (item.totalSeats ?? 'N/A'))
                 const price = (item.price && String(item.price)) || (rp.price && String(rp.price)) || 'N/A'
-                const notes = item.notes || rp.notes || item.specialRequests || 'None'
+                const notes = item.notes || rp.notes || item.specialRequests || rp?.rawPayload?.personalData?.specialRequests || rp?.personalData?.specialRequests || 'None'
 
                 // created/posted date - support Firestore timestamp shapes
                 const createdAtRaw = item.createdAt || item.postedDate || rp.postedDate || rp.createdAt || null
@@ -3095,14 +3371,15 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
                 // passenger id and pickup date (from raw payload or item)
                 const passengerId = item.passengerId ?? rp.passengerId ?? 'N/A'
-                const pickupDateRaw = rp.pickupDate ?? item.pickupDate ?? null
+                const bdObj = rp?.bookingData as Record<string, unknown> | undefined;
+                const pickupDateRaw = (rp?.pickupDate) ?? (rp?.rideDate) ?? (rp?.date) ?? (bdObj?.date) ?? item.pickupDate ?? null;
                 let pickupDateFormatted = 'N/A'
                 if (pickupDateRaw) {
                   try {
-                    if (typeof pickupDateRaw === 'string') pickupDateFormatted = new Date(pickupDateRaw).toLocaleString()
+                    if (typeof pickupDateRaw === 'string') pickupDateFormatted = new Date(pickupDateRaw).toLocaleDateString()
                     else if (typeof pickupDateRaw === 'object' && (pickupDateRaw._seconds || pickupDateRaw.seconds)) {
                       const secs = Number(pickupDateRaw._seconds ?? pickupDateRaw.seconds)
-                      pickupDateFormatted = new Date(secs * 1000).toLocaleString()
+                      pickupDateFormatted = new Date(secs * 1000).toLocaleDateString()
                     } else pickupDateFormatted = String(pickupDateRaw)
                   } catch {
                     pickupDateFormatted = String(pickupDateRaw)
@@ -3219,7 +3496,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                             <label className="text-xs font-medium text-gray-600 block mb-2">Customer</label>
                             {(() => {
                               // Helper: return a non-empty trimmed string or undefined
-                              const maybeStr = (val: unknown) => (typeof val === 'string' && val.trim() !== '' ? val.trim() : undefined)
+                              const maybeStr = (val: unknown) => (typeof val === 'string' && val.trim() !== '' && val.trim() !== 'N/A' ? val.trim() : undefined)
 
                               // Recursive shallow scanner to find first matching key among targets
                               const findInObj = (obj: unknown, targets: string[], depth = 0): string | undefined => {
@@ -3255,10 +3532,10 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
                               const emailTargets = ['email', 'customeremail', 'customerEmail']
                               const phoneTargets = ['phone', 'customerphone', 'customerPhone', 'mobile']
 
-                              // Check explicit top-level fields first
-                              const explicitName = maybeStr(item?.customer?.fullName) || maybeStr(item?.customerName) || maybeStr(item?.customer?.name)
-                              const explicitEmail = maybeStr(item?.customer?.email) || maybeStr(item?.customerEmail)
-                              const explicitPhone = maybeStr(item?.customer?.phone) || maybeStr(item?.customerPhone)
+                              // Check explicit payload and top-level fields first to avoid matching generic "name" fields (which may contain booking IDs)
+                              const explicitName = maybeStr(rp?.rawPayload?.personalData?.fullName) || maybeStr(rp?.personalData?.fullName) || maybeStr(rp?.customerName) || maybeStr(item?.customer?.fullName) || maybeStr(item?.customerName) || maybeStr(item?.customer?.name)
+                              const explicitEmail = maybeStr(rp?.rawPayload?.personalData?.email) || maybeStr(rp?.personalData?.email) || maybeStr(rp?.customerEmail) || maybeStr(item?.customer?.email) || maybeStr(item?.customerEmail)
+                              const explicitPhone = maybeStr(rp?.rawPayload?.personalData?.phone) || maybeStr(rp?.personalData?.phone) || maybeStr(rp?.customerPhone) || maybeStr(item?.customer?.phone) || maybeStr(item?.customerPhone)
 
                               // Compose search roots: item, rp, rp.rawPayload (if present)
                               const roots = [item, rp, rp && rp.rawPayload, rp && rp.rawPayload && rp.rawPayload.rawPayload]
@@ -3304,7 +3581,7 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
 
       {/* Passengers Dialog */}
       <Dialog open={passengersDialogOpen} onOpenChange={closePassengersDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-track]:my-2 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5 text-blue-600" />
@@ -3441,6 +3718,26 @@ export function AdminPanel({ onBack, onAddRide, onAddVehicle }: AdminPanelProps)
               })()}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Deletion</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-gray-700">
+            Are you sure you want to delete this {itemToDelete?.type === 'shared' ? 'share ride' : itemToDelete?.type === 'vehicle' ? 'vehicle booking' : 'personal ride'}? This action cannot be undone.
+          </div>
+          <div className="flex justify-end gap-3 mt-4">
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={executeDelete}>
+              Delete
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
