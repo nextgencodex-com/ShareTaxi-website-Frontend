@@ -114,7 +114,7 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
           let pickupDate: Date | null = null
           let pickupDateFormatted = ''
           const rawPayload = r.rawPayload as Record<string, unknown> | undefined
-          const rawPdFromPayload = rawPayload ? rawPayload['pickupDate'] : undefined
+          const rawPdFromPayload = rawPayload ? (rawPayload['pickupDate'] ?? rawPayload['rideDate'] ?? rawPayload['date']) : undefined
           if (rawPdFromPayload !== undefined && rawPdFromPayload !== null) {
             const rawPdStr = String(rawPdFromPayload)
             const d = new Date(rawPdStr)
@@ -123,8 +123,9 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
               pickupDateFormatted = d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
             }
           }
-          if (!pickupDate && r.pickupDate !== undefined && r.pickupDate !== null) {
-            const pd = r.pickupDate
+          if (!pickupDate) {
+            const pd = r.pickupDate ?? (r as any).rideDate ?? (r as any).date;
+            if (pd !== undefined && pd !== null) {
             if (typeof pd === 'object' && ('seconds' in (pd as Record<string, unknown>) || '_seconds' in (pd as Record<string, unknown>))) {
               const secs = Number((pd as Record<string, unknown>)['seconds'] ?? (pd as Record<string, unknown>)['_seconds'])
               if (!isNaN(secs)) {
@@ -137,6 +138,7 @@ export function SharedRidesSection({ initialRides = [], backendDown = false }: S
                 pickupDate = d
                 pickupDateFormatted = d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
               }
+            }
             }
           }
 
